@@ -7,7 +7,10 @@ data:
   customers_csv: "data/h-and-m-personalized-fashion-recommendations/customers.csv"
   # For development, subsample so we don't process 105k items and 31M transactions
   sample_num_items: 20000
-  sample_num_transactions: 500000
+  # Calibrated for the 20k-article sample (~19% of catalogue).
+  # 500k would compress into ~2 months and kill cold-user filter.
+  # 2M gives roughly 1 year of history.
+  sample_num_transactions: 2000000
   min_interactions_per_user: 5
 
 encoders:
