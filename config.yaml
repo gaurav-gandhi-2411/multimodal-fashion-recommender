@@ -1,0 +1,49 @@
+data:
+  raw_path: "data/h-and-m-personalized-fashion-recommendations"
+  processed_path: "data/processed"
+  images_dir: "data/h-and-m-personalized-fashion-recommendations/images"
+  articles_csv: "data/h-and-m-personalized-fashion-recommendations/articles.csv"
+  transactions_csv: "data/h-and-m-personalized-fashion-recommendations/transactions_train.csv"
+  customers_csv: "data/h-and-m-personalized-fashion-recommendations/customers.csv"
+  # For development, subsample so we don't process 105k items and 31M transactions
+  sample_num_items: 20000
+  sample_num_transactions: 500000
+  min_interactions_per_user: 5
+
+encoders:
+  image_model: "ViT-B-32"
+  image_pretrained: "openai"
+  image_embed_dim: 512
+  text_model: "sentence-transformers/all-MiniLM-L6-v2"
+  text_embed_dim: 384
+  device: "cuda"
+  batch_size: 64
+
+model:
+  item_fusion_hidden: 512
+  output_dim: 256
+  user_seq_len: 20
+  dropout: 0.2
+
+training:
+  batch_size: 256
+  num_epochs: 5
+  lr: 0.001
+  weight_decay: 0.00001
+  temperature: 0.07
+  num_negatives: "in_batch"
+  val_split: 0.1
+  test_split: 0.1
+  seed: 42
+
+retrieval:
+  index_type: "flat"
+  top_k: 10
+  metric: "cosine"
+
+llm:
+  provider: "ollama"
+  model: "llama3.1:8b"
+  host: "http://localhost:11434"
+  temperature: 0.3
+  max_tokens: 80
