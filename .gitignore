@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 data/raw/
+data/h-and-m-personalized-fashion-recommendations/
 data/processed/
 checkpoints/
 *.ckpt
