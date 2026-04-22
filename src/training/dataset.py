@@ -113,4 +113,5 @@ class FashionInteractionDataset(Dataset):
             "user_mask": torch.from_numpy(mask),
             "target_img": target_img,
             "target_txt": target_txt,
+            "target_idx": self.article_id_to_idx[target_aid],
         }

@@ -1,0 +1,256 @@
+import logging
+import math
+import time
+from pathlib import Path
+
+import numpy as np
+import torch
+import torch.nn.functional as F
+from torch.utils.data import DataLoader, Subset
+from tqdm import tqdm
+
+from src.training.evaluate import ndcg_at_k, recall_at_k
+
+logger = logging.getLogger(__name__)
+
+
+def encode_all_items(
+    model,
+    img_emb: np.ndarray,
+    txt_emb: np.ndarray,
+    device: torch.device,
+    batch_size: int = 512,
+) -> np.ndarray:
+    """Pass all precomputed CLIP+SBERT embeddings through ItemTower -> (M, 256) numpy array."""
+    model.eval()
+    all_embs = []
+    M = len(img_emb)
+    with torch.no_grad():
+        for start in range(0, M, batch_size):
+            img_b = torch.from_numpy(img_emb[start : start + batch_size]).to(device)
+            txt_b = torch.from_numpy(txt_emb[start : start + batch_size]).to(device)
+            emb = model.item_tower(img_b, txt_b)
+            all_embs.append(emb.cpu().numpy())
+    return np.concatenate(all_embs, axis=0)
+
+
+def _collect_val_user_embs(
+    model,
+    val_loader: DataLoader,
+    device: torch.device,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Collect user embeddings and true item indices for the entire val set."""
+    model.eval()
+    all_user_embs = []
+    all_true_idx = []
+    with torch.no_grad():
+        for batch in tqdm(val_loader, desc="  val user embs", leave=False):
+            B, N, _ = batch["user_seq_img"].shape
+            seq_img = batch["user_seq_img"].view(B * N, -1).to(device)
+            seq_txt = batch["user_seq_txt"].view(B * N, -1).to(device)
+            seq_item = model.item_tower(seq_img, seq_txt).view(B, N, -1)
+            user_emb = model.user_tower(seq_item, batch["user_mask"].to(device))
+            all_user_embs.append(user_emb.cpu().numpy())
+            all_true_idx.append(batch["target_idx"].numpy())
+    return np.concatenate(all_user_embs, axis=0), np.concatenate(all_true_idx, axis=0)
+
+
+def run_sanity_check(model, train_dataset, device: torch.device) -> None:
+    """
+    One forward+backward on 8 samples before the main loop.
+    Expected at random init:
+      loss   ~= log(batch_size) = log(8) ~= 2.08
+      logits roughly in [-10, 10]
+      grad norm > 0 and finite
+    Raises RuntimeError if any check fails.
+    """
+    print("\n--- Sanity check (batch_size=8) ---")
+    n = min(8, len(train_dataset))
+    loader = DataLoader(Subset(train_dataset, list(range(n))), batch_size=n, shuffle=False)
+    batch = next(iter(loader))
+
+    model.train()
+    model.zero_grad()
+
+    B = batch["target_img"].shape[0]
+    logits = model(
+        batch["user_seq_img"].to(device),
+        batch["user_seq_txt"].to(device),
+        batch["user_mask"].to(device),
+        batch["target_img"].to(device),
+        batch["target_txt"].to(device),
+    )
+    labels = torch.arange(B, device=device)
+    loss = F.cross_entropy(logits, labels)
+    loss.backward()
+
+    grad_norm = sum(
+        p.grad.norm().item() ** 2 for p in model.parameters() if p.grad is not None
+    ) ** 0.5
+
+    expected = math.log(B)
+    print(f"  Loss:        {loss.item():.4f}  (expected ~{expected:.4f})")
+    print(f"  Logit range: [{logits.min().item():.4f}, {logits.max().item():.4f}]")
+    print(f"  Grad norm:   {grad_norm:.6f}")
+
+    model.zero_grad()
+
+    failed = False
+    if not torch.isfinite(loss):
+        print("  ERROR: loss is NaN or Inf")
+        failed = True
+    if loss.item() < 1.0 or loss.item() > 5.0:
+        print(f"  WARNING: loss {loss.item():.4f} outside expected range [1.0, 5.0]")
+        failed = True
+    if not np.isfinite(grad_norm) or grad_norm == 0.0:
+        print(f"  ERROR: grad norm is {grad_norm}")
+        failed = True
+
+    if failed:
+        raise RuntimeError("Sanity check failed -- see messages above.")
+
+    print("  Sanity check PASSED -- proceeding to full training.\n")
+
+
+def train(
+    config: dict,
+    model,
+    train_dataset,
+    val_dataset,
+    all_img_emb: np.ndarray,
+    all_txt_emb: np.ndarray,
+    device: torch.device,
+) -> dict:
+    """
+    Full training loop:
+    - AdamW optimiser with grad clipping (max_norm=1.0)
+    - Mixed precision via torch.amp
+    - Val loss + full retrieval eval (Recall@10, NDCG@10) each epoch
+    - Early stopping on val loss (patience=2)
+    - Best checkpoint -> checkpoints/best.pt
+    """
+    tcfg = config["training"]
+    bs = tcfg["batch_size"]
+    num_epochs = tcfg["num_epochs"]
+    patience = 2
+
+    train_loader = DataLoader(
+        train_dataset, batch_size=bs, shuffle=True, num_workers=0, pin_memory=True
+    )
+    val_loader = DataLoader(
+        val_dataset, batch_size=bs, shuffle=False, num_workers=0, pin_memory=True
+    )
+
+    optimiser = torch.optim.AdamW(
+        model.parameters(), lr=tcfg["lr"], weight_decay=tcfg["weight_decay"]
+    )
+    scaler = torch.amp.GradScaler("cuda")
+
+    Path("checkpoints").mkdir(exist_ok=True)
+
+    best_val_loss = float("inf")
+    no_improve = 0
+    best_metrics: dict = {}
+
+    for epoch in range(1, num_epochs + 1):
+        # Training
+        model.train()
+        train_loss_sum = 0.0
+        n_train = 0
+        t0 = time.time()
+
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{num_epochs} [train]", leave=True)
+        for step, batch in enumerate(pbar):
+            optimiser.zero_grad()
+            with torch.amp.autocast("cuda"):
+                logits = model(
+                    batch["user_seq_img"].to(device),
+                    batch["user_seq_txt"].to(device),
+                    batch["user_mask"].to(device),
+                    batch["target_img"].to(device),
+                    batch["target_txt"].to(device),
+                )
+                B = logits.shape[0]
+                loss = F.cross_entropy(logits, torch.arange(B, device=device))
+
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimiser)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            scaler.step(optimiser)
+            scaler.update()
+
+            train_loss_sum += loss.item()
+            n_train += 1
+            if step % 50 == 0:
+                pbar.set_postfix({"loss": f"{loss.item():.4f}"})
+
+        avg_train_loss = train_loss_sum / max(n_train, 1)
+        elapsed = time.time() - t0
+
+        # Val loss
+        model.eval()
+        val_loss_sum = 0.0
+        n_val = 0
+        with torch.no_grad():
+            for batch in tqdm(val_loader, desc=f"Epoch {epoch}/{num_epochs} [val loss]", leave=False):
+                with torch.amp.autocast("cuda"):
+                    logits = model(
+                        batch["user_seq_img"].to(device),
+                        batch["user_seq_txt"].to(device),
+                        batch["user_mask"].to(device),
+                        batch["target_img"].to(device),
+                        batch["target_txt"].to(device),
+                    )
+                    B = logits.shape[0]
+                    loss = F.cross_entropy(logits, torch.arange(B, device=device))
+                val_loss_sum += loss.item()
+                n_val += 1
+        avg_val_loss = val_loss_sum / max(n_val, 1)
+
+        # Full retrieval eval (encode all items once, reuse for both metrics)
+        print(f"  Encoding all {len(all_img_emb):,} items for retrieval eval...")
+        all_item_embs = encode_all_items(model, all_img_emb, all_txt_emb, device)
+        user_embs, true_idx = _collect_val_user_embs(model, val_loader, device)
+        val_recall = recall_at_k(user_embs, all_item_embs, true_idx, k=10)
+        val_ndcg = ndcg_at_k(user_embs, all_item_embs, true_idx, k=10)
+
+        print(
+            f"Epoch {epoch}/{num_epochs} | "
+            f"train_loss={avg_train_loss:.4f} | "
+            f"val_loss={avg_val_loss:.4f} | "
+            f"val_Recall@10={val_recall:.4f} | "
+            f"val_NDCG@10={val_ndcg:.4f} | "
+            f"time={elapsed:.0f}s"
+        )
+
+        # Checkpoint + early stopping
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            no_improve = 0
+            best_metrics = {
+                "epoch": epoch,
+                "train_loss": avg_train_loss,
+                "val_loss": avg_val_loss,
+                "val_recall_at_10": val_recall,
+                "val_ndcg_at_10": val_ndcg,
+            }
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "model_state_dict": model.state_dict(),
+                    "optimiser_state_dict": optimiser.state_dict(),
+                    "metrics": best_metrics,
+                    "config": config,
+                },
+                "checkpoints/best.pt",
+            )
+            print(f"  [saved] Checkpoint saved (best val_loss={best_val_loss:.4f})")
+        else:
+            no_improve += 1
+            print(f"  No improvement for {no_improve}/{patience} epochs.")
+            if no_improve >= patience:
+                print(f"  Early stopping at epoch {epoch}.")
+                break
+
+    print(f"\nTraining complete. Best: {best_metrics}")
+    return best_metrics
