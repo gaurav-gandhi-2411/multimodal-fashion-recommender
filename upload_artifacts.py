@@ -139,6 +139,23 @@ def main():
     top_active_rows = np.array([aid_to_active_row[a] for a in top_ids])
     top_embs = embs_256[top_active_rows]
 
+    # ── modality-only projections for top-1500 ────────────────────────────────
+    # image-only: ItemTower(img, zeros_text) → (1500, 256) L2-norm
+    # text-only:  ItemTower(zeros_img, txt)  → (1500, 256) L2-norm
+    # Used at query time to compute per-modality cosine without running ItemTower in Space.
+    print("Computing modality-only projections for top-1500 items...")
+    top_img_raw = img_emb[np.array([aid_to_row_full[a] for a in top_ids])]
+    top_txt_raw = txt_emb[np.array([aid_to_row_full[a] for a in top_ids])]
+    item_img_proj = encode_all_items(
+        model, top_img_raw, np.zeros((N_ITEMS, top_txt_raw.shape[1]), dtype=np.float32),
+        device, batch_size=512,
+    )
+    item_txt_proj = encode_all_items(
+        model, np.zeros((N_ITEMS, top_img_raw.shape[1]), dtype=np.float32), top_txt_raw,
+        device, batch_size=512,
+    )
+    print(f"  img_proj: {item_img_proj.shape}  txt_proj: {item_txt_proj.shape}")
+
     # ── demo users ─────────────────────────────────────────────────────────────
     print("Selecting demo users...")
     _arts = (
@@ -288,6 +305,11 @@ def main():
         pickle.dump(retriever_1500.article_ids, f)
     idx_sz = sum(p.stat().st_size for p in idx_dir.rglob("*"))
     print(f"  faiss_index_1500/          {idx_sz/1e6:.2f} MB")
+
+    np.save(data_dir / "item_img_proj_1500.npy", item_img_proj)
+    np.save(data_dir / "item_txt_proj_1500.npy", item_txt_proj)
+    print(f"  item_img_proj_1500.npy     {(data_dir/'item_img_proj_1500.npy').stat().st_size/1e6:.2f} MB")
+    print(f"  item_txt_proj_1500.npy     {(data_dir/'item_txt_proj_1500.npy').stat().st_size/1e6:.2f} MB")
 
     articles = pd.read_parquet(PROCESSED / "articles.parquet")
     articles["article_id"] = articles["article_id"].astype(int)

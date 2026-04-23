@@ -57,6 +57,15 @@ def load_resources():
     # FAISS index for top-1500 items
     retriever = FaissRetriever.load(str(DATA_DIR / "faiss_index_1500"))
 
+    # Modality-only projections for top-1500 (precomputed offline)
+    img_proj = np.load(DATA_DIR / "item_img_proj_1500.npy")  # (1500, 256)
+    txt_proj = np.load(DATA_DIR / "item_txt_proj_1500.npy")  # (1500, 256)
+    # Map article_id → row index in the 1500-item projection arrays
+    with open(DATA_DIR / "faiss_index_1500" / "article_ids.pkl", "rb") as _f:
+        import pickle as _pkl
+        _faiss_aids = [int(a) for a in _pkl.load(_f)]
+    aid_to_modrow = {aid: i for i, aid in enumerate(_faiss_aids)}
+
     # Article metadata
     articles = pd.read_parquet(DATA_DIR / "articles_1500.parquet")
     articles["article_id"] = articles["article_id"].astype(int)
@@ -66,7 +75,7 @@ def load_resources():
     with open(DATA_DIR / "demo_users.json") as f:
         demo_users = json.load(f)
 
-    return tower, item_embs, aid_to_row, retriever, art_map, demo_users
+    return tower, item_embs, aid_to_row, retriever, art_map, demo_users, img_proj, txt_proj, aid_to_modrow
 
 
 def get_user_embedding(
@@ -123,7 +132,7 @@ def main():
     )
 
     config = load_config()
-    tower, item_embs, aid_to_row, retriever, art_map, demo_users = load_resources()
+    tower, item_embs, aid_to_row, retriever, art_map, demo_users, img_proj, txt_proj, aid_to_modrow = load_resources()
     explainer = GroqExplainer(config)
 
     top_k = config.get("retrieval", {}).get("top_k", 5)
@@ -158,7 +167,17 @@ def main():
     history_set  = set(history_ids)
     user_emb     = get_user_embedding(history_ids, tower, item_embs, aid_to_row)
     results      = retriever.search(user_emb, k=top_k + 20)
-    rec_ids      = list(dict.fromkeys(int(aid) for aid, _ in results if int(aid) not in history_set))[:top_k]
+    seen: set    = set()
+    rec_pairs: list = []
+    for aid_str, fused_score in results:
+        aid = int(aid_str)
+        if aid in history_set or aid in seen:
+            continue
+        seen.add(aid)
+        rec_pairs.append((aid, float(fused_score)))
+        if len(rec_pairs) >= top_k:
+            break
+    rec_ids = [aid for aid, _ in rec_pairs]
 
     history_display = list(dict.fromkeys(history_ids))[-5:]
     history_meta    = [
@@ -174,19 +193,42 @@ def main():
         for col, aid in zip(hist_cols, history_display):
             render_item(col, aid, art_map, width=100)
 
+    def _sim_color(v: float) -> str:
+        if v >= 0.80:
+            return "#2e7d32"   # green
+        if v >= 0.60:
+            return "#888888"   # neutral gray
+        return "#e65100"       # muted orange
+
     with right:
         st.subheader(f"Top {top_k} recommendations")
+        st.caption(
+            "Similarity = cosine distance in the 256-dim fused embedding space. "
+            "Img / Text = modality-specific cosine against the user session vector, before fusion."
+        )
         if len(rec_ids) < top_k:
             st.caption(f"Only {len(rec_ids)} recommendations available after excluding browsing history.")
         if explain:
             st.caption("Generating explanations via Groq llama-3.1-8b-instant...")
             prog = st.progress(0)
 
-        for i, rec_id in enumerate(rec_ids):
+        for i, (rec_id, fused_score) in enumerate(rec_pairs):
             rec_meta = art_map.get(
                 rec_id,
                 {"prod_name": str(rec_id), "colour_group_name": "", "product_type_name": ""},
             )
+            modrow   = aid_to_modrow.get(rec_id)
+            img_sim  = float(user_emb @ img_proj[modrow]) if modrow is not None else 0.0
+            txt_sim  = float(user_emb @ txt_proj[modrow]) if modrow is not None else 0.0
+            sim_col  = _sim_color(fused_score)
+            score_md = (
+                f'<span style="color:#888888;font-size:0.82em">'
+                f'Rank #{i+1} · Similarity '
+                f'<span style="color:{sim_col};font-weight:600">{fused_score:.2f}</span>'
+                f' · Img {img_sim:.2f} · Text {txt_sim:.2f}'
+                f'</span>'
+            )
+
             cols = st.columns([1, 4])
             render_item(cols[0], rec_id, art_map, width=90)
             with cols[1]:
@@ -194,6 +236,7 @@ def main():
                     f"**{rec_meta.get('prod_name', rec_id)}** — "
                     f"{rec_meta.get('colour_group_name','')} {rec_meta.get('product_type_name','')}"
                 )
+                st.markdown(score_md, unsafe_allow_html=True)
                 if explain:
                     try:
                         exp = explainer.explain(history_meta, rec_meta)
