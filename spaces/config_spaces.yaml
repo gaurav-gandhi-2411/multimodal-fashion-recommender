@@ -1,0 +1,12 @@
+model:
+  output_dim: 256
+  user_seq_len: 20
+  dropout: 0.2
+
+retrieval:
+  top_k: 5
+
+llm:
+  provider: "groq"
+  temperature: 0.3
+  max_tokens: 80
