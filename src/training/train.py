@@ -165,6 +165,7 @@ def train(
     all_txt_emb: np.ndarray,
     device: torch.device,
     test_dataset=None,
+    checkpoint_path: str = "checkpoints/best.pt",
 ) -> dict:
     """
     Full training loop:
@@ -320,7 +321,7 @@ def train(
                     "metrics":             best_metrics,
                     "config":              config,
                 },
-                "checkpoints/best.pt",
+                checkpoint_path,
             )
             print(f"  [saved] Checkpoint saved (best val_loss={best_val_loss:.4f})")
         else:
@@ -333,7 +334,7 @@ def train(
     # Optional test evaluation using best checkpoint
     if test_loader is not None and best_metrics:
         print("\n  Loading best checkpoint for test evaluation...")
-        ckpt = torch.load("checkpoints/best.pt", map_location=device, weights_only=False)
+        ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
         model.load_state_dict(ckpt["model_state_dict"])
         all_item_embs             = encode_all_items(model, all_img_emb, all_txt_emb, device)
         test_user_embs, test_idx  = _collect_user_embs(model, test_loader, device)

@@ -1,6 +1,36 @@
 import numpy as np
 
 
+def popularity_recall_at_k(
+    true_item_indices: np.ndarray,
+    popular_item_indices: list,
+    k: int = 10,
+) -> float:
+    """
+    Popularity baseline: every user receives the same top-K popular items.
+    true_item_indices: (N,) — index into whatever item pool is being evaluated.
+    popular_item_indices: list of item indices sorted by popularity descending.
+    """
+    top_k = set(popular_item_indices[:k])
+    hits  = sum(1 for ti in true_item_indices if ti in top_k)
+    return hits / max(len(true_item_indices), 1)
+
+
+def popularity_ndcg_at_k(
+    true_item_indices: np.ndarray,
+    popular_item_indices: list,
+    k: int = 10,
+) -> float:
+    """NDCG@K for the popularity baseline (single relevant item, ideal DCG=1)."""
+    pop_rank  = {idx: i for i, idx in enumerate(popular_item_indices[:k])}
+    ndcg_sum  = sum(
+        1.0 / np.log2(pop_rank[ti] + 2)
+        for ti in true_item_indices
+        if ti in pop_rank
+    )
+    return ndcg_sum / max(len(true_item_indices), 1)
+
+
 def recall_at_k(
     user_embs: np.ndarray,
     item_embs: np.ndarray,
