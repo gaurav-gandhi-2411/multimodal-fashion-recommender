@@ -190,7 +190,7 @@ def main():
     st.markdown(
         "---\n"
         "Built with CLIP + SBERT + LLaMA 3.1 via Groq · "
-        "[GitHub](https://github.com/gaurav-gandhi-2411/multimodal-fashion-recommender)"
+        "[GitHub](https://github.com/gauravgandhi2411/multimodal-fashion-recommender)"
     )
 
 

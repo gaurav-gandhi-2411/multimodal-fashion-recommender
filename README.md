@@ -2,7 +2,7 @@
 
 > A two-tower recommender combining CLIP image embeddings, sentence-transformer text encoders, and session-aware sequence modelling — with an LLM reasoning layer that generates natural-language explanations for each recommendation.
 
-**[Live Demo on HuggingFace Spaces](#)** *(coming soon)* · **[Demo screenshots](#demo)**
+**[Live Demo on HuggingFace Spaces](https://huggingface.co/spaces/gauravgandhi2411/multimodal-fashion-recommender)** · **[Demo screenshots](#demo)**
 
 ---
 
