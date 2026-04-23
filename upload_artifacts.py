@@ -160,17 +160,18 @@ def main():
         .to_dict()
     )
 
+    MIN_UNIQUE = 5
     scored = []
     for uid in tqdm(candidates, desc="  scoring users", leave=False):
         hist        = user_hist.get(uid, [])
         hist_active = [a for a in hist if a in active_set]
-        filtered    = [a for a in hist_active[-SEQ_LEN:] if a in top_set]
-        overlap     = len(filtered)
-        if overlap >= 3:
-            ct          = Counter(art_ptype.get(a, "") for a in filtered)
-            top_type, top_cnt = ct.most_common(1)[0]
-            coherence   = top_cnt / overlap
-            scored.append((coherence, overlap, top_type, uid, filtered))
+        unique      = list(dict.fromkeys(a for a in hist_active[-SEQ_LEN:] if a in top_set))
+        if len(unique) < MIN_UNIQUE:
+            continue
+        ct          = Counter(art_ptype.get(a, "") for a in unique)
+        top_type, top_cnt = ct.most_common(1)[0]
+        coherence   = top_cnt / len(unique)
+        scored.append((coherence, len(unique), top_type, uid, unique))
 
     # Sort by coherence desc, break ties by history length desc
     scored.sort(key=lambda x: (-x[0], -x[1]))
