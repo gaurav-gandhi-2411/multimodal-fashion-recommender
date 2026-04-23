@@ -145,9 +145,9 @@ def main():
     history_set  = set(history_ids)
     user_emb     = get_user_embedding(history_ids, tower, item_embs, aid_to_row)
     results      = retriever.search(user_emb, k=top_k + 20)
-    rec_ids      = [int(aid) for aid, _ in results if int(aid) not in history_set][:top_k]
+    rec_ids      = list(dict.fromkeys(int(aid) for aid, _ in results if int(aid) not in history_set))[:top_k]
 
-    history_display = history_ids[-5:]
+    history_display = list(dict.fromkeys(history_ids))[-5:]
     history_meta    = [
         art_map.get(aid, {"prod_name": str(aid), "colour_group_name": "", "product_type_name": ""})
         for aid in history_display
@@ -193,7 +193,7 @@ def main():
     st.markdown(
         "---\n"
         "Built with CLIP + SBERT + LLaMA 3.1 via Groq · "
-        "[GitHub](https://github.com/gauravgandhi2411/multimodal-fashion-recommender)"
+        "[GitHub](https://github.com/gaurav-gandhi-2411/multimodal-fashion-recommender)"
     )
 
 
