@@ -23,6 +23,7 @@ import pickle
 import shutil
 import sys
 import tempfile
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -140,6 +141,13 @@ def main():
 
     # ── demo users ─────────────────────────────────────────────────────────────
     print("Selecting demo users...")
+    art_ptype = (
+        pd.read_parquet(PROCESSED / "articles.parquet")[["article_id", "product_type_name"]]
+        .assign(article_id=lambda d: d["article_id"].astype(int))
+        .set_index("article_id")["product_type_name"]
+        .to_dict()
+    )
+
     test_uids  = set(test_df["customer_id"].unique())
     uid_counts = full_df.groupby("customer_id").size()
     candidates = set(u for u in test_uids if uid_counts.get(u, 0) >= 10)
@@ -156,19 +164,37 @@ def main():
     for uid in tqdm(candidates, desc="  scoring users", leave=False):
         hist        = user_hist.get(uid, [])
         hist_active = [a for a in hist if a in active_set]
-        overlap     = sum(1 for a in hist_active[-SEQ_LEN:] if a in top_set)
+        filtered    = [a for a in hist_active[-SEQ_LEN:] if a in top_set]
+        overlap     = len(filtered)
         if overlap >= 3:
-            scored.append((overlap, uid, hist_active))
+            ct          = Counter(art_ptype.get(a, "") for a in filtered)
+            top_type, top_cnt = ct.most_common(1)[0]
+            coherence   = top_cnt / overlap
+            scored.append((coherence, overlap, top_type, uid, filtered))
 
-    scored.sort(key=lambda x: -x[0])
-    pool   = scored[:min(200, len(scored))]
-    rng    = np.random.default_rng(42)
-    chosen = rng.choice(len(pool), size=min(N_DEMO_USERS, len(pool)), replace=False)
-    demo_users = [
-        {"label": f"User {i + 1}", "history_ids": [a for a in pool[c][2][-SEQ_LEN:] if a in top_set]}
-        for i, c in enumerate(chosen)
-    ]
-    print(f"  {len(demo_users)} demo users selected (min overlap={min(pool[c][0] for c in chosen)})")
+    # Sort by coherence desc, break ties by history length desc
+    scored.sort(key=lambda x: (-x[0], -x[1]))
+
+    # Walk sorted list: first 10 slots cap 1 per type (diversity), then cap 8 overall
+    MAX_PER_TYPE  = 8
+    DIVERSITY_CAP = 10   # first N slots enforce cap=1 per type
+    type_counts: dict = {}
+    demo_users  = []
+    for coherence, overlap, top_type, uid, filtered in scored:
+        if len(demo_users) >= N_DEMO_USERS:
+            break
+        cap = 1 if len(demo_users) < DIVERSITY_CAP else MAX_PER_TYPE
+        if type_counts.get(top_type, 0) >= cap:
+            continue
+        type_counts[top_type] = type_counts.get(top_type, 0) + 1
+        demo_users.append({
+            "label":      f"User {len(demo_users) + 1}",
+            "history_ids": filtered,
+        })
+
+    print(f"  {len(demo_users)} demo users selected")
+    type_summary = ", ".join(f"{t}:{n}" for t, n in sorted(type_counts.items(), key=lambda x: -x[1]))
+    print(f"  dominant types: {type_summary}")
 
     # ── UserTower weights only ─────────────────────────────────────────────────
     user_tower_state = {
