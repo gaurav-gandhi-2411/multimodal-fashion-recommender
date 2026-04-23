@@ -205,7 +205,7 @@ def main():
 
     def _rank_str(item_sim: float) -> str:
         rank = int((all_sims > item_sim).sum()) + 1
-        return f"Ranked {rank:,} of {len(all_sims):,}"
+        return f"Catalogue rank: {rank:,} / {len(all_sims):,}"
 
     with right:
         st.subheader(f"Top {top_k} recommendations")
@@ -213,7 +213,7 @@ def main():
             st.markdown(
                 "**Similarity** — cosine distance in the model's 256-dim embedding space. "
                 "After InfoNCE training, values typically range 0.3–0.6.\n\n"
-                "**Rank** — item's position in the full 10,556-item active catalogue ranked for this user.\n\n"
+                "**Catalogue rank** — item's position in the full 10,556-item catalogue when ranked by similarity to this user. Lower is better.\n\n"
                 "**Img / Text** — modality-specific cosine scores before the fusion MLP. "
                 "Reveals whether the match is driven by visual style or text description.\n\n"
                 "**Confidence gap** — difference between rank 1 and rank 5 similarity. "
@@ -255,9 +255,8 @@ def main():
             rank_str = _rank_str(fused_score)
             score_md = (
                 f'<span style="color:#888888;font-size:0.82em">'
-                f'Rank #{i+1} · Similarity '
+                f'{rank_str} · Similarity '
                 f'<span style="color:{sim_col};font-weight:600">{fused_score:.2f}</span>'
-                f' · {rank_str}'
                 f' · Img {img_sim:.2f} · Text {txt_sim:.2f}'
                 f'</span>'
             )
