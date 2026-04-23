@@ -209,28 +209,38 @@ def main():
 
     with right:
         st.subheader(f"Top {top_k} recommendations")
-        st.caption(
-            "Scores = cosine similarity in the model's 256-dim embedding space. "
-            "After InfoNCE training, values typically range 0.3–0.6; relative ranking "
-            "matters more than absolute magnitude. Rank shows item position in the full "
-            "10,556-item active catalogue. Img / Text = modality-specific cosine before fusion."
-        )
+        with st.expander("ℹ️ About the scores", expanded=False):
+            st.markdown(
+                "**Similarity** — cosine distance in the model's 256-dim embedding space. "
+                "After InfoNCE training, values typically range 0.3–0.6.\n\n"
+                "**Rank** — item's position in the full 10,556-item active catalogue ranked for this user.\n\n"
+                "**Img / Text** — modality-specific cosine scores before the fusion MLP. "
+                "Reveals whether the match is driven by visual style or text description.\n\n"
+                "**Confidence gap** — difference between rank 1 and rank 5 similarity. "
+                "Larger gap = clearer style signal; smaller gap = model less certain which items fit best."
+            )
 
         # Confidence gap indicator
         if len(rec_pairs) >= 2:
-            gap       = rec_pairs[0][1] - rec_pairs[-1][1]
+            gap = rec_pairs[0][1] - rec_pairs[-1][1]
             if gap >= 0.08:
-                conf_dot, conf_msg = "\U0001f7e2", f"High confidence — clear style signal  (gap {gap:.2f})"
+                conf_dot  = "\U0001f7e2"
+                conf_msg  = f"High confidence  (gap {gap:.2f})"
+                conf_sub  = "Strong match — the top recommendation stands out clearly."
             elif gap >= 0.03:
-                conf_dot, conf_msg = "⚪", f"Moderate confidence  (gap {gap:.2f})"
+                conf_dot  = "⚪"
+                conf_msg  = f"Moderate confidence  (gap {gap:.2f})"
+                conf_sub  = "Moderate — items are comparable; top pick is slightly favoured."
             else:
-                conf_dot, conf_msg = "\U0001f7e0", f"Long tail — explore widely  (gap {gap:.2f})"
-            st.caption(f"{conf_dot} {conf_msg}")
+                conf_dot  = "\U0001f7e0"
+                conf_msg  = f"Long tail — explore widely  (gap {gap:.2f})"
+                conf_sub  = "Weak signal — items cluster close together; many alternatives possible."
+            st.markdown(f"{conf_dot} {conf_msg}")
+            st.caption(conf_sub)
 
         if len(rec_ids) < top_k:
             st.caption(f"Only {len(rec_ids)} recommendations available after excluding browsing history.")
         if explain:
-            st.caption("Generating explanations via Groq llama-3.1-8b-instant...")
             prog = st.progress(0)
 
         for i, (rec_id, fused_score) in enumerate(rec_pairs):
@@ -261,11 +271,12 @@ def main():
                 )
                 st.markdown(score_md, unsafe_allow_html=True)
                 if explain:
-                    try:
-                        exp = explainer.explain(history_meta, rec_meta)
-                        st.info(exp)
-                    except Exception as e:
-                        st.warning(f"Explanation unavailable: {e}")
+                    with st.spinner("✨ Explaining..."):
+                        try:
+                            exp = explainer.explain(history_meta, rec_meta)
+                            st.info(exp)
+                        except Exception as e:
+                            st.warning(f"Explanation unavailable: {e}")
                     prog.progress((i + 1) / top_k)
             st.divider()
 
