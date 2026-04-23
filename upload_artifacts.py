@@ -125,7 +125,12 @@ def main():
     full_df_sorted = full_df.sort_values("t_dat")
 
     counts  = train_df["article_id"].value_counts()
-    top_ids = [int(a) for a in counts.index if int(a) in active_set][:N_ITEMS]
+    top_ids = []
+    for a in (int(x) for x in counts.index if int(x) in active_set):
+        if len(top_ids) >= N_ITEMS:
+            break
+        if raw_img_path(a).exists():
+            top_ids.append(a)
     top_set = set(top_ids)
     print(f"Top-{N_ITEMS}: cover {counts[counts.index.isin(top_set)].sum():,} of {len(train_df):,} train txns"
           f" ({counts[counts.index.isin(top_set)].sum()/len(train_df)*100:.1f}%)")
@@ -160,7 +165,7 @@ def main():
     rng    = np.random.default_rng(42)
     chosen = rng.choice(len(pool), size=min(N_DEMO_USERS, len(pool)), replace=False)
     demo_users = [
-        {"label": f"User {i + 1}", "history_ids": pool[c][2][-SEQ_LEN:]}
+        {"label": f"User {i + 1}", "history_ids": [a for a in pool[c][2][-SEQ_LEN:] if a in top_set]}
         for i, c in enumerate(chosen)
     ]
     print(f"  {len(demo_users)} demo users selected (min overlap={min(pool[c][0] for c in chosen)})")

@@ -141,10 +141,11 @@ def main():
         st.info("Select a user in the sidebar and click **Recommend**.")
         return
 
-    history_ids = user["history_ids"]
-    user_emb    = get_user_embedding(history_ids, tower, item_embs, aid_to_row)
-    results     = retriever.search(user_emb, k=top_k)
-    rec_ids     = [int(aid) for aid, _ in results]
+    history_ids  = user["history_ids"]
+    history_set  = set(history_ids)
+    user_emb     = get_user_embedding(history_ids, tower, item_embs, aid_to_row)
+    results      = retriever.search(user_emb, k=top_k + 20)
+    rec_ids      = [int(aid) for aid, _ in results if int(aid) not in history_set][:top_k]
 
     history_display = history_ids[-5:]
     history_meta    = [
@@ -162,6 +163,8 @@ def main():
 
     with right:
         st.subheader(f"Top {top_k} recommendations")
+        if len(rec_ids) < top_k:
+            st.caption(f"Only {len(rec_ids)} recommendations available after excluding browsing history.")
         if explain:
             st.caption("Generating explanations via Groq llama-3.1-8b-instant...")
             prog = st.progress(0)
