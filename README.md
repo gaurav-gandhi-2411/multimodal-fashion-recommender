@@ -53,7 +53,7 @@ Temporal train/val/test split (no leakage):
 
 ```text
               ┌─────────────────────────────────────┐
-              │           TWO-TOWER MODEL            │
+              │           TWO-TOWER MODEL           │
               └─────────────────────────────────────┘
 
  ITEM TOWER                          USER TOWER
