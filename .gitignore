@@ -12,3 +12,4 @@ checkpoints/
 .env
 notes/
 staging_path.txt
+.claude/
