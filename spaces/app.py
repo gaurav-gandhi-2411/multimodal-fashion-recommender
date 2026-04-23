@@ -194,11 +194,11 @@ def main():
             render_item(col, aid, art_map, width=100)
 
     def _sim_color(v: float) -> str:
-        if v >= 0.80:
-            return "#2e7d32"   # green
-        if v >= 0.60:
-            return "#888888"   # neutral gray
-        return "#e65100"       # muted orange
+        if v >= 0.52:
+            return "#2e7d32"   # green  — strong match
+        if v >= 0.45:
+            return "#888888"   # gray   — moderate match
+        return "#e65100"       # orange — weak / long tail
 
     with right:
         st.subheader(f"Top {top_k} recommendations")

@@ -10,3 +10,5 @@ checkpoints/
 .DS_Store
 *.log
 .env
+notes/
+staging_path.txt
