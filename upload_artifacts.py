@@ -141,18 +141,24 @@ def main():
 
     # ── demo users ─────────────────────────────────────────────────────────────
     print("Selecting demo users...")
-    art_ptype = (
-        pd.read_parquet(PROCESSED / "articles.parquet")[["article_id", "product_type_name"]]
+    _arts = (
+        pd.read_parquet(PROCESSED / "articles.parquet")
         .assign(article_id=lambda d: d["article_id"].astype(int))
-        .set_index("article_id")["product_type_name"]
-        .to_dict()
+        .set_index("article_id")
     )
+    art_ptype  = _arts["product_type_name"].to_dict()
+    art_colour = _arts["colour_group_name"].to_dict()
+    art_dept   = _arts["department_name"].to_dict()
+
+    OUTFIT_TYPES = {"Top", "Shirt", "T-shirt", "Blouse", "Trousers", "Shorts",
+                    "Skirt", "Dress", "Jacket", "Sweater", "Hoodie", "Coat"}
+    MIN_UNIQUE   = 5
+    N_PER_ARCH   = 10
 
     test_uids  = set(test_df["customer_id"].unique())
     uid_counts = full_df.groupby("customer_id").size()
     candidates = set(u for u in test_uids if uid_counts.get(u, 0) >= 10)
 
-    # Pre-compute full history per user once (O(n_rows)), then O(1) per user lookup
     print("  Pre-computing user histories...")
     user_hist = (
         full_df_sorted.groupby("customer_id")["article_id"]
@@ -160,42 +166,85 @@ def main():
         .to_dict()
     )
 
-    MIN_UNIQUE = 5
-    scored = []
+    scored_a: list = []   # (score, n_unique, uid, unique_ids)
+    scored_b: list = []
+    scored_c: list = []
+
     for uid in tqdm(candidates, desc="  scoring users", leave=False):
-        hist        = user_hist.get(uid, [])
-        hist_active = [a for a in hist if a in active_set]
+        hist_active = [a for a in user_hist.get(uid, []) if a in active_set]
         unique      = list(dict.fromkeys(a for a in hist_active[-SEQ_LEN:] if a in top_set))
-        if len(unique) < MIN_UNIQUE:
+        n = len(unique)
+        if n < MIN_UNIQUE:
             continue
-        ct          = Counter(art_ptype.get(a, "") for a in unique)
-        top_type, top_cnt = ct.most_common(1)[0]
-        coherence   = top_cnt / len(unique)
-        scored.append((coherence, len(unique), top_type, uid, unique))
 
-    # Sort by coherence desc, break ties by history length desc
-    scored.sort(key=lambda x: (-x[0], -x[1]))
+        types   = [art_ptype.get(a, "")  for a in unique]
+        colours = [art_colour.get(a, "") for a in unique]
+        depts   = [art_dept.get(a, "")   for a in unique]
 
-    # Walk sorted list: first 10 slots cap 1 per type (diversity), then cap 8 overall
-    MAX_PER_TYPE  = 8
-    DIVERSITY_CAP = 10   # first N slots enforce cap=1 per type
-    type_counts: dict = {}
-    demo_users  = []
-    for coherence, overlap, top_type, uid, filtered in scored:
-        if len(demo_users) >= N_DEMO_USERS:
-            break
-        cap = 1 if len(demo_users) < DIVERSITY_CAP else MAX_PER_TYPE
-        if type_counts.get(top_type, 0) >= cap:
-            continue
-        type_counts[top_type] = type_counts.get(top_type, 0) + 1
-        demo_users.append({
-            "label":      f"User {len(demo_users) + 1}",
-            "history_ids": filtered,
-        })
+        type_pct   = Counter(types).most_common(1)[0][1]   / n
+        colour_pct = Counter(colours).most_common(1)[0][1] / n
+        dept_pct   = Counter(depts).most_common(1)[0][1]   / n
+        distinct_outfit = len({t for t in types if t in OUTFIT_TYPES})
+        distinct_types  = len(set(types))
 
-    print(f"  {len(demo_users)} demo users selected")
-    type_summary = ", ".join(f"{t}:{n}" for t, n in sorted(type_counts.items(), key=lambda x: -x[1]))
-    print(f"  dominant types: {type_summary}")
+        if type_pct >= 0.80:
+            scored_a.append((type_pct, n, uid, unique))
+
+        if type_pct < 0.50 and distinct_outfit >= 3:
+            bonus  = 0.2 if colour_pct >= 0.60 or dept_pct >= 0.70 else 0.0
+            scored_b.append((dept_pct + bonus, n, uid, unique))
+
+        if colour_pct >= 0.60 and distinct_types >= 3:
+            scored_c.append((colour_pct, n, uid, unique))
+
+    for lst in (scored_a, scored_b, scored_c):
+        lst.sort(key=lambda x: (-x[0], -x[1]))
+
+    # Assign each uid to the archetype where it scores highest; break 3-way ties A > B > C
+    uid_best: dict = {}
+    for arch, lst in (("A", scored_a), ("B", scored_b), ("C", scored_c)):
+        for score, n, uid, _ in lst:
+            prev = uid_best.get(uid)
+            if prev is None or score > prev[0] or (score == prev[0] and "ABC".index(arch) < "ABC".index(prev[1])):
+                uid_best[uid] = (score, arch)
+
+    def _pick(lst: list, arch: str) -> list:
+        seen: set = set()
+        out:  list = []
+        for row in lst:
+            uid = row[2]
+            if uid in seen or uid_best.get(uid, (0, arch))[1] != arch:
+                continue
+            seen.add(uid)
+            out.append(row)
+            if len(out) >= N_PER_ARCH:
+                break
+        return out
+
+    top_a = _pick(scored_a, "A")
+    top_b = _pick(scored_b, "B")
+    top_c = _pick(scored_c, "C")
+    print(f"  A:{len(top_a)}  B:{len(top_b)}  C:{len(top_c)}")
+
+    # Interleave A/B/C: indices 0,3,6,... = A; 1,4,7,... = B; 2,5,8,... = C
+    interleaved = []
+    for i in range(N_PER_ARCH):
+        if i < len(top_a):
+            interleaved.append(("specialist",     top_a[i]))
+        if i < len(top_b):
+            interleaved.append(("outfit_builder",  top_b[i]))
+        if i < len(top_c):
+            interleaved.append(("aesthetic_buyer", top_c[i]))
+
+    demo_users = [
+        {
+            "label":       f"User {idx + 1}",
+            "archetype":   arch,
+            "history_ids": row[3],
+        }
+        for idx, (arch, row) in enumerate(interleaved)
+    ]
+    print(f"  {len(demo_users)} demo users selected (interleaved A/B/C)")
 
     # ── UserTower weights only ─────────────────────────────────────────────────
     user_tower_state = {

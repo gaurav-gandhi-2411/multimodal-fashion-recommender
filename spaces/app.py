@@ -128,11 +128,24 @@ def main():
 
     top_k = config.get("retrieval", {}).get("top_k", 5)
 
+    _ARCH_BADGE = {
+        "specialist":     "Style Specialist",
+        "outfit_builder": "Outfit Builder",
+        "aesthetic_buyer": "Colour / Aesthetic Buyer",
+    }
+
     # Sidebar
     st.sidebar.header("User selection")
-    labels = [u["label"] for u in demo_users]
+    labels = [
+        f"{u['label']} · {_ARCH_BADGE.get(u.get('archetype',''), '')}"
+        for u in demo_users
+    ]
     idx    = st.sidebar.selectbox("Pick a demo user", range(len(labels)), format_func=lambda i: labels[i])
     user   = demo_users[idx]
+
+    arch_label = _ARCH_BADGE.get(user.get("archetype", ""), "")
+    if arch_label:
+        st.sidebar.caption(f"Archetype: **{arch_label}**")
 
     explain = st.sidebar.checkbox("Generate LLM explanations", value=True)
     run_btn = st.sidebar.button("Recommend", type="primary")
