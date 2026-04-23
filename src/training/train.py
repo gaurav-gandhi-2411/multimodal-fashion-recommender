@@ -209,10 +209,10 @@ def train(
 
     Path("checkpoints").mkdir(exist_ok=True)
 
-    best_val_loss  = float("inf")
-    no_improve     = 0
+    best_val_recall = -1.0
+    no_improve      = 0
     best_metrics: dict = {}
-    global_step    = 0
+    global_step     = 0
 
     for epoch in range(1, num_epochs + 1):
         # Training
@@ -290,8 +290,8 @@ def train(
         print(f"  Encoding all {len(all_img_emb):,} items for retrieval eval...")
         all_item_embs          = encode_all_items(model, all_img_emb, all_txt_emb, device)
         val_user_embs, val_idx = _collect_user_embs(model, val_loader, device)
-        val_recall = recall_at_k(val_user_embs, all_item_embs, val_idx, k=10)
-        val_ndcg   = ndcg_at_k(val_user_embs,   all_item_embs, val_idx, k=10)
+        val_recall = recall_at_k(val_user_embs, all_item_embs, val_idx, k=10, device=device)
+        val_ndcg   = ndcg_at_k(val_user_embs,   all_item_embs, val_idx, k=10, device=device)
 
         print(
             f"Epoch {epoch}/{num_epochs} | "
@@ -302,28 +302,28 @@ def train(
             f"time={elapsed:.0f}s"
         )
 
-        # Checkpoint + early stopping
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
-            no_improve    = 0
-            best_metrics  = {
-                "epoch":           epoch,
-                "train_loss":      avg_train_loss,
-                "val_loss":        avg_val_loss,
+        # Checkpoint + early stopping on val Recall@10
+        if val_recall > best_val_recall:
+            best_val_recall = val_recall
+            no_improve      = 0
+            best_metrics    = {
+                "epoch":            epoch,
+                "train_loss":       avg_train_loss,
+                "val_loss":         avg_val_loss,
                 "val_recall_at_10": val_recall,
-                "val_ndcg_at_10":  val_ndcg,
+                "val_ndcg_at_10":   val_ndcg,
             }
             torch.save(
                 {
-                    "epoch":               epoch,
-                    "model_state_dict":    model.state_dict(),
+                    "epoch":                epoch,
+                    "model_state_dict":     model.state_dict(),
                     "optimiser_state_dict": optimiser.state_dict(),
-                    "metrics":             best_metrics,
-                    "config":              config,
+                    "metrics":              best_metrics,
+                    "config":               config,
                 },
                 checkpoint_path,
             )
-            print(f"  [saved] Checkpoint saved (best val_loss={best_val_loss:.4f})")
+            print(f"  [saved] Checkpoint saved (best val_Recall@10={best_val_recall:.4f})")
         else:
             no_improve += 1
             print(f"  No improvement for {no_improve}/{patience} epochs.")
@@ -338,8 +338,8 @@ def train(
         model.load_state_dict(ckpt["model_state_dict"])
         all_item_embs             = encode_all_items(model, all_img_emb, all_txt_emb, device)
         test_user_embs, test_idx  = _collect_user_embs(model, test_loader, device)
-        test_recall = recall_at_k(test_user_embs, all_item_embs, test_idx, k=10)
-        test_ndcg   = ndcg_at_k(test_user_embs,   all_item_embs, test_idx, k=10)
+        test_recall = recall_at_k(test_user_embs, all_item_embs, test_idx, k=10, device=device)
+        test_ndcg   = ndcg_at_k(test_user_embs,   all_item_embs, test_idx, k=10, device=device)
         best_metrics["test_recall_at_10"] = test_recall
         best_metrics["test_ndcg_at_10"]   = test_ndcg
         print(f"  Test | Recall@10={test_recall:.4f} | NDCG@10={test_ndcg:.4f}")

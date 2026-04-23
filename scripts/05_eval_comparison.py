@@ -41,12 +41,12 @@ def load_model(ckpt_path: str, device: torch.device):
     return model, ckpt
 
 
-def eval_retrieval(user_embs, item_embs_full, item_embs_active, true_idx_full, true_idx_active):
+def eval_retrieval(user_embs, item_embs_full, item_embs_active, true_idx_full, true_idx_active, device=None):
     """Evaluate on both item pools; return (r_full, n_full, r_active, n_active)."""
-    r_full   = recall_at_k(user_embs, item_embs_full,   true_idx_full,   k=10)
-    n_full   = ndcg_at_k(user_embs,   item_embs_full,   true_idx_full,   k=10)
-    r_active = recall_at_k(user_embs, item_embs_active, true_idx_active, k=10)
-    n_active = ndcg_at_k(user_embs,   item_embs_active, true_idx_active, k=10)
+    r_full   = recall_at_k(user_embs, item_embs_full,   true_idx_full,   k=10, device=device)
+    n_full   = ndcg_at_k(user_embs,   item_embs_full,   true_idx_full,   k=10, device=device)
+    r_active = recall_at_k(user_embs, item_embs_active, true_idx_active, k=10, device=device)
+    n_active = ndcg_at_k(user_embs,   item_embs_active, true_idx_active, k=10, device=device)
     return r_full, n_full, r_active, n_active
 
 
@@ -181,11 +181,11 @@ def main() -> None:
     txt_test_true_full  = dataset_true_idx(full_hist_test, test_df, article_id_to_idx)
     txt_test_true_active= dataset_true_idx(full_hist_test, test_df, {int(aid): active_id_to_idx[int(aid)] for aid in active_article_ids if int(aid) in active_id_to_idx})
 
-    # Mask out -1 (items not in pool)
+    # Mask out -1 (items not in pool) and use GPU if available
     def masked_eval(user_embs, item_embs, true_idx):
         mask = true_idx >= 0
-        return recall_at_k(user_embs[mask], item_embs, true_idx[mask], k=10), \
-               ndcg_at_k(user_embs[mask],   item_embs, true_idx[mask], k=10)
+        return recall_at_k(user_embs[mask], item_embs, true_idx[mask], k=10, device=device), \
+               ndcg_at_k(user_embs[mask],   item_embs, true_idx[mask], k=10, device=device)
 
     txt_vr_full,  txt_vn_full   = masked_eval(txt_val_user_embs,  txt_item_embs_full,   txt_val_true_full)
     txt_vr_act,   txt_vn_act    = masked_eval(txt_val_user_embs,  txt_item_embs_active, txt_val_true_active)
