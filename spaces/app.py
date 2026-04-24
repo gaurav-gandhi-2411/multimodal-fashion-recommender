@@ -12,6 +12,7 @@ Key differences from app/streamlit_app.py:
 """
 import json
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -270,12 +271,20 @@ def main():
                 )
                 st.markdown(score_md, unsafe_allow_html=True)
                 if explain:
+                    if i > 0:
+                        time.sleep(0.2)
                     with st.spinner("✨ Explaining..."):
                         try:
                             exp = explainer.explain(history_meta, rec_meta)
-                            st.info(exp)
                         except Exception as e:
-                            st.warning(f"Explanation unavailable: {e}")
+                            print(
+                                f"[app] explainer raised unexpectedly: "
+                                f"{type(e).__name__}: {e}",
+                                file=sys.stderr,
+                                flush=True,
+                            )
+                            exp = "This item matches your style based on your recent browsing."
+                        st.info(exp)
                     prog.progress((i + 1) / top_k)
             st.divider()
 
