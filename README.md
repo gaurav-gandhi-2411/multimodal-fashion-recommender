@@ -171,10 +171,11 @@ multimodal-fashion-recommender/
 │   ├── training/      # InfoNCE loss, trainer, callbacks
 │   ├── retrieval/     # FAISS index build + search
 │   └── reasoning/     # Groq LLM explainer
+├── app/
+│   └── streamlit_app.py  # Local demo (Ollama LLM explanations)
 ├── spaces/
-│   ├── app.py         # HuggingFace Spaces Streamlit app
-│   └── src/           # Model + retrieval modules (symlinked)
-├── upload_artifacts.py  # Offline: compute embeddings, build index, push to HF
+│   ├── app.py         # HuggingFace Spaces Streamlit app (Groq LLM)
+│   └── src/           # Model + retrieval modules for the Space
 ├── config.yaml          # Full training config
 ├── config_spaces.yaml   # Spaces config (CPU, top-k, Groq model)
 └── requirements.txt
@@ -198,14 +199,15 @@ pip install -r requirements.txt
 python -m src.data.pipeline          # Phase 1: process + split
 python -m src.models.encode_items    # Phase 2: CLIP + SBERT embeddings
 python -m src.training.train         # Phase 3: two-tower training
-
-# 4. Build Space artifacts and push to HuggingFace
-python upload_artifacts.py --push
 ```
 
-To run the Streamlit demo locally:
+**Two app variants:**
+> - `app/streamlit_app.py` — local demo using Ollama for LLM explanations
+> - `spaces/app.py` — HuggingFace Space deployment using Groq API
+
+To run the local demo:
 ```bash
-streamlit run spaces/app.py
+streamlit run app/streamlit_app.py
 ```
 
 ---
