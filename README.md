@@ -97,16 +97,26 @@ Temporal train/val/test split (no leakage):
 
 ## Results
 
-Evaluated on the temporal held-out test set (final 10% of transaction history):
+Evaluated on the temporal held-out **test set** (final 10%, 110,390 users):
 
-| Metric | Value |
-|---|---|
-| Recall@10 | 0.041 |
-| Recall@20 | 0.063 |
-| NDCG@10 | 0.028 |
-| MRR | 0.019 |
+| Metric | Full pool (20k items) | Active pool (10,556 items) |
+|---|---|---|
+| Recall@10 | 0.0299 | 0.0328 |
+| NDCG@10 | 0.0191 | 0.0208 |
+| MRR | 0.0158 | 0.0172 |
 
-Model early-stopped at epoch 13. Metrics are competitive with published two-tower baselines on this dataset (no cross-attention, no re-ranking). The 1,500-item Space index is a frequency-filtered subset; full-catalogue retrieval uses all 10,556 active items.
+### Phase 0.5 Baseline comparison (active pool, Recall@10)
+
+| Model | Recall@10 | vs. Popularity | vs. Co-purchase |
+|---|---|---|---|
+| Popularity (top-N global) | 0.0107 | 1.00× | — |
+| Co-purchase (item-to-item) | 0.0155 | 1.45× | 1.00× |
+| Text-only (SBERT) | 0.0248 | 2.31× | 1.60× |
+| **Multimodal two-tower (ours)** | **0.0328** | **3.06×** | **2.12×** |
+
+The 3.06× lift over popularity and 2.12× lift over co-purchase were measured on the active item pool (10,556 items) to match the FAISS retrieval index used in production. Quality gate threshold: 1.5× over co-purchase.
+
+Model early-stopped at epoch 13. Metrics on the full test set; the active-pool numbers reflect live retrieval conditions (items indexed by FAISS with valid images). The 1,500-item Space index is a frequency-filtered subset; full-catalogue retrieval uses all 10,556 active items.
 
 All training and evaluation ran on an NVIDIA RTX 3070 Laptop (8 GB VRAM); no cloud compute.
 
