@@ -4,11 +4,12 @@ import warnings
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
+from app.ingestion.pipeline import run_catalog_pipeline
 from app.ingestion.schema import CatalogRow
 from app.ingestion.sources import CsvSource, ShopifySource
-
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -229,10 +230,6 @@ class TestShopifySource:
 
 
 # ── Pipeline integration tests ────────────────────────────────────────────────
-
-import numpy as np
-
-from app.ingestion.pipeline import run_catalog_pipeline
 
 
 @pytest.fixture
