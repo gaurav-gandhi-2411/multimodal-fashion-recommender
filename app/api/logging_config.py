@@ -10,7 +10,6 @@ def configure_logging(*, json_logs: bool = False) -> None:
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
-        structlog.stdlib.add_logger_name,
     ]
     if json_logs:
         processors: list[structlog.types.Processor] = [
