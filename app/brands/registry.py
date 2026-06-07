@@ -30,6 +30,8 @@ class BrandConfig(BaseModel):
     transactions_dir: str | None = None
     checkpoint_path: str = "checkpoints/best.pt"
     api_key_env: str
+    embeddings_path: str | None = None
+    pdp_url_template: str | None = None
     llm: LLMBrandConfig = Field(default_factory=LLMBrandConfig)
 
 
