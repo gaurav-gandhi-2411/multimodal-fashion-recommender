@@ -152,7 +152,9 @@ def run_catalog_pipeline(
     # ── Step 5: ItemTower fusion → 256-dim ────────────────────────────────────
     logger.info("Step 4/6 — ItemTower fusion (checkpoint: %s)", checkpoint_path)
     model = _load_two_tower(checkpoint_path, device)
-    fused_emb: np.ndarray = _fuse_embeddings(model, img_emb, txt_emb, device, item_encode_batch_size)
+    fused_emb: np.ndarray = _fuse_embeddings(
+        model, img_emb, txt_emb, device, item_encode_batch_size
+    )
     logger.info("Fused embeddings: %s", fused_emb.shape)
 
     np.save(embeddings_path, fused_emb)
