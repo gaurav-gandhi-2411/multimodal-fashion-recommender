@@ -1,0 +1,15 @@
+brand: h_and_m
+display_name: "H&M"
+catalog_path: data/processed/articles.parquet
+# Directory containing faiss.index + article_ids.pkl (built by 03_build_index.py)
+index_path: data/processed/faiss_index_active
+# Concatenated train/val/test parquets for user history lookup
+transactions_dir: data/processed
+# Full TwoTowerModel checkpoint (UserTower needed for user embeddings)
+checkpoint_path: checkpoints/best.pt
+# API key is read from this env var at startup — value never stored in this file
+api_key_env: HM_API_KEY
+llm:
+  provider: groq          # groq | ollama | template
+  model: llama-3.1-8b-instant
+  enabled: true

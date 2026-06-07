@@ -1,0 +1,30 @@
+# Large data artifacts — mount at runtime via docker run -v
+data/
+checkpoints/
+
+# Development environments
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Git and IDE
+.git/
+.gitignore
+.claude/
+
+# Notebooks and reports
+notebooks/
+reports/
+docs/screenshots/
+
+# Log and eval artifacts
+*.log
+evals/
+baselines.log
+comparison*.log
+training*.log
+upload_artifacts.log
