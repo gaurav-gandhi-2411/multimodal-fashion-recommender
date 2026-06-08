@@ -4,7 +4,7 @@
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
-A two-tower retrieval system for personalised fashion recommendations, combining CLIP image embeddings, SBERT text embeddings, and a Transformer-based user sequence model. Deployed as an interactive HuggingFace Space with per-recommendation modality breakdowns and one-sentence LLM explanations via Groq.
+A two-tower retrieval system for personalised fashion recommendations, combining CLIP image embeddings, SBERT text embeddings, and a Transformer-based user sequence model. The system now supports multiple Indian D2C brands (Snitch, Fashor, Powerlook) with catalog-agnostic content-based retrieval — enabling any brand to go live with "more like this" recommendations from a catalog CSV, with no interaction history required. Deployed as an interactive HuggingFace Space with per-recommendation modality breakdowns and one-sentence LLM explanations via Groq.
 
 **[Live Demo](https://huggingface.co/spaces/gauravgandhi2411/multimodal-fashion-recommender)**
 
@@ -18,9 +18,10 @@ A two-tower retrieval system for personalised fashion recommendations, combining
 4. [Training](#training)
 5. [Results](#results)
 6. [Deployment](#deployment)
-7. [What I Learned](#what-i-learned)
-8. [Project Structure](#project-structure)
-9. [Reproducing](#reproducing)
+7. [Multi-Brand Indian Demo](#multi-brand-indian-demo)
+8. [What I Learned](#what-i-learned)
+9. [Project Structure](#project-structure)
+10. [Reproducing](#reproducing)
 
 ---
 
@@ -116,6 +117,8 @@ Evaluated on the temporal held-out **test set** (final 10%, 110,390 users):
 
 The 3.06× lift over popularity and 2.12× lift over co-purchase were measured on the active item pool (10,556 items) to match the FAISS retrieval index used in production. Quality gate threshold: 1.5× over co-purchase.
 
+These metrics apply to the H&M dataset on which the model was trained. For fresh Indian-brand catalogs, content-based `/similar` is the validated path; personalized `/recommend` improves as brand interaction data accumulates.
+
 Model early-stopped at epoch 13. Metrics on the full test set; the active-pool numbers reflect live retrieval conditions (items indexed by FAISS with valid images). The 1,500-item Space index is a frequency-filtered subset; full-catalogue retrieval uses all 10,556 active items.
 
 All training and evaluation ran on an NVIDIA RTX 3070 Laptop (8 GB VRAM); no cloud compute.
@@ -149,6 +152,33 @@ Live demo: [HuggingFace Space](https://huggingface.co/spaces/gauravgandhi2411/mu
 2. **Specialist recommendations (User A1)** — ![specialist](docs/screenshots/02-specialist.png)
 3. **Aesthetic buyer with modality breakdown (User C1)** — ![aesthetic](docs/screenshots/03-aesthetic.png)
 4. **Tooltip expanded showing score definitions** — ![scores](docs/screenshots/04-scores.png)
+
+---
+
+## Multi-Brand Indian Demo
+
+The Phase 3 addition makes the demo client-presentable to Indian fashion retailers. The system now ingests real catalogs from Indian D2C brands and serves them via the same production API.
+
+### Brands ingested
+
+| Brand | Category | Products | PDP URLs |
+|---|---|---|---|
+| **Snitch** | Men's streetwear (shirts, tees, jeans, cargo) | ~500 | snitch.co.in |
+| **Fashor** | Women's ethnic wear (kurta sets, 2P/3P kurta, kurti, co-ords) | ~3,600 | fashor.com |
+| **Powerlook** | Men's smart-casual & formal (shirts, tees, bottoms) | ~920 | powerlook.in |
+
+### Transfer-learning honesty
+
+The **item tower** (CLIP + SBERT → MLP → 256-dim) transfers cleanly to any catalog — CLIP has seen ethnic wear, and SBERT encodes Indian fashion vocabulary. Content-based `/similar` ("more like this", outfit completion) works well on day one.
+
+The **user tower** was trained on H&M interaction sequences and does **not** transfer to a brand with no interaction history. Personalized `/recommend` shown in the demo uses synthetic users labelled as such and is **illustrative only** — it demonstrates the API surface, not personalization quality. Personalization improves as the brand accumulates real traffic.
+
+> "Content-based recommendations work day one. Personalized recommendations improve as we learn from your traffic."
+
+### Demo flows
+
+1. **More Like This** — select any catalog item → `/v1/{brand}/item/{id}/similar` → ranked similar items with LLM explanation. This is the strong, honest day-one story.
+2. **Personalized Recommendations [Illustrative]** — select a synthetic demo user → `/v1/{brand}/recommend` → ranked personalized results. Clearly labelled synthetic throughout.
 
 ---
 
@@ -186,6 +216,17 @@ multimodal-fashion-recommender/
 ├── spaces/
 │   ├── app.py         # HuggingFace Spaces Streamlit app (Groq LLM)
 │   └── src/           # Model + retrieval modules for the Space
+├── brands/
+│   ├── h_and_m.yaml
+│   ├── snitch.yaml
+│   ├── fashor.yaml
+│   └── powerlook.yaml
+├── demo/
+│   └── demo_script.md       # Salesperson walkthrough
+├── scripts/
+│   ├── ingest_catalog.py
+│   ├── ingest_interactions.py
+│   └── prepare_indian_catalogs.py
 ├── config.yaml          # Full training config
 ├── config_spaces.yaml   # Spaces config (CPU, top-k, Groq model)
 └── requirements.txt
@@ -219,6 +260,26 @@ To run the local demo:
 ```bash
 streamlit run app/streamlit_app.py
 ```
+
+### Running the Indian brand demo
+
+```bash
+# 1. Prepare catalog CSVs from source data
+python scripts/prepare_indian_catalogs.py
+
+# 2. Ingest each brand (creates FAISS index + brand config)
+python scripts/ingest_catalog.py --source csv --path data/snitch/catalog.csv --brand snitch
+python scripts/ingest_catalog.py --source csv --path data/fashor/catalog.csv --brand fashor
+python scripts/ingest_catalog.py --source csv --path data/powerlook/catalog.csv --brand powerlook
+
+# 3. Start the API
+uvicorn app.main:app --reload
+
+# 4. Launch the demo
+streamlit run app/streamlit_app.py
+```
+
+See `demo/demo_script.md` for the full salesperson walkthrough.
 
 ---
 
