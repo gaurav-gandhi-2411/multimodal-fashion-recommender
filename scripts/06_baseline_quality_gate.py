@@ -712,7 +712,7 @@ def main() -> None:
     print(f"  → [{action_str}]")
 
     # Additional diagnostics
-    print(f"\nAdditional stats:")
+    print("\nAdditional stats:")
     print(
         f"  Co-purchase coverage: {cp_metrics['coverage_pct']:.1f}% had signal; "
         f"{cp_metrics['fallback_pct']:.1f}% fell back to popularity"

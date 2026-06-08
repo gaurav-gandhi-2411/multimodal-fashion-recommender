@@ -174,10 +174,6 @@ def test_dataset_getitem_dtypes(dataset):
 
 def test_dataset_getitem_mask_has_real_items(dataset):
     # Find a sample for our known test user that has prior history
-    train_df = pd.read_parquet("data/processed/train.parquet")
-    img_ids = np.load("data/processed/item_ids_image.npy")
-    article_to_idx = {int(aid): i for i, aid in enumerate(img_ids)}
-
     # Look for any sample index belonging to the test user
     found_idx = None
     for i, (uid, _, _) in enumerate(dataset._samples):

@@ -18,7 +18,6 @@ import pandas as pd
 import torch
 import yaml
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 

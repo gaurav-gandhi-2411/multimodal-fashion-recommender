@@ -80,7 +80,6 @@ def load_config():
 
 @st.cache_resource
 def load_model_and_embeddings():
-    config = load_config()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ckpt   = torch.load(CKPT_PATH, map_location=device, weights_only=False)
     model  = TwoTowerModel(ckpt["config"]).to(device)
@@ -235,7 +234,7 @@ def indian_brand_demo(brand: str) -> None:
                     recs = data.get("recommendations", data.get("items", []))
                     if recs:
                         cols = st.columns(min(len(recs), 5))
-                        for col, rec in zip(cols, recs):
+                        for col, rec in zip(cols, recs, strict=False):
                             rid = str(rec.get("item_id", rec.get("article_id", "")))
                             # Prefer pdp_url from API response; fall back to art_map
                             if rec.get("pdp_url"):
@@ -285,7 +284,7 @@ def indian_brand_demo(brand: str) -> None:
                     recs = data.get("recommendations", data.get("items", []))
                     if recs:
                         cols = st.columns(min(len(recs), 5))
-                        for col, rec in zip(cols, recs):
+                        for col, rec in zip(cols, recs, strict=False):
                             rid = str(rec.get("item_id", rec.get("article_id", "")))
                             if rec.get("pdp_url"):
                                 art_map[rid] = {**art_map.get(rid, {}), "pdp_url": rec["pdp_url"]}
@@ -380,7 +379,7 @@ def main():
     with left:
         st.subheader("Recent browsing history")
         hist_cols = st.columns(len(history_items))
-        for col, aid in zip(hist_cols, history_items):
+        for col, aid in zip(hist_cols, history_items, strict=False):
             render_item_card(col, aid, art_map)
 
     with right:

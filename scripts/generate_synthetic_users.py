@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 """Generate synthetic user interaction CSVs for three Indian fashion brands.
 
 Outputs one CSV per brand with columns: user_id, product_id, timestamp, event_type.
 All product_ids are verified to exist in the brand's catalog.csv.
 """
+from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
@@ -158,7 +157,7 @@ def generate_interactions(
 
             timestamps = random_timestamps(n_events, rng)
 
-            for pid, ts in zip(product_ids, timestamps):
+            for pid, ts in zip(product_ids, timestamps, strict=False):
                 rows.append(
                     {
                         "user_id": user_id,

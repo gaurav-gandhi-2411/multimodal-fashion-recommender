@@ -24,16 +24,14 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+
 from src.models.two_tower import TwoTowerModel
 from src.training.dataset import FashionInteractionDataset
 from src.training.evaluate import (
-    ndcg_at_k,
     popularity_ndcg_at_k,
     popularity_recall_at_k,
-    recall_at_k,
 )
-from src.training.train import encode_all_items, run_sanity_check, train, _collect_user_embs
-from torch.utils.data import DataLoader
+from src.training.train import run_sanity_check, train
 
 logging.basicConfig(
     level=logging.INFO,

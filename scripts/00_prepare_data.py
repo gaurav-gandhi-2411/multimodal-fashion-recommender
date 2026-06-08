@@ -1,11 +1,12 @@
 import yaml
+
 from src.data.loader import load_articles, load_transactions
 from src.data.preprocess import (
     build_item_text,
-    filter_cold_users,
-    temporal_split,
     build_user_sequences,
+    filter_cold_users,
     save_processed,
+    temporal_split,
 )
 
 with open("config.yaml") as f:

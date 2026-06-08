@@ -41,7 +41,7 @@ class OllamaExplainer:
             f"{history_str}\n\n"
             f"We are recommending: {rec_item['prod_name']} "
             f"({rec_item['colour_group_name']} {rec_item['product_type_name']})\n\n"
-            "In ONE sentence (max 25 words), explain why this recommendation fits the user's style. "
+            "In ONE sentence (max 25 words), explain why this recommendation fits the user's style. "  # noqa: E501
             "Be specific about patterns (e.g., colour, product category, style). "
             "Do not use bullet points. Do not start with 'This' or 'The'."
         )

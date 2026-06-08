@@ -1,0 +1,11 @@
+brand: snitch
+display_name: Snitch
+catalog_path: data/snitch/items.parquet
+index_path: indices/snitch/active.faiss
+embeddings_path: indices/snitch/item_emb.npy
+pdp_url_template: null
+api_key_env: SNITCH_API_KEY
+llm:
+  provider: template
+  enabled: true
+transactions_dir: data/snitch/transactions

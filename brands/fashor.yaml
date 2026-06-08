@@ -1,0 +1,11 @@
+brand: fashor
+display_name: Fashor
+catalog_path: data/fashor/items.parquet
+index_path: indices/fashor/active.faiss
+embeddings_path: indices/fashor/item_emb.npy
+pdp_url_template: null
+api_key_env: FASHOR_API_KEY
+llm:
+  provider: template
+  enabled: true
+transactions_dir: data/fashor/transactions

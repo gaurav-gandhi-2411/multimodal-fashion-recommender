@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Prepare Indian brand catalogs (Snitch, Fashor, Powerlook) for ingestion.
 
@@ -13,6 +11,7 @@ Sampling strategy:
 - Snitch    : Stratified 500-item sample from top-10 categories, min(count, 50) per
               category, seed=42 for reproducibility.
 """
+from __future__ import annotations
 
 import re
 from pathlib import Path
@@ -38,7 +37,9 @@ PDP_BASES: dict[str, str] = {
     "powerlook": "https://powerlook.in/products/",
 }
 
-TARGET_COLUMNS = ["product_id", "title", "description", "image_url", "price_inr", "category", "pdp_url"]
+TARGET_COLUMNS = [
+    "product_id", "title", "description", "image_url", "price_inr", "category", "pdp_url"
+]
 
 SNITCH_SAMPLE_SIZE = 500
 SNITCH_PER_CATEGORY = 50

@@ -75,9 +75,16 @@ markers = ["integration: requires H&M data files and HM_API_KEY env var"]
 
 [tool.ruff]
 line-length = 100
+exclude = ["notebooks", "spaces"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/0*.py" = ["E501", "F401", "F841", "B905", "I001"]
+"scripts/04_baselines.py" = ["E501", "F401", "F841", "I001"]
+"scripts/05_eval_comparison.py" = ["E501", "F401", "F841"]
+"scripts/06_baseline_quality_gate.py" = ["E501", "F541"]
 
 [tool.mypy]
 python_version = "3.11"

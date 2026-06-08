@@ -271,7 +271,7 @@ def train(
         val_loss_sum = 0.0
         n_val        = 0
         with torch.no_grad():
-            for batch in tqdm(val_loader, desc=f"Epoch {epoch}/{num_epochs} [val loss]", leave=False):
+            for batch in tqdm(val_loader, desc=f"Epoch {epoch}/{num_epochs} [val loss]", leave=False):  # noqa: E501
                 with torch.amp.autocast("cuda"):
                     logits = model(
                         batch["user_seq_img"].to(device),

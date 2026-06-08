@@ -4,6 +4,12 @@ __pycache__/
 data/raw/
 data/h-and-m-personalized-fashion-recommendations/
 data/processed/
+data/h-and-m-personalized-fashion-recommendations.zip
+# Brand-specific artifacts (reproduced by pipeline; commit only CSVs + yaml configs)
+data/*/images/
+data/*/items.parquet
+data/*/transactions/
+indices/
 checkpoints/
 *.ckpt
 .ipynb_checkpoints/
