@@ -555,3 +555,54 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 - Click/impression logging to Postgres (request_id → impression; click event links back)
 - `evals/` harness with Recall@K fixtures per brand
 - Weekly eval report auto-generated
+
+---
+
+## Phase 3 — Indian Brand Demo (complete)
+
+**Status:** Complete, merged to main via draft PR.
+
+### Brands ingested
+
+| Brand | Items | Catalog path | Index path | PDP base |
+|---|---|---|---|---|
+| Snitch | 500 (stratified) | data/snitch/items.parquet | indices/snitch/active.faiss | https://snitch.co.in/products/ |
+| Fashor | 3,618 (full) | data/fashor/items.parquet | indices/fashor/active.faiss | https://fashor.com/products/ |
+| Powerlook | 906 (full) | data/powerlook/items.parquet | indices/powerlook/active.faiss | https://powerlook.in/products/ |
+
+### Data provenance
+- Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\processed\{brand}\catalogue.parquet`
+- Transform script: `scripts/prepare_indian_catalogs.py` (parquet → 7-column CSV)
+- Ingest: `scripts/ingest_catalog.py --source csv` (unchanged Phase 2 pipeline)
+- PDP URLs: all 15 sampled URLs verified HTTP 200 before ingest
+
+### Synthetic users
+- 15 users per brand (45 total), 8–15 interactions each
+- user_id format: `synthetic_{brand}_{archetype}_{n}` — labelled synthetic everywhere
+- Generator: `scripts/generate_synthetic_users.py`
+- Ingested via `scripts/ingest_interactions.py` (transactions at data/{brand}/transactions/)
+- NOT personalization quality — illustrative only, as documented in README and demo UI
+
+### Transfer-learning honesty
+- Item tower (CLIP + SBERT → MLP) transfers cleanly to any catalog → /similar is the hero flow
+- User tower trained on H&M sequences → does NOT transfer to fresh Indian catalogs
+- /recommend on synthetic users = illustrative only, labelled in UI with warning banner
+
+### Demo flows
+1. **More Like This** (`/v1/{brand}/item/{id}/similar`) — strong day-one content story
+2. **Personalized Recs [Illustrative]** (`/v1/{brand}/recommend`) — labelled synthetic, API surface demo
+
+### Files added / changed
+- `scripts/prepare_indian_catalogs.py` — parquet-to-CSV catalog prep
+- `scripts/generate_synthetic_users.py` — synthetic interaction generator
+- `app/streamlit_app.py` — brand selector + Indian brand flows (H&M path unchanged)
+- `app/ingestion/interactions.py` — bug fix: `dtype={"product_id": str}` in load_generic_csv
+- `tests/test_indian_demo.py` — 22 smoke tests (113 total, 0 regressions)
+- `brands/snitch.yaml`, `brands/fashor.yaml`, `brands/powerlook.yaml` — brand configs
+- `README.md` — multi-brand intro, Indian brand section, transfer-learning note
+- `demo/demo_script.md` — salesperson walkthrough
+
+### Brand API key env vars (demo)
+- `SNITCH_API_KEY` → set to any value for local demo
+- `FASHOR_API_KEY` → set to any value for local demo
+- `POWERLOOK_API_KEY` → set to any value for local demo
