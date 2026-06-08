@@ -19,7 +19,10 @@ def load_generic_csv(path: Path) -> pd.DataFrame:
     with a warning. Raises ValueError if required columns are missing.
     """
     REQUIRED = {"user_id", "product_id", "timestamp", "event_type"}
-    df = pd.read_csv(path)
+    # product_id must be str so it matches the string keys in the catalog parquet.
+    # Without this, pandas infers large numeric-looking IDs (e.g. "8713437249698")
+    # as int64, causing 100% row drop when mapped against string catalog product_ids.
+    df = pd.read_csv(path, dtype={"product_id": str})
     missing = REQUIRED - set(df.columns)
     if missing:
         raise ValueError(f"Generic CSV missing required columns: {sorted(missing)}")

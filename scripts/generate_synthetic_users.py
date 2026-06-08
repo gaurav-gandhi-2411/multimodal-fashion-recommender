@@ -94,9 +94,15 @@ BRAND_CONFIG: dict[str, list[ArchetypeConfig]] = {
 
 
 def load_catalog(brand: str) -> pd.DataFrame:
-    """Load a brand's catalog CSV and return it."""
+    """Load a brand's catalog CSV and return it.
+
+    product_id is explicitly read as str so that large numeric-looking IDs
+    (e.g. "8713437249698") are not silently cast to int64 by pandas inference.
+    The ingestion pipeline stores product_id as string; mismatched types cause
+    100% row-drop during interaction merging.
+    """
     path = DATA_DIR / brand / "catalog.csv"
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, dtype={"product_id": str})
     return df
 
 
