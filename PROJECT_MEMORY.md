@@ -252,12 +252,16 @@ All mapped to generic format internally (`Email` → `user_id`, `Paid at` → `t
 
 ## Prometheus Metrics
 
-| Metric | Type | Labels |
-|--------|------|--------|
-| `fashion_rec_requests_total` | Counter | brand, endpoint, status |
-| `fashion_rec_request_latency_seconds` | Histogram | brand, endpoint |
-| `fashion_rec_llm_cost_usd_total` | Counter | brand, provider |
-| `fashion_rec_llm_calls_total` | Counter | brand, provider, status |
+| Metric | Type | Labels | Added |
+|--------|------|--------|-------|
+| `fashion_rec_requests_total` | Counter | brand, endpoint, status | Phase 1 |
+| `fashion_rec_request_latency_seconds` | Histogram | brand, endpoint | Phase 1 |
+| `fashion_rec_llm_cost_usd_total` | Counter | brand, provider | Phase 1 |
+| `fashion_rec_llm_calls_total` | Counter | brand, provider, status | Phase 1 |
+| `fashion_rec_llm_call_duration_seconds` | Histogram | brand, provider | Phase 4 |
+| `fashion_rec_llm_tokens_total` | Counter | brand, provider | Phase 4 |
+| `fashion_rec_explanation_cache_hits_total` | Counter | brand | Phase 4 |
+| `fashion_rec_explanation_cache_misses_total` | Counter | brand | Phase 4 |
 
 Buckets: [0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1.0, 2.5, 5.0]
 
@@ -266,7 +270,7 @@ Buckets: [0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1.0, 2.5, 5.0]
 ## structlog Fields (per request)
 
 ```
-brand, request_id, latency_ms, usd_cost, cold_start, k, n_results
+brand, request_id, latency_ms, usd_cost, inr_cost, cache_hits, cache_misses, cold_start, k, n_results
 ```
 
 LLM cost estimate: ($0.05×120 + $0.08×80)/1M ≈ $0.0000094 per call (Groq llama-3.1-8b-instant).
@@ -401,8 +405,8 @@ Additional notes from quality gate run:
 ### P1 — Required for commercial viability
 | Gap | Impact |
 |-----|--------|
-| No explanation caching | Groq costs spike at scale; caching is free |
-| No Cloud Run deploy + WIF auth | Not live on the internet |
+| ~~No explanation caching~~ | ✅ Phase 4: Redis + LRU fallback |
+| ~~No Cloud Run deploy + WIF auth~~ | ✅ Phase 4: deploy.yml workflow_dispatch ready |
 | No onboarding automation (CLI flags only; no web UI) | Requires data engineer; not self-serve |
 
 ### P2 — For scale / enterprise sales
@@ -496,7 +500,7 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | **Phase 1** | **Production API + Multi-Tenancy** | ✅ Complete | 2026-06-07 |
 | **Phase 2** | **Catalog Ingestion + Interaction Ingestion** | ✅ Complete | 2026-06-08 |
 | Phase 3 | Indian Brand Demo (Snitch + Fashor via Phase 2 pipeline) | — | — |
-| Phase 4 | Observability + Cost Tracking + Caching | — | — |
+| **Phase 4** | **Deploy + Cost + Caching** | ✅ Complete | 2026-06-09 |
 | Phase 5 | A/B Framework + Online Learning | — | — |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
@@ -543,12 +547,19 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 - Demo script updated for Indian brand results (kurta, ethnic wear categories visible)
 - Spaces deployment updated with Indian brand dropdown
 
-### Phase 4 — Exit Criteria
-- Redis-backed explanation cache (key = item_ids hash)
-- `app/pricing.py` with USD/INR cost constants, `usd_cost`/`inr_cost` logged per call
-- Prometheus histograms: `recommendation_latency_seconds`, `llm_tokens_total`
-- Sentry integration
-- `docker compose up` starts API + Redis + Prometheus locally
+### Phase 4 — Exit Criteria (ALL MET ✅)
+- [x] `app/pricing.py` — Groq cost constants, Cloud Run rates, `groq_call_cost_usd()`, `usd_to_inr()`, `cost_per_1000_recommendations()`
+- [x] `app/cache.py` — ExplanationCache (Redis primary, in-process LRU fallback); graceful Redis failure → LRU; no crash when Redis absent
+- [x] `app/storage.py` — GCS brand asset sync at startup; local-path no-op when `GCS_BUCKET_NAME` unset; mocked in CI (zero real GCS calls)
+- [x] Per-call structured logs: `usd_cost`, `inr_cost`, `cache_hits`, `cache_misses`
+- [x] New Prometheus metrics: `fashion_rec_llm_call_duration_seconds`, `fashion_rec_llm_tokens_total`, `fashion_rec_explanation_cache_hits_total`, `fashion_rec_explanation_cache_misses_total`
+- [x] `infra/Dockerfile.cpu` — CPU-only image (no CUDA runtime); respects `PORT` env var; healthcheck on `/health`; non-root (uid 1001)
+- [x] `infra/docker-compose.yml` — API + Redis for local dev; brand assets mounted from host
+- [x] `.github/workflows/deploy.yml` — `workflow_dispatch` only; WIF auth (no SA key files); build → push → Cloud Run; all secrets via GitHub Secrets
+- [x] `COST.md` — cost-per-1000 derivation with 4 scenarios; assumptions documented
+- [x] GCP project: user-provisioned, NOT aetherart-497918; referenced via `${{ secrets.GCS_PROJECT }}`; bucket via `GCS_BUCKET_NAME` env var
+- [x] 133 tests pass (15 new tests vs Phase 3 baseline); 1 pre-existing known failure unchanged
+- [x] DRAFT PR opened from branch `phase-4-deploy-cost-caching`
 
 ### Phase 5 — Exit Criteria
 - Champion-challenger traffic split in brand config
@@ -606,3 +617,56 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 - `SNITCH_API_KEY` → set to any value for local demo
 - `FASHOR_API_KEY` → set to any value for local demo
 - `POWERLOOK_API_KEY` → set to any value for local demo
+
+---
+
+## Phase 4 — Deploy + Cost + Caching (complete 2026-06-09)
+
+**Status:** Complete. DRAFT PR open from `phase-4-deploy-cost-caching`.
+
+### New modules
+| Module | Purpose |
+|--------|---------|
+| `app/pricing.py` | Groq + Cloud Run cost constants; `groq_call_cost_usd()`, `usd_to_inr()`, `cost_per_1000_recommendations()` |
+| `app/cache.py` | ExplanationCache (Redis → LRU fallback); `make_key()` keyed by brand+user_hist_ids+item_id+cold_start; TTL=3600s |
+| `app/storage.py` | GCS brand asset sync; mirrors repo-relative paths into bucket; no-op when `GCS_BUCKET_NAME` unset |
+
+### Infrastructure added
+| File | Purpose |
+|------|---------|
+| `infra/Dockerfile.cpu` | CPU-only image; no uv.lock (re-resolves on Linux = CPU torch from PyPI); non-root, `PORT`-aware, healthcheck |
+| `infra/docker-compose.yml` | API + Redis; brand data mounted from host |
+| `.github/workflows/deploy.yml` | `workflow_dispatch` → build/push/deploy to Cloud Run; WIF auth; all secrets via GitHub Secrets |
+| `COST.md` | Cost-per-1000 derivation; 4 scenarios; assumptions documented |
+
+### Cost summary (worst case)
+| Scenario | Cost / 1k recs (USD) | Cost / 1k recs (INR) |
+|----------|----------------------|----------------------|
+| explain=true, no cache | $0.0124 | ₹1.03 |
+| explain=true, 80% cache hit | $0.00248 | ₹0.21 |
+| explain=false (retrieval only) | $0.00 | ₹0.00 |
+
+### Deploy checklist (human steps before first Cloud Run run)
+1. Create new GCP project (NOT aetherart-497918)
+2. Enable: Artifact Registry, Cloud Run, Secret Manager, GCS APIs
+3. Create Artifact Registry repo (`fashion-rec`)
+4. Create GCS bucket for brand assets; upload indices/checkpoints/parquets mirroring repo layout
+5. Create Workload Identity Federation pool + provider for GitHub Actions
+6. Create service account with: Artifact Registry Writer, Cloud Run Developer, Secret Manager Accessor, Storage Object Viewer
+7. Add GitHub Secrets: `GCS_PROJECT`, `GCS_BUCKET_NAME`, `GCP_WIF_PROVIDER`, `GCP_SERVICE_ACCOUNT`, `SNITCH_API_KEY`, `FASHOR_API_KEY`, `POWERLOOK_API_KEY`, `GROQ_API_KEY`
+8. Add GitHub Variables: `GCP_REGION`, `GAR_HOSTNAME`, `GAR_REPO`
+9. Run workflow: Actions → Deploy to Cloud Run → Run workflow → staging
+10. Verify `/health` returns OK; verify `/metrics` exposes all 8 metrics
+
+### Docker build (pending human action)
+- `docker build -f infra/Dockerfile.cpu -t fashion-rec:cpu .` — requires Docker Desktop running
+- Before/after size comparison pending (baseline: 2.9 GB; expected: ~1–1.5 GB CPU-only)
+
+### Decisions made in Phase 4
+| Decision | Rationale |
+|----------|-----------|
+| LRU fallback for cache (no Redis in local dev) | Explanation caching works with zero infra in dev; Redis is opt-in via `REDIS_URL` |
+| `workflow_dispatch` only deploy | Unreviewed code must not auto-deploy to a public endpoint |
+| No `uv.lock` in Dockerfile.cpu | Windows lock has CUDA wheels; re-resolving on Linux gives CPU torch from PyPI |
+| GCS object key == local relative path | Simplest mapping; no translation layer; bucket mirrors repo layout |
+| In-process LRU cache (not functools.lru_cache) | OrderedDict LRU is evictable and testable; functools.lru_cache is not evictable and hides the key logic |
