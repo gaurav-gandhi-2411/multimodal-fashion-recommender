@@ -1,0 +1,38 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.cpu
+    ports:
+      - "8000:8000"
+    environment:
+      LOG_FORMAT: console
+      REDIS_URL: redis://redis:6379/0
+      # Brand API keys — set these in shell or .env file before running
+      SNITCH_API_KEY: ${SNITCH_API_KEY:-dev-snitch-key}
+      FASHOR_API_KEY: ${FASHOR_API_KEY:-dev-fashor-key}
+      POWERLOOK_API_KEY: ${POWERLOOK_API_KEY:-dev-powerlook-key}
+      HM_API_KEY: ${HM_API_KEY:-dev-hm-key}
+    volumes:
+      - ../checkpoints:/app/checkpoints:ro
+      - ../data:/app/data:ro
+      - ../indices:/app/indices:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
