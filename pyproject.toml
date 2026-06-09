@@ -50,18 +50,26 @@ dev = [
     "types-requests>=2.32",
 ]
 
-# ── PyTorch CUDA builds (Windows dev/test) ────────────────────────────────────
-# On Linux (Docker), uv pulls CPU-only torch from PyPI (no marker, default).
-# On Windows (this dev machine, CUDA 13.0 driver, RTX 3070), pull from the
-# PyTorch CUDA 12.8 index so existing encoder tests that call .to("cuda") pass.
+# ── PyTorch index sources ─────────────────────────────────────────────────────
+# Windows dev (CUDA 13.0 / RTX 3070): pull CUDA 12.8 wheels so encoder tests
+# that call .to("cuda") pass.
+# Linux (Docker / Cloud Run): pull CPU-only wheels from the PyTorch CPU index.
+# PyPI's linux torch wheel pulls nvidia-* CUDA packages as hard deps — the
+# explicit CPU index is required to avoid them.
 [[tool.uv.index]]
 name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
 [tool.uv.sources]
 torch = [
     { index = "pytorch-cu128", marker = "sys_platform == 'win32'" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
 ]
 torchvision = [
     { index = "pytorch-cu128", marker = "sys_platform == 'win32'" },

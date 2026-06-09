@@ -1,6 +1,7 @@
 # ── Stage 1: deps ────────────────────────────────────────────────────────────
-# Do NOT copy uv.lock — re-resolve on Linux so torch installs from PyPI
-# (CPU-only wheel) instead of the Windows CUDA 12.8 index.
+# Do NOT copy uv.lock — re-resolve on Linux so the pytorch-cpu index entry
+# in pyproject.toml is used (CPU-only torch). PyPI's linux torch wheel pulls
+# nvidia-* CUDA packages as hard deps; the explicit pytorch-cpu index avoids them.
 FROM python:3.11-slim AS deps
 WORKDIR /app
 
