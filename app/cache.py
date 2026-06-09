@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 from collections import OrderedDict
 
 import structlog
@@ -11,24 +12,30 @@ logger = structlog.get_logger(__name__)
 
 
 class _LRUCache:
-    """In-process LRU cache backed by OrderedDict."""
+    """In-process LRU cache with TTL, backed by OrderedDict."""
 
-    def __init__(self, maxsize: int = 512) -> None:
+    def __init__(self, maxsize: int = 512, ttl: int = 3600) -> None:
         self._maxsize = maxsize
-        self._store: OrderedDict[str, str] = OrderedDict()
+        self._ttl = ttl
+        self._store: OrderedDict[str, tuple[str, float]] = OrderedDict()
 
     def get(self, key: str) -> str | None:
         if key not in self._store:
             return None
+        value, inserted_at = self._store[key]
+        if time.monotonic() - inserted_at > self._ttl:
+            del self._store[key]
+            return None
         self._store.move_to_end(key)
-        return self._store[key]
+        return value
 
     def set(self, key: str, value: str) -> None:
+        entry = (value, time.monotonic())
         if key in self._store:
             self._store.move_to_end(key)
-            self._store[key] = value
+            self._store[key] = entry
             return
-        self._store[key] = value
+        self._store[key] = entry
         if len(self._store) > self._maxsize:
             self._store.popitem(last=False)
 
@@ -46,7 +53,7 @@ class ExplanationCache:
         ttl: int = 3600,
     ) -> None:
         self._ttl = ttl
-        self._lru = _LRUCache(maxsize=lru_maxsize)
+        self._lru = _LRUCache(maxsize=lru_maxsize, ttl=ttl)
         self._redis = None
 
         url = redis_url or os.environ.get("REDIS_URL")

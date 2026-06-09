@@ -20,12 +20,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
 COPY src/ src/
-COPY app/__init__.py app/
-COPY app/pricing.py app/
-COPY app/cache.py app/
-COPY app/storage.py app/
-COPY app/api/ app/api/
-COPY app/brands/ app/brands/
+COPY app/ app/
 COPY brands/ brands/
 COPY config.yaml .
 

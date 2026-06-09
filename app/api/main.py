@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -17,7 +18,7 @@ from app.storage import sync_brand_assets
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Configure logging and load all brand states before serving requests."""
     configure_logging(json_logs=os.environ.get("LOG_FORMAT", "console") == "json")
-    sync_brand_assets()
+    await asyncio.to_thread(sync_brand_assets)
     registry = load_registry("brands")
     app.state.registry = registry
     yield

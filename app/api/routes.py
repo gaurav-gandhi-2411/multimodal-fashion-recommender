@@ -99,6 +99,9 @@ def _get_item_embedding(item_id: str, state: BrandState) -> np.ndarray | None:
     return state.retriever.index.reconstruct(row)
 
 
+_EMPTY_EXPLANATION_SENTINEL = "__empty__"
+
+
 def _maybe_explain(
     user_hist_meta: list[dict],
     rec_meta: dict,
@@ -107,17 +110,21 @@ def _maybe_explain(
     *,
     cache: ExplanationCache,
     cache_key: str,
-) -> tuple[str | None, float, bool]:
-    """Return (explanation_or_none, usd_cost_estimate, cache_hit)."""
+) -> tuple[str | None, float, bool | None]:
+    """Return (explanation_or_none, usd_cost_estimate, cache_result).
+
+    cache_result: True=hit, False=miss, None=cache not consulted (LLM disabled).
+    """
     if not state.config.llm.enabled:
-        return None, 0.0, False
+        return None, 0.0, None
     provider = state.config.llm.provider
     if provider == "template":
-        return None, 0.0, False
+        return None, 0.0, None
 
     cached = cache.get(cache_key)
     if cached is not None:
-        return cached, 0.0, True
+        decoded = None if cached == _EMPTY_EXPLANATION_SENTINEL else cached
+        return decoded, 0.0, True
 
     try:
         if provider == "groq":
@@ -133,8 +140,7 @@ def _maybe_explain(
             LLM_TOKENS_TOTAL.labels(brand=brand, provider=provider).inc(
                 GROQ_EST_INPUT_TOKENS + GROQ_EST_OUTPUT_TOKENS
             )
-            if explanation:
-                cache.set(cache_key, explanation)
+            cache.set(cache_key, explanation or _EMPTY_EXPLANATION_SENTINEL)
             return explanation, usd, False
 
         if provider == "ollama":
@@ -149,8 +155,7 @@ def _maybe_explain(
             llm_duration = time.perf_counter() - t_llm
             LLM_CALLS.labels(brand=brand, provider=provider, status="success").inc()
             LLM_CALL_DURATION.labels(brand=brand, provider=provider).observe(llm_duration)
-            if explanation:
-                cache.set(cache_key, explanation)
+            cache.set(cache_key, explanation or _EMPTY_EXPLANATION_SENTINEL)
             return explanation, 0.0, False
 
     except Exception as exc:  # noqa: BLE001
@@ -226,10 +231,10 @@ async def recommend(
                 cache=_cache, cache_key=cache_key,
             )
             total_usd += cost
-            if was_cached:
+            if was_cached is True:
                 cache_hits += 1
                 EXPLANATION_CACHE_HITS.labels(brand=brand).inc()
-            else:
+            elif was_cached is False:
                 cache_misses += 1
                 EXPLANATION_CACHE_MISSES.labels(brand=brand).inc()
         results.append(
