@@ -14,7 +14,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.api.auth import require_brand
-from app.api.metrics import LLM_CALLS, LLM_COST_USD, REQUEST_COUNT, REQUEST_LATENCY
+from app.api.metrics import (
+    EXPLANATION_CACHE_HITS,
+    EXPLANATION_CACHE_MISSES,
+    LLM_CALL_DURATION,
+    LLM_CALLS,
+    LLM_COST_USD,
+    LLM_TOKENS_TOTAL,
+    REQUEST_COUNT,
+    REQUEST_LATENCY,
+)
 from app.api.schemas import (
     HealthBrand,
     HealthResponse,
@@ -24,13 +33,15 @@ from app.api.schemas import (
     SimilarResponse,
 )
 from app.brands.registry import BrandState
+from app.cache import ExplanationCache, get_cache
+from app.pricing import (
+    GROQ_EST_INPUT_TOKENS,
+    GROQ_EST_OUTPUT_TOKENS,
+    groq_call_cost_usd,
+    usd_to_inr,
+)
 
 _SEQ_LEN = 20
-# Groq llama-3.1-8b-instant pricing (USD/million tokens, June 2026 estimate)
-_GROQ_INPUT_PER_M = 0.05
-_GROQ_OUTPUT_PER_M = 0.08
-_GROQ_EST_INPUT_TOKENS = 120
-_GROQ_EST_OUTPUT_TOKENS = 80
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -88,31 +99,49 @@ def _get_item_embedding(item_id: str, state: BrandState) -> np.ndarray | None:
     return state.retriever.index.reconstruct(row)
 
 
+_EMPTY_EXPLANATION_SENTINEL = "__empty__"
+
+
 def _maybe_explain(
     user_hist_meta: list[dict],
     rec_meta: dict,
     brand: str,
     state: BrandState,
-) -> tuple[str | None, float]:
-    """Call LLM explainer; return (explanation_or_none, usd_cost_estimate)."""
+    *,
+    cache: ExplanationCache,
+    cache_key: str,
+) -> tuple[str | None, float, bool | None]:
+    """Return (explanation_or_none, usd_cost_estimate, cache_result).
+
+    cache_result: True=hit, False=miss, None=cache not consulted (LLM disabled).
+    """
     if not state.config.llm.enabled:
-        return None, 0.0
+        return None, 0.0, None
     provider = state.config.llm.provider
     if provider == "template":
-        return None, 0.0
+        return None, 0.0, None
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        decoded = None if cached == _EMPTY_EXPLANATION_SENTINEL else cached
+        return decoded, 0.0, True
 
     try:
         if provider == "groq":
             from src.reasoning.groq_explainer import GroqExplainer
 
+            t_llm = time.perf_counter()
             explanation = GroqExplainer().explain(user_hist_meta, rec_meta)
-            usd = (
-                _GROQ_EST_INPUT_TOKENS * _GROQ_INPUT_PER_M
-                + _GROQ_EST_OUTPUT_TOKENS * _GROQ_OUTPUT_PER_M
-            ) / 1_000_000
+            llm_duration = time.perf_counter() - t_llm
+            usd = groq_call_cost_usd()
             LLM_CALLS.labels(brand=brand, provider=provider, status="success").inc()
             LLM_COST_USD.labels(brand=brand, provider=provider).inc(usd)
-            return explanation, usd
+            LLM_CALL_DURATION.labels(brand=brand, provider=provider).observe(llm_duration)
+            LLM_TOKENS_TOTAL.labels(brand=brand, provider=provider).inc(
+                GROQ_EST_INPUT_TOKENS + GROQ_EST_OUTPUT_TOKENS
+            )
+            cache.set(cache_key, explanation or _EMPTY_EXPLANATION_SENTINEL)
+            return explanation, usd, False
 
         if provider == "ollama":
             import yaml
@@ -121,15 +150,19 @@ def _maybe_explain(
 
             with open("config.yaml") as f:  # noqa: PTH123
                 cfg = yaml.safe_load(f)
+            t_llm = time.perf_counter()
             explanation = OllamaExplainer(cfg).explain(user_hist_meta, rec_meta)
+            llm_duration = time.perf_counter() - t_llm
             LLM_CALLS.labels(brand=brand, provider=provider, status="success").inc()
-            return explanation, 0.0
+            LLM_CALL_DURATION.labels(brand=brand, provider=provider).observe(llm_duration)
+            cache.set(cache_key, explanation or _EMPTY_EXPLANATION_SENTINEL)
+            return explanation, 0.0, False
 
     except Exception as exc:  # noqa: BLE001
         LLM_CALLS.labels(brand=brand, provider=provider, status="error").inc()
         logger.warning("llm_explain_failed", provider=provider, exc=str(exc))
 
-    return None, 0.0
+    return None, 0.0, False
 
 
 @router.post("/v1/{brand}/recommend", response_model=RecommendResponse)
@@ -178,8 +211,11 @@ async def recommend(
 
     raw_results = state.retriever.search(query_emb, k=req.k)
 
+    _cache = get_cache()
     results: list[RecommendedItem] = []
     total_usd = 0.0
+    cache_hits = 0
+    cache_misses = 0
     for art_id, score in raw_results:
         try:
             aid = int(art_id)
@@ -188,8 +224,19 @@ async def recommend(
         meta = state.art_map.get(aid, {})
         explanation: str | None = None
         if req.explain:
-            explanation, cost = _maybe_explain(user_hist_meta, meta, brand, state)
+            user_hist_ids = [str(m["article_id"]) for m in user_hist_meta if "article_id" in m]
+            cache_key = _cache.make_key(brand, user_hist_ids, str(art_id), cold_start)
+            explanation, cost, was_cached = _maybe_explain(
+                user_hist_meta, meta, brand, state,
+                cache=_cache, cache_key=cache_key,
+            )
             total_usd += cost
+            if was_cached is True:
+                cache_hits += 1
+                EXPLANATION_CACHE_HITS.labels(brand=brand).inc()
+            elif was_cached is False:
+                cache_misses += 1
+                EXPLANATION_CACHE_MISSES.labels(brand=brand).inc()
         results.append(
             RecommendedItem(item_id=str(art_id), score=score, explanation=explanation)
         )
@@ -203,6 +250,9 @@ async def recommend(
         n_results=len(results),
         latency_ms=round(latency_ms, 2),
         usd_cost=round(total_usd, 8),
+        inr_cost=round(usd_to_inr(total_usd), 6),
+        cache_hits=cache_hits,
+        cache_misses=cache_misses,
     )
     REQUEST_COUNT.labels(brand=brand, endpoint="recommend", status="200").inc()
     REQUEST_LATENCY.labels(brand=brand, endpoint="recommend").observe(latency_ms / 1000)
@@ -250,6 +300,7 @@ async def similar(
         n_results=len(results),
         latency_ms=round(latency_ms, 2),
         usd_cost=0.0,
+        inr_cost=0.0,
     )
     REQUEST_COUNT.labels(brand=brand, endpoint="similar", status="200").inc()
     REQUEST_LATENCY.labels(brand=brand, endpoint="similar").observe(latency_ms / 1000)
