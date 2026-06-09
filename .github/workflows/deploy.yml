@@ -1,0 +1,123 @@
+# deploy.yml — Manual-only Cloud Run deployment workflow.
+#
+# TRIGGER: workflow_dispatch only. This workflow never runs automatically on push or PR.
+#
+# ──────────────────────────────────────────────────────────────────────────────
+# REQUIRED GITHUB SECRETS  (Settings → Secrets and variables → Actions → Secrets)
+# ──────────────────────────────────────────────────────────────────────────────
+#   GCS_PROJECT           — GCP project ID for this product (provision your own;
+#                           NOT aetherart-497918 or any shared project)
+#   GCS_BUCKET_NAME       — GCS bucket holding brand data assets (served at runtime)
+#   GCP_WIF_PROVIDER      — Workload Identity Federation provider resource name,
+#                           e.g. projects/123456/locations/global/workloadIdentityPools/gh/providers/gh
+#   GCP_SERVICE_ACCOUNT   — SA email bound to the WIF pool; must carry roles:
+#                             - Artifact Registry Writer
+#                             - Cloud Run Developer
+#                             - Secret Manager Accessor
+#                             - Storage Object Viewer
+#   SNITCH_API_KEY        — Stored in Secret Manager; injected into Cloud Run at deploy time
+#   FASHOR_API_KEY        — Stored in Secret Manager; injected into Cloud Run at deploy time
+#   POWERLOOK_API_KEY     — Stored in Secret Manager; injected into Cloud Run at deploy time
+#   GROQ_API_KEY          — Stored in Secret Manager; injected into Cloud Run at deploy time
+#
+# ──────────────────────────────────────────────────────────────────────────────
+# REQUIRED GITHUB VARIABLES  (Settings → Secrets and variables → Actions → Variables)
+# ──────────────────────────────────────────────────────────────────────────────
+#   GCP_REGION            — GCP region, e.g. us-central1
+#   GAR_HOSTNAME          — Artifact Registry hostname, e.g. us-central1-docker.pkg.dev
+#   GAR_REPO              — Artifact Registry repository name, e.g. fashion-rec
+#
+# ──────────────────────────────────────────────────────────────────────────────
+# NOTES
+# ──────────────────────────────────────────────────────────────────────────────
+# • REDIS_URL is intentionally omitted from Cloud Run env vars. The API falls back
+#   to an in-process LRU cache when Redis is unavailable. To enable managed caching,
+#   provision a Memorystore instance and add REDIS_URL to --set-secrets below.
+#
+# • --allow-unauthenticated makes the endpoint publicly accessible. To restrict
+#   access, replace with --no-allow-unauthenticated and grant the Cloud Run Invoker
+#   role (roles/run.invoker) to the specific service accounts or groups that need it.
+
+name: Deploy to Cloud Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment target'
+        required: true
+        default: 'staging'
+        type: choice
+        options: [staging, production]
+
+# Never cancel an in-flight deploy; a partial deploy is worse than a queued one.
+concurrency:
+  group: deploy-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build → Push → Deploy
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write   # required for Workload Identity Federation
+
+    env:
+      IMAGE: ${{ vars.GAR_HOSTNAME }}/${{ secrets.GCS_PROJECT }}/${{ vars.GAR_REPO }}/api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (WIF — no SA key file)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ vars.GAR_HOSTNAME }} --quiet
+
+      - name: Build CPU-only image
+        run: |
+          docker build \
+            -f infra/Dockerfile.cpu \
+            -t $IMAGE:${{ github.sha }} \
+            -t $IMAGE:latest \
+            .
+
+      - name: Push to Artifact Registry
+        run: |
+          docker push $IMAGE:${{ github.sha }}
+          docker push $IMAGE:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy fashion-recommender-api \
+            --image "$IMAGE:${{ github.sha }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --platform managed \
+            --port 8000 \
+            --min-instances 0 \
+            --max-instances 3 \
+            --memory 2Gi \
+            --cpu 1 \
+            --timeout 60s \
+            --concurrency 80 \
+            --set-env-vars "LOG_FORMAT=json,GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }},USD_TO_INR=83.0" \
+            --set-secrets "SNITCH_API_KEY=SNITCH_API_KEY:latest,FASHOR_API_KEY=FASHOR_API_KEY:latest,POWERLOOK_API_KEY=POWERLOOK_API_KEY:latest,GROQ_API_KEY=GROQ_API_KEY:latest" \
+            --service-account "${{ secrets.GCP_SERVICE_ACCOUNT }}" \
+            --allow-unauthenticated \
+            --project "${{ secrets.GCS_PROJECT }}"
+
+      - name: Show Cloud Run URL
+        run: |
+          gcloud run services describe fashion-recommender-api \
+            --region "${{ vars.GCP_REGION }}" \
+            --project "${{ secrets.GCS_PROJECT }}" \
+            --format "value(status.url)"
