@@ -382,6 +382,14 @@ Additional notes from quality gate run:
 
 ## Known Issues
 
+### Tech-debt: eval harness and live /similar route use different retrieval code paths
+- **Eval path** (`scripts/eval_similarity_quality.py`): calls `faiss_index.reconstruct()` directly and converts all IDs to `int` via `[int(aid) for aid in raw_ids]`. Candidates entering `rerank()` are always `(int, float)`.
+- **Live route path** (`app/api/routes.py`): calls `FaissRetriever.search()` which returns `str` IDs from `article_ids.pkl`. Candidates entering `rerank()` are `(str, float)`.
+- **Current state**: functionally equivalent post-Phase-6-fix because `rerank()` normalizes str→int internally. But the paths are NOT the same.
+- **Risk**: a future change to `FaissRetriever.search()`, the pkl serialization format, or `rerank()` could silently diverge — the eval would still look fine while prod is broken. This is exactly how the original no-op bug went undetected.
+- **Guard**: `tests/test_rerank_str_int.py` Test 2 asserts rerank is not a no-op for str candidates, but does not test the full live route end-to-end.
+- **Recommended fix**: unify on one path — either make the eval call through `FaissRetriever` (matching prod), or make `FaissRetriever.search()` return `int` IDs (matching eval). Do this in a future hardening pass, not under feature pressure.
+
 ### Pre-existing test failure: test_dataset_getitem_keys_and_shapes (out of scope)
 - **File**: `tests/test_models.py`
 - **Symptom**: Dataset `__getitem__` returns a `target_idx` key; test expects exactly 5 keys and fails.
