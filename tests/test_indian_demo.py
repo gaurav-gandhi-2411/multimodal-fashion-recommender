@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pickle
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -11,6 +12,9 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(ROOT))
+
+from app.rerank import RerankConfig
 
 BRANDS = ["snitch", "fashor", "powerlook"]
 
@@ -203,6 +207,7 @@ def _make_brand_state(brand: str) -> MagicMock:
     state.config.display_name = cfg_data["display_name"]
     state.config.llm.enabled = False
     state.config.llm.provider = "template"
+    state.config.rerank = RerankConfig.model_validate(cfg_data.get("rerank", {}))
     state.api_key = "test-key"
     state.retriever = retriever
     state.art_map = art_map
