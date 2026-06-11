@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from app.rerank import RerankConfig
 from src.models.two_tower import TwoTowerModel
 from src.retrieval.faiss_index import FaissRetriever
 
@@ -33,6 +34,7 @@ class BrandConfig(BaseModel):
     embeddings_path: str | None = None
     pdp_url_template: str | None = None
     llm: LLMBrandConfig = Field(default_factory=LLMBrandConfig)
+    rerank: RerankConfig = Field(default_factory=RerankConfig)
 
 
 @dataclass

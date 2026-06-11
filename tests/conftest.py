@@ -10,6 +10,8 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from app.rerank import RerankConfig
+
 
 @pytest.fixture(scope="module")
 def mock_art_map() -> dict[int, dict]:
@@ -45,6 +47,7 @@ def mock_brand_state(mock_art_map: dict) -> MagicMock:
     state.retriever.index.reconstruct.side_effect = (
         lambda row: np.zeros(256, dtype=np.float32)
     )
+    state.config.rerank = RerankConfig()
     state.art_map = mock_art_map
     state.faiss_aid_to_row = {111: 0, 222: 1, 333: 2}
     state.user_history = None

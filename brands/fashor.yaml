@@ -9,3 +9,32 @@ llm:
   provider: template
   enabled: true
 transactions_dir: data/fashor/transactions
+rerank:
+  enabled: true
+  candidate_pool_size: 50
+  w_similarity: 0.70
+  w_price_penalty: 0.25
+  w_category_affinity: 0.15
+  price_norm_inr: 1200.0
+  equivalent_group_bonus: 0.70
+  related_group_bonus: 0.40
+  category_groups:
+    - name: ethnic_set
+      members:
+        - "3P Kurta Set"
+        - "2P Kurta Set"
+        - "Kurta Set"
+        - "Co-ord Set"
+      related_groups:
+        - ethnic_individual
+    - name: ethnic_individual
+      members:
+        - "Kurtas"
+        - "Kurta"
+        - "Kurti/Tunics"
+      related_groups:
+        - ethnic_set
+    - name: western_dress
+      members:
+        - "Dresses"
+        - "Dress"

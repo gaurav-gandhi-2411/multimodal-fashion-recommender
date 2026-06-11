@@ -1,16 +1,26 @@
 """
 scripts/eval_similarity_quality.py
 
-One-off similarity-quality inspection for Indian brand catalogs. Runs the
-same item-to-item retrieval as /similar without touching the API, model
-checkpoints, encoders, or FAISS build logic.
+Before/after similarity-quality inspection for Indian brand catalogs.
+Compares raw FAISS retrieval against the re-rank layer (app.rerank) for /similar.
 
 For each brand (snitch, fashor, powerlook):
-  1. Samples 25 query items spread across categories (stratified).
-  2. Retrieves top-5 similar items (same logic as /similar route).
-  3. Computes: category-match rate, mean |ΔPrice| (INR), self-match / near-dupe flags.
-  4. Dumps a browsable HTML report.
-  5. Flags worst-10 results (lowest category-match) for failure-mode inspection.
+  1. Loads per-brand RerankConfig from brands/{brand}.yaml.
+  2. Samples N query items spread across categories (stratified, seed=42).
+  3. Runs TWO retrieval passes per query:
+       raw      — pure FAISS top-k (mirrors /similar with rerank disabled)
+       reranked — FAISS pool → rerank() (mirrors /similar with rerank enabled)
+  4. Computes TWO category-match metrics per pass:
+       strict   — exact category label match only (original metric; comparable to any
+                  baseline — not inflated by our taxonomy choices)
+       affinity — affinity(query_cat, neighbor_cat) >= AFFINITY_THRESHOLD (0.4).
+                  Counts exact (1.0) + equivalent-group (0.7) + related-group (0.4).
+                  Threshold is stated explicitly so taxonomy-driven improvement is
+                  auditable against the strict number.
+  5. Reports mean |ΔPrice| (INR) before/after rerank.
+  6. Checks per-brand guardrails (Fashor strict ≥ 58%, Powerlook strict ≥ 64%,
+     Fashor |ΔPrice| must drop; Snitch has no hard floor).
+  7. Dumps a browsable HTML report.
 
 Usage:
   python scripts/eval_similarity_quality.py
@@ -28,17 +38,48 @@ import pickle
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import faiss
 import numpy as np
 import pandas as pd
+import yaml
 
 REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from app.rerank import CategoryAffinityMap, RerankConfig
+from app.rerank import rerank as _rerank_fn
+
 BRANDS: list[str] = ["snitch", "fashor", "powerlook"]
-NEAR_DUPE_THRESHOLD = 0.995  # cosine-sim above this (non-self) flagged as near-dupe
+NEAR_DUPE_THRESHOLD = 0.995
 DEFAULT_OUTPUT = REPO_ROOT / "reports" / "similarity_eval.html"
+
+# Affinity match threshold = related_group_bonus (0.4).
+# Counts exact (1.0) + equivalent-group (0.7) + related-group (0.4) as a match.
+# Stated explicitly so affinity improvement vs. taxonomy choice is auditable.
+AFFINITY_THRESHOLD = 0.4
+
+# Per-brand guardrails checked against the RERANKED pass.
+# strict_floor: minimum reranked strict cat-match rate (None = no hard floor).
+# price_must_drop: reranked mean |ΔPrice| must be strictly lower than raw.
+GUARDRAILS: dict[str, dict[str, Any]] = {
+    "fashor": {
+        "strict_floor": 0.58,
+        "price_must_drop": True,
+        "note": "price weight=0.25 (highest); if price drops but strict regresses, flag weight as too high",
+    },
+    "powerlook": {
+        "strict_floor": 0.64,
+        "price_must_drop": False,
+        "note": "strongest baseline; protect strict floor",
+    },
+    "snitch": {
+        "strict_floor": None,
+        "price_must_drop": False,
+        "note": "no hard floor; report before/after only",
+    },
+}
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +96,8 @@ class NeighborResult:
     image_url: str
     pdp_url: str
     score: float
-    is_category_match: bool
+    is_strict_match: bool    # n_category == query_category (exact label only)
+    is_affinity_match: bool  # affinity(query_cat, n_cat) >= AFFINITY_THRESHOLD
     is_self: bool
     is_near_dupe: bool
 
@@ -69,11 +111,16 @@ class QueryResult:
     query_price_inr: float
     query_image_url: str
     query_pdp_url: str
-    neighbors: list[NeighborResult]
-    category_match_rate: float
-    mean_price_delta_inr: float
-    has_self_match: bool
-    n_near_dupes: int
+    raw_neighbors: list[NeighborResult]
+    reranked_neighbors: list[NeighborResult]
+    raw_strict_rate: float
+    raw_affinity_rate: float
+    raw_mean_price_delta: float
+    reranked_strict_rate: float
+    reranked_affinity_rate: float
+    reranked_mean_price_delta: float
+    has_self_match: bool    # reranked pass
+    n_near_dupes: int       # reranked pass
 
 
 # ---------------------------------------------------------------------------
@@ -84,20 +131,27 @@ class QueryResult:
 def _load_faiss(index_dir: Path) -> tuple[faiss.Index, list[int]]:
     index = faiss.read_index(str(index_dir / "faiss.index"))
     with open(index_dir / "article_ids.pkl", "rb") as fh:
-        raw_ids = pickle.load(fh)
+        raw_ids = pickle.load(fh)  # noqa: S301
     return index, [int(aid) for aid in raw_ids]
 
 
-def load_brand(brand: str) -> tuple[pd.DataFrame, faiss.Index, list[int], dict[int, int]]:
-    """Load catalog + FAISS index. No API key or model checkpoint needed."""
+def _load_rerank_config(brand: str) -> RerankConfig:
+    yaml_path = REPO_ROOT / "brands" / f"{brand}.yaml"
+    with open(yaml_path) as fh:
+        data = yaml.safe_load(fh)
+    return RerankConfig.model_validate(data.get("rerank", {}))
+
+
+def load_brand(
+    brand: str,
+) -> tuple[pd.DataFrame, faiss.Index, list[int], dict[int, int], RerankConfig]:
     catalog = pd.read_parquet(REPO_ROOT / "data" / brand / "items.parquet")
     catalog["article_id"] = catalog["article_id"].astype(int)
-
     index_dir = REPO_ROOT / "indices" / brand / "active.faiss"
     faiss_index, article_ids = _load_faiss(index_dir)
     aid_to_row: dict[int, int] = {aid: i for i, aid in enumerate(article_ids)}
-
-    return catalog, faiss_index, article_ids, aid_to_row
+    rerank_config = _load_rerank_config(brand)
+    return catalog, faiss_index, article_ids, aid_to_row, rerank_config
 
 
 # ---------------------------------------------------------------------------
@@ -106,25 +160,18 @@ def load_brand(brand: str) -> tuple[pd.DataFrame, faiss.Index, list[int], dict[i
 
 
 def _stratified_sample(catalog: pd.DataFrame, n: int, seed: int) -> pd.DataFrame:
-    """
-    Sample n rows spread across categories.
-
-    Algorithm: allocate min-1 slot per category, then distribute remaining n
-    slots proportionally by category size, capping at available items.
-    """
+    """Sample n rows spread across categories (min-1 per category, proportional fill)."""
     rng = np.random.default_rng(seed)
     cat_counts = catalog["category"].value_counts()
     n_cats = len(cat_counts)
 
     if n_cats >= n:
-        # More categories than query budget: one item from each top-n category.
         selected = []
         for cat in cat_counts.head(n).index:
             rows = catalog[catalog["category"] == cat]
             selected.append(rows.sample(1, random_state=int(rng.integers(1_000_000))))
         return pd.concat(selected).reset_index(drop=True)
 
-    # Allocate base = 1 per category, then distribute remaining proportionally.
     slots: dict[str, int] = {cat: 1 for cat in cat_counts.index}
     remaining = n - n_cats
     if remaining > 0:
@@ -133,7 +180,6 @@ def _stratified_sample(catalog: pd.DataFrame, n: int, seed: int) -> pd.DataFrame
             max_extra = len(catalog[catalog["category"] == cat]) - slots[cat]
             slots[cat] += min(int(extra), max_extra)
 
-    # Trim to exactly n (rounding may overshoot).
     total = sum(slots.values())
     for cat in reversed(cat_counts.index.tolist()):
         if total <= n:
@@ -152,11 +198,44 @@ def _stratified_sample(catalog: pd.DataFrame, n: int, seed: int) -> pd.DataFrame
 
 
 # ---------------------------------------------------------------------------
-# Retrieval (mirrors /similar route in app/api/routes.py)
+# Retrieval
 # ---------------------------------------------------------------------------
 
 
-def _retrieve_similar(
+def _build_neighbor(
+    n_aid: int,
+    score: float,
+    art_map: dict[int, dict],
+    query_aid: int,
+    query_category: str,
+    query_price: float,
+    affinity_map: CategoryAffinityMap,
+) -> NeighborResult:
+    meta = art_map.get(n_aid, {})
+    n_cat = str(meta.get("category", "unknown"))
+    n_price_raw = meta.get("price_inr")
+    try:
+        n_price = float(n_price_raw) if n_price_raw is not None else 0.0
+    except (TypeError, ValueError):
+        n_price = 0.0
+    is_self = n_aid == query_aid
+    aff = affinity_map.affinity(query_category, n_cat)
+    return NeighborResult(
+        article_id=n_aid,
+        title=str(meta.get("title", str(n_aid))),
+        category=n_cat,
+        price_inr=n_price,
+        image_url=str(meta.get("image_url", "")),
+        pdp_url=str(meta.get("pdp_url", "")),
+        score=score,
+        is_strict_match=(n_cat == query_category),
+        is_affinity_match=(aff >= AFFINITY_THRESHOLD),
+        is_self=is_self,
+        is_near_dupe=(score >= NEAR_DUPE_THRESHOLD and not is_self),
+    )
+
+
+def _retrieve_raw(
     query_aid: int,
     faiss_index: faiss.Index,
     article_ids: list[int],
@@ -168,12 +247,37 @@ def _retrieve_similar(
         return []
     emb = faiss_index.reconstruct(row).reshape(1, -1).astype(np.float32)
     scores, indices = faiss_index.search(emb, k + 1)
-    results = [
+    return [
+        (article_ids[idx], float(scores[0][j]))
+        for j, idx in enumerate(indices[0])
+        if idx != -1 and article_ids[idx] != query_aid
+    ][:k]
+
+
+def _retrieve_reranked(
+    query_aid: int,
+    faiss_index: faiss.Index,
+    article_ids: list[int],
+    aid_to_row: dict[int, int],
+    art_map: dict[int, dict],
+    rerank_config: RerankConfig,
+    k: int,
+) -> list[tuple[int, float]]:
+    row = aid_to_row.get(query_aid)
+    if row is None:
+        return []
+    pool_k = rerank_config.candidate_pool_size
+    emb = faiss_index.reconstruct(row).reshape(1, -1).astype(np.float32)
+    scores, indices = faiss_index.search(emb, pool_k + 1)
+    candidates = [
         (article_ids[idx], float(scores[0][j]))
         for j, idx in enumerate(indices[0])
         if idx != -1 and article_ids[idx] != query_aid
     ]
-    return results[:k]
+    query_meta = art_map.get(query_aid, {})
+    query_price = float(query_meta.get("price_inr") or 0.0)
+    query_cat = str(query_meta.get("category", ""))
+    return _rerank_fn(candidates, query_price, query_cat, art_map, rerank_config, k)
 
 
 # ---------------------------------------------------------------------------
@@ -181,55 +285,53 @@ def _retrieve_similar(
 # ---------------------------------------------------------------------------
 
 
+def _neighbor_metrics(
+    neighbors: list[NeighborResult],
+    query_price: float,
+) -> tuple[float, float, float]:
+    """Returns (strict_rate, affinity_rate, mean_price_delta)."""
+    valid = [nb for nb in neighbors if not nb.is_self]
+    n_valid = len(valid)
+    strict_rate = sum(1 for nb in valid if nb.is_strict_match) / n_valid if n_valid else 0.0
+    affinity_rate = sum(1 for nb in valid if nb.is_affinity_match) / n_valid if n_valid else 0.0
+    deltas = [abs(query_price - nb.price_inr) for nb in valid if nb.price_inr > 0 and query_price > 0]
+    mean_delta = float(np.mean(deltas)) if deltas else math.nan
+    return strict_rate, affinity_rate, mean_delta
+
+
 def eval_brand(brand: str, n_queries: int = 25, k: int = 5, seed: int = 42) -> list[QueryResult]:
     print(f"  Loading {brand}...", end=" ", flush=True)
-    catalog, faiss_index, article_ids, aid_to_row = load_brand(brand)
+    catalog, faiss_index, article_ids, aid_to_row, rerank_config = load_brand(brand)
     art_map: dict[int, dict] = catalog.set_index("article_id").to_dict("index")
     print(f"{len(catalog)} items, {catalog['category'].nunique()} categories")
 
     queries = _stratified_sample(catalog, n=n_queries, seed=seed)
     print(f"  Sampled {len(queries)} queries across {queries['category'].nunique()} categories")
 
+    affinity_map = CategoryAffinityMap(rerank_config)
     results: list[QueryResult] = []
+
     for _, qrow in queries.iterrows():
         q_aid = int(qrow["article_id"])
         q_cat = str(qrow["category"])
         q_price = float(qrow["price_inr"]) if pd.notna(qrow["price_inr"]) else 0.0
 
-        raw = _retrieve_similar(q_aid, faiss_index, article_ids, aid_to_row, k=k)
+        raw_hits = _retrieve_raw(q_aid, faiss_index, article_ids, aid_to_row, k=k)
+        rkd_hits = _retrieve_reranked(
+            q_aid, faiss_index, article_ids, aid_to_row, art_map, rerank_config, k=k
+        )
 
-        neighbors: list[NeighborResult] = []
-        for n_aid, score in raw:
-            meta = art_map.get(n_aid, {})
-            n_cat = str(meta.get("category", "unknown"))
-            n_price_raw = meta.get("price_inr")
-            n_price = (
-                float(n_price_raw) if n_price_raw is not None and pd.notna(n_price_raw) else 0.0
-            )
-            is_self = n_aid == q_aid
-            neighbors.append(NeighborResult(
-                article_id=n_aid,
-                title=str(meta.get("title", str(n_aid))),
-                category=n_cat,
-                price_inr=n_price,
-                image_url=str(meta.get("image_url", "")),
-                pdp_url=str(meta.get("pdp_url", "")),
-                score=score,
-                is_category_match=(n_cat == q_cat),
-                is_self=is_self,
-                is_near_dupe=(score >= NEAR_DUPE_THRESHOLD and not is_self),
-            ))
-
-        cat_matches = sum(1 for nb in neighbors if nb.is_category_match and not nb.is_self)
-        n_valid = sum(1 for nb in neighbors if not nb.is_self)
-        cat_match_rate = cat_matches / n_valid if n_valid > 0 else 0.0
-
-        price_deltas = [
-            abs(q_price - nb.price_inr)
-            for nb in neighbors
-            if not nb.is_self and nb.price_inr > 0 and q_price > 0
+        raw_nbs = [
+            _build_neighbor(aid, sc, art_map, q_aid, q_cat, q_price, affinity_map)
+            for aid, sc in raw_hits
         ]
-        mean_delta = float(np.mean(price_deltas)) if price_deltas else math.nan
+        rkd_nbs = [
+            _build_neighbor(aid, sc, art_map, q_aid, q_cat, q_price, affinity_map)
+            for aid, sc in rkd_hits
+        ]
+
+        raw_strict, raw_affinity, raw_delta = _neighbor_metrics(raw_nbs, q_price)
+        rkd_strict, rkd_affinity, rkd_delta = _neighbor_metrics(rkd_nbs, q_price)
 
         results.append(QueryResult(
             brand=brand,
@@ -237,13 +339,18 @@ def eval_brand(brand: str, n_queries: int = 25, k: int = 5, seed: int = 42) -> l
             query_title=str(qrow["title"]),
             query_category=q_cat,
             query_price_inr=q_price,
-            query_image_url=str(qrow.get("image_url", "")),
-            query_pdp_url=str(qrow.get("pdp_url", "")),
-            neighbors=neighbors,
-            category_match_rate=cat_match_rate,
-            mean_price_delta_inr=mean_delta,
-            has_self_match=any(nb.is_self for nb in neighbors),
-            n_near_dupes=sum(1 for nb in neighbors if nb.is_near_dupe),
+            query_image_url=str(qrow.get("image_url") or ""),
+            query_pdp_url=str(qrow.get("pdp_url") or ""),
+            raw_neighbors=raw_nbs,
+            reranked_neighbors=rkd_nbs,
+            raw_strict_rate=raw_strict,
+            raw_affinity_rate=raw_affinity,
+            raw_mean_price_delta=raw_delta,
+            reranked_strict_rate=rkd_strict,
+            reranked_affinity_rate=rkd_affinity,
+            reranked_mean_price_delta=rkd_delta,
+            has_self_match=any(nb.is_self for nb in rkd_nbs),
+            n_near_dupes=sum(1 for nb in rkd_nbs if nb.is_near_dupe),
         ))
 
     return results
@@ -255,33 +362,186 @@ def eval_brand(brand: str, n_queries: int = 25, k: int = 5, seed: int = 42) -> l
 
 
 def _brand_stats(results: list[QueryResult]) -> dict:
-    cat_rates = [r.category_match_rate for r in results]
-    deltas = [r.mean_price_delta_inr for r in results if not math.isnan(r.mean_price_delta_inr)]
+    raw_strict = [r.raw_strict_rate for r in results]
+    raw_affinity = [r.raw_affinity_rate for r in results]
+    raw_deltas = [r.raw_mean_price_delta for r in results if not math.isnan(r.raw_mean_price_delta)]
+    rkd_strict = [r.reranked_strict_rate for r in results]
+    rkd_affinity = [r.reranked_affinity_rate for r in results]
+    rkd_deltas = [r.reranked_mean_price_delta for r in results if not math.isnan(r.reranked_mean_price_delta)]
 
-    per_cat: dict[str, list[float]] = {}
+    per_cat: dict[str, dict] = {}
     for r in results:
-        per_cat.setdefault(r.query_category, []).append(r.category_match_rate)
+        cat = r.query_category
+        if cat not in per_cat:
+            per_cat[cat] = {
+                "n": 0,
+                "raw_strict": [],
+                "rkd_strict": [],
+                "raw_affinity": [],
+                "rkd_affinity": [],
+            }
+        per_cat[cat]["n"] += 1
+        per_cat[cat]["raw_strict"].append(r.raw_strict_rate)
+        per_cat[cat]["rkd_strict"].append(r.reranked_strict_rate)
+        per_cat[cat]["raw_affinity"].append(r.raw_affinity_rate)
+        per_cat[cat]["rkd_affinity"].append(r.reranked_affinity_rate)
 
     return {
         "n_queries": len(results),
-        "cat_match_rate": float(np.mean(cat_rates)),
-        "cat_match_std": float(np.std(cat_rates)),
-        "mean_price_delta": float(np.mean(deltas)) if deltas else math.nan,
+        "raw_strict_rate": float(np.mean(raw_strict)) if raw_strict else math.nan,
+        "raw_affinity_rate": float(np.mean(raw_affinity)) if raw_affinity else math.nan,
+        "raw_mean_price_delta": float(np.mean(raw_deltas)) if raw_deltas else math.nan,
+        "rkd_strict_rate": float(np.mean(rkd_strict)) if rkd_strict else math.nan,
+        "rkd_affinity_rate": float(np.mean(rkd_affinity)) if rkd_affinity else math.nan,
+        "rkd_mean_price_delta": float(np.mean(rkd_deltas)) if rkd_deltas else math.nan,
         "self_match_count": sum(1 for r in results if r.has_self_match),
         "near_dupe_count": sum(r.n_near_dupes for r in results),
         "per_category": {
             cat: {
-                "n": len(vals),
-                "mean_match_rate": float(np.mean(vals)),
+                "n": data["n"],
+                "raw_strict_rate": float(np.mean(data["raw_strict"])),
+                "rkd_strict_rate": float(np.mean(data["rkd_strict"])),
+                "raw_affinity_rate": float(np.mean(data["raw_affinity"])),
+                "rkd_affinity_rate": float(np.mean(data["rkd_affinity"])),
             }
-            for cat, vals in per_cat.items()
+            for cat, data in per_cat.items()
         },
     }
 
 
 # ---------------------------------------------------------------------------
+# Guardrail checks + CLI table
+# ---------------------------------------------------------------------------
+
+
+def _check_guardrails(brand: str, stats: dict) -> tuple[bool, list[str]]:
+    """Returns (all_hard_guardrails_pass, list_of_breach_and_flag_messages)."""
+    g = GUARDRAILS.get(brand, {})
+    raw_strict = stats["raw_strict_rate"]
+    rkd_strict = stats["rkd_strict_rate"]
+    raw_delta = stats["raw_mean_price_delta"]
+    rkd_delta = stats["rkd_mean_price_delta"]
+    breaches: list[str] = []
+    flags: list[str] = []
+
+    strict_floor = g.get("strict_floor")
+    if strict_floor is not None and not math.isnan(rkd_strict):
+        if rkd_strict < strict_floor:
+            breaches.append(
+                f"strict cat-match {_pct(rkd_strict)} < floor {_pct(strict_floor)}"
+            )
+
+    if g.get("price_must_drop"):
+        if not math.isnan(raw_delta) and not math.isnan(rkd_delta):
+            if rkd_delta >= raw_delta:
+                breaches.append(
+                    f"|ΔPrice| did not drop ({_inr(raw_delta)} → {_inr(rkd_delta)})"
+                )
+
+    # Fashor-specific advisory: price improved but strict regressed — price weight likely too high
+    if brand == "fashor":
+        if (
+            not math.isnan(raw_delta)
+            and not math.isnan(rkd_delta)
+            and not math.isnan(raw_strict)
+            and not math.isnan(rkd_strict)
+        ):
+            if rkd_delta < raw_delta and rkd_strict < raw_strict:
+                flags.append(
+                    f"price improved ({_inr(raw_delta)} → {_inr(rkd_delta)}) "
+                    f"but strict regressed ({_pct(raw_strict)} → {_pct(rkd_strict)}); "
+                    f"Fashor price weight 0.25 may be too high — consider 0.20"
+                )
+
+    ok = len(breaches) == 0
+    messages = [f"BREACH: {b}" for b in breaches] + [f"FLAG: {f}" for f in flags]
+    return ok, messages
+
+
+def _pct(v: float) -> str:
+    return f"{v * 100:.0f}%"
+
+
+def _inr(v: float) -> str:
+    if math.isnan(v):
+        return "—"
+    return f"₹{v:,.0f}"
+
+
+def _delta_pp(before: float, after: float) -> str:
+    if math.isnan(before) or math.isnan(after):
+        return "—"
+    diff = (after - before) * 100
+    sign = "+" if diff >= 0 else ""
+    return f"{sign}{diff:.0f}pp"
+
+
+def _delta_inr(before: float, after: float) -> str:
+    if math.isnan(before) or math.isnan(after):
+        return "—"
+    arrow = "↓" if after < before else ("↑" if after > before else "→")
+    return f"{arrow}{abs(before - after):,.0f}"
+
+
+def print_comparison_table(all_stats: dict[str, dict]) -> bool:
+    """Print the before/after CLI table. Returns True if all hard guardrails pass."""
+    col_brand = 12
+    col_strict = 22
+    col_affinity = 24
+    col_price = 24
+    col_guard = 10
+
+    header = (
+        f"{'Brand':<{col_brand}} | "
+        f"{'Strict (raw → rkd)':<{col_strict}} | "
+        f"{'Affinity (raw → rkd)':<{col_affinity}} | "
+        f"{'|ΔPrice| (raw → rkd)':<{col_price}} | "
+        f"Guardrail"
+    )
+    sep = "-" * len(header)
+
+    print(f"\nAffinity threshold: {AFFINITY_THRESHOLD} "
+          f"(counts exact + equivalent-group + related-group)\n")
+    print(sep)
+    print(header)
+    print(sep)
+
+    all_ok = True
+    for brand in BRANDS:
+        if brand not in all_stats:
+            continue
+        s = all_stats[brand]
+        ok, messages = _check_guardrails(brand, s)
+        if not ok:
+            all_ok = False
+
+        rs, ra = s["raw_strict_rate"], s["raw_affinity_rate"]
+        ks, ka = s["rkd_strict_rate"], s["rkd_affinity_rate"]
+        rd, kd = s["raw_mean_price_delta"], s["rkd_mean_price_delta"]
+
+        strict_str = f"{_pct(rs)} → {_pct(ks)} ({_delta_pp(rs, ks)})"
+        affinity_str = f"{_pct(ra)} → {_pct(ka)} ({_delta_pp(ra, ka)})"
+        price_str = f"{_inr(rd)} → {_inr(kd)} ({_delta_inr(rd, kd)})"
+        guard_str = "BREACH" if not ok else ("FLAG" if messages else "OK")
+
+        print(
+            f"{brand:<{col_brand}} | "
+            f"{strict_str:<{col_strict}} | "
+            f"{affinity_str:<{col_affinity}} | "
+            f"{price_str:<{col_price}} | "
+            f"{guard_str}"
+        )
+        for msg in messages:
+            print(f"  {'':>{col_brand}}   {msg}")
+
+    print(sep)
+    return all_ok
+
+
+# ---------------------------------------------------------------------------
 # HTML generation
 # ---------------------------------------------------------------------------
+
 
 _CSS = """
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -309,6 +569,9 @@ tr:hover td { background: #fafafa; }
 .badge-info { background: #dbeafe; color: #1e40af; }
 .badge-dupe { background: #f3e8ff; color: #6b21a8; }
 .badge-self { background: #ffe4e6; color: #9f1239; }
+.badge-breach { background: #fee2e2; color: #991b1b; font-size: 12px; padding: 3px 8px; }
+.badge-flag { background: #fef3c7; color: #92400e; font-size: 12px; padding: 3px 8px; }
+.badge-pass { background: #d1fae5; color: #065f46; font-size: 12px; padding: 3px 8px; }
 .callout { background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;
            padding: 14px 18px; margin: 16px 0; }
 .callout-warn { background: #fff1f2; border-color: #fecdd3; }
@@ -347,21 +610,14 @@ tr:hover td { background: #fafafa; }
 .toc a { color: #4F46E5; text-decoration: none; font-size: 13px; }
 .toc a:hover { text-decoration: underline; }
 .toc li { margin: 4px 0; }
+.delta-good { color: #065f46; font-weight: 600; }
+.delta-bad { color: #991b1b; font-weight: 600; }
+.delta-neutral { color: #555; }
 """
 
 
 def _esc(s: str) -> str:
     return html_lib.escape(str(s))
-
-
-def _pct(v: float) -> str:
-    return f"{v * 100:.0f}%"
-
-
-def _inr(v: float) -> str:
-    if math.isnan(v):
-        return "—"
-    return f"₹{v:,.0f}"
 
 
 def _match_badge(rate: float) -> str:
@@ -376,16 +632,27 @@ def _match_badge(rate: float) -> str:
 
 def _bar_html(rate: float) -> str:
     width = int(rate * 80)
-    if rate >= 0.8:
-        color = "#10b981"
-    elif rate >= 0.4:
-        color = "#f59e0b"
-    else:
-        color = "#ef4444"
+    color = "#10b981" if rate >= 0.8 else ("#f59e0b" if rate >= 0.4 else "#ef4444")
     return (
         f'<div class="bar-bg"><div class="bar" style="width:{width}px;background:{color}"></div>'
         f"</div>"
     )
+
+
+def _delta_html(before: float, after: float, lower_is_better: bool = False) -> str:
+    if math.isnan(before) or math.isnan(after):
+        return '<span class="delta-neutral">—</span>'
+    diff = after - before
+    if lower_is_better:
+        is_good = diff < 0
+    else:
+        is_good = diff > 0
+    cls = "delta-good" if is_good else ("delta-bad" if diff != 0 else "delta-neutral")
+    sign = "+" if diff >= 0 else ""
+    if lower_is_better:
+        arrow = "↓" if diff < 0 else ("↑" if diff > 0 else "→")
+        return f'<span class="{cls}">{arrow}{abs(diff):,.0f}</span>'
+    return f'<span class="{cls}">{sign}{diff * 100:.0f}pp</span>'
 
 
 def _item_card_html(
@@ -397,8 +664,10 @@ def _item_card_html(
     *,
     query_category: str = "",
     score: float | None = None,
-    is_query: bool = False,
+    is_strict_match: bool = False,
+    is_affinity_match: bool = False,
     is_near_dupe: bool = False,
+    is_query: bool = False,
     rank: int | None = None,
 ) -> str:
     img_html = (
@@ -410,12 +679,19 @@ def _item_card_html(
         label = '<div class="query-label">Query</div>'
     else:
         rank_str = f"#{rank} " if rank else ""
-        is_match = category == query_category
-        cat_cls = "badge-good" if is_match else "badge-bad"
+        if is_strict_match:
+            cat_cls = "badge-good"
+            cat_note = ""
+        elif is_affinity_match:
+            cat_cls = "badge-ok"
+            cat_note = " ~"  # affinity-only match
+        else:
+            cat_cls = "badge-bad"
+            cat_note = ""
         dupe_badge = ' <span class="badge badge-dupe">dupe?</span>' if is_near_dupe else ""
         label = (
             f'<div class="neighbor-label">{rank_str}'
-            f'<span class="badge {cat_cls}">{_esc(category)}</span>{dupe_badge}</div>'
+            f'<span class="badge {cat_cls}">{_esc(category)}{cat_note}</span>{dupe_badge}</div>'
         )
     score_html = (
         f'<div class="item-score">sim {score:.3f}</div>' if score is not None else ""
@@ -431,18 +707,23 @@ def _item_card_html(
     )
 
 
-def _query_row_html(r: QueryResult, *, is_worst: bool = False, rank_label: str = "") -> str:
+def _query_row_html(r: QueryResult, *, is_worst: bool = False) -> str:
+    """Render one query row showing RERANKED neighbors with strict + affinity badges."""
     row_cls = "query-row worst" if is_worst else "query-row"
     brand_badge = f'<span class="badge badge-info" style="margin-right:4px">{_esc(r.brand)}</span>'
-    rate_badge = _match_badge(r.category_match_rate)
-    delta_str = _inr(r.mean_price_delta_inr)
-    self_badge = ' — <span class="badge badge-self">self?</span>' if r.has_self_match else ""
+
+    strict_delta = _delta_html(r.raw_strict_rate, r.reranked_strict_rate)
+    affinity_delta = _delta_html(r.raw_affinity_rate, r.reranked_affinity_rate)
+    price_delta = _delta_html(r.raw_mean_price_delta, r.reranked_mean_price_delta, lower_is_better=True)
+
+    self_badge = ' <span class="badge badge-self">self?</span>' if r.has_self_match else ""
     header = (
         f'<div style="margin-bottom:8px;font-size:12px">'
         f"{brand_badge}"
         f'<strong>{_esc(r.query_category)}</strong>'
-        f" — cat match: {rate_badge}"
-        f" — |ΔPrice|: {delta_str}"
+        f" — strict: {_match_badge(r.reranked_strict_rate)} ({strict_delta})"
+        f" — affinity: {_match_badge(r.reranked_affinity_rate)} ({affinity_delta})"
+        f" — |ΔPrice|: {_inr(r.reranked_mean_price_delta)} ({price_delta})"
         f"{self_badge}"
         f"</div>"
     )
@@ -454,13 +735,15 @@ def _query_row_html(r: QueryResult, *, is_worst: bool = False, rank_label: str =
         _item_card_html(
             nb.title, nb.category, nb.price_inr, nb.image_url, nb.pdp_url,
             query_category=r.query_category, score=nb.score,
+            is_strict_match=nb.is_strict_match,
+            is_affinity_match=nb.is_affinity_match,
             is_near_dupe=nb.is_near_dupe, rank=i + 1,
         )
-        for i, nb in enumerate(r.neighbors)
+        for i, nb in enumerate(r.reranked_neighbors)
     )
     return (
         f'<div class="{row_cls}">'
-        f"<div>"
+        f"<div style='width:100%'>"
         f"{header}"
         f'<div class="neighbors">'
         f"{query_card}"
@@ -472,55 +755,83 @@ def _query_row_html(r: QueryResult, *, is_worst: bool = False, rank_label: str =
     )
 
 
-def _summary_table_html(all_results: list[QueryResult], stats: dict[str, dict]) -> str:
+def _comparison_table_html(all_stats: dict[str, dict]) -> str:
+    """Before/after table: brand × strict/affinity/price (raw → reranked)."""
     rows_html = ""
     for brand in BRANDS:
-        if brand not in stats:
+        if brand not in all_stats:
             continue
-        s = stats[brand]
-        rate = s["cat_match_rate"]
+        s = all_stats[brand]
+        ok, messages = _check_guardrails(brand, s)
+        guard_cls = "badge-pass" if ok and not messages else ("badge-flag" if ok else "badge-breach")
+        guard_label = "OK" if ok and not messages else ("FLAG" if ok else "BREACH")
+
+        rs, ra = s["raw_strict_rate"], s["raw_affinity_rate"]
+        ks, ka = s["rkd_strict_rate"], s["rkd_affinity_rate"]
+        rd, kd = s["raw_mean_price_delta"], s["rkd_mean_price_delta"]
+
+        msg_html = "".join(
+            f'<div style="font-size:11px;color:#555;margin-top:3px">{_esc(m)}</div>'
+            for m in messages
+        )
+
         rows_html += (
             f"<tr>"
             f"<td><strong>{_esc(brand)}</strong></td>"
             f"<td>{s['n_queries']}</td>"
-            f"<td>{_bar_html(rate)} {_match_badge(rate)}</td>"
-            f"<td>{_inr(s['mean_price_delta'])}</td>"
-            f"<td>{'⚠ ' + str(s['self_match_count']) if s['self_match_count'] > 0 else '✓ 0'}</td>"
-            f"<td>{s['near_dupe_count']}</td>"
+            f"<td>{_bar_html(rs)} {_match_badge(rs)}</td>"
+            f"<td>{_bar_html(ks)} {_match_badge(ks)} {_delta_html(rs, ks)}</td>"
+            f"<td>{_bar_html(ra)} {_match_badge(ra)}</td>"
+            f"<td>{_bar_html(ka)} {_match_badge(ka)} {_delta_html(ra, ka)}</td>"
+            f"<td>{_inr(rd)}</td>"
+            f"<td>{_inr(kd)} {_delta_html(rd, kd, lower_is_better=True)}</td>"
+            f'<td><span class="badge {guard_cls}">{guard_label}</span>{msg_html}</td>'
             f"</tr>"
         )
+
     return (
         f"<table>"
-        f"<tr><th>Brand</th><th>Queries</th><th>Cat Match Rate</th>"
-        f"<th>Mean |ΔPrice|</th><th>Self-Match</th><th>Near Dupes (sim≥0.995)</th></tr>"
+        f"<tr>"
+        f"<th>Brand</th><th>Queries</th>"
+        f"<th>Strict (raw)</th><th>Strict (reranked)</th>"
+        f"<th>Affinity (raw)</th><th>Affinity (reranked)</th>"
+        f"<th>|ΔPrice| (raw)</th><th>|ΔPrice| (reranked)</th>"
+        f"<th>Guardrail</th>"
+        f"</tr>"
         f"{rows_html}"
         f"</table>"
+        f'<p class="meta">Affinity threshold: {AFFINITY_THRESHOLD} — '
+        f"counts exact (1.0) + equivalent-group (0.7) + related-group (0.4) as matches. "
+        f"Green item-card badge = strict match; yellow ~ = affinity-only match; red = no match.</p>"
     )
 
 
 def _per_category_table_html(cat_data: dict[str, dict]) -> str:
-    sorted_cats = sorted(cat_data.items(), key=lambda x: x[1]["mean_match_rate"])
+    sorted_cats = sorted(cat_data.items(), key=lambda x: x[1]["rkd_strict_rate"])
     rows_html = "".join(
         f"<tr>"
         f"<td>{_esc(cat)}</td>"
         f"<td>{d['n']}</td>"
-        f"<td>{_bar_html(d['mean_match_rate'])} {_match_badge(d['mean_match_rate'])}</td>"
+        f"<td>{_bar_html(d['raw_strict_rate'])} {_match_badge(d['raw_strict_rate'])}</td>"
+        f"<td>{_bar_html(d['rkd_strict_rate'])} {_match_badge(d['rkd_strict_rate'])} "
+        f"{_delta_html(d['raw_strict_rate'], d['rkd_strict_rate'])}</td>"
+        f"<td>{_bar_html(d['rkd_affinity_rate'])} {_match_badge(d['rkd_affinity_rate'])}</td>"
         f"</tr>"
         for cat, d in sorted_cats
     )
     return (
         f"<table>"
-        f"<tr><th>Category</th><th>Queries</th><th>Avg Cat Match Rate</th></tr>"
+        f"<tr><th>Category</th><th>Queries</th><th>Strict (raw)</th>"
+        f"<th>Strict (reranked)</th><th>Affinity (reranked)</th></tr>"
         f"{rows_html}"
         f"</table>"
     )
 
 
 def _fashor_callout_html(fashor_stats: dict) -> str:
-    rate = fashor_stats["cat_match_rate"]
+    rate = fashor_stats["rkd_strict_rate"]
     per_cat = fashor_stats["per_category"]
 
-    # Compare ethnic vs western-cut categories
     ethnic_cats = {k: v for k, v in per_cat.items() if any(
         kw in k.lower() for kw in ["kurta", "ethnic", "lehenga", "dupatta", "anarkali"]
     )}
@@ -529,34 +840,31 @@ def _fashor_callout_html(fashor_stats: dict) -> str:
     )}
 
     ethnic_rate = (
-        float(np.mean([v["mean_match_rate"] for v in ethnic_cats.values()]))
+        float(np.mean([v["rkd_strict_rate"] for v in ethnic_cats.values()]))
         if ethnic_cats else math.nan
     )
     western_rate = (
-        float(np.mean([v["mean_match_rate"] for v in western_cats.values()]))
+        float(np.mean([v["rkd_strict_rate"] for v in western_cats.values()]))
         if western_cats else math.nan
     )
 
     cls = "callout-warn" if rate < 0.5 else ("callout" if rate < 0.8 else "callout-good")
-    verdict = (
-        "⚠ Low" if rate < 0.5
-        else ("~ Moderate" if rate < 0.8 else "✓ Strong")
-    )
+    verdict = "⚠ Low" if rate < 0.5 else ("~ Moderate" if rate < 0.8 else "✓ Strong")
 
     ethnic_str = _pct(ethnic_rate) if not math.isnan(ethnic_rate) else "n/a"
     western_str = _pct(western_rate) if not math.isnan(western_rate) else "n/a"
 
     ethnic_rows = "".join(
-        f"<li>{_esc(k)}: {_pct(v['mean_match_rate'])} ({v['n']} queries)</li>"
-        for k, v in sorted(ethnic_cats.items(), key=lambda x: x[1]["mean_match_rate"])
+        f"<li>{_esc(k)}: {_pct(v['rkd_strict_rate'])} ({v['n']} queries)</li>"
+        for k, v in sorted(ethnic_cats.items(), key=lambda x: x[1]["rkd_strict_rate"])
     ) or "<li>(no ethnic categories matched keywords)</li>"
 
     return (
         f'<div class="callout {cls}">'
         f"<h3>Fashor Ethnic Wear Analysis (H&M-trained tower)</h3>"
-        f"<p><strong>Overall cat match rate:</strong> {_pct(rate)} — {verdict}</p>"
-        f"<p style='margin-top:6px'><strong>Ethnic avg:</strong> {ethnic_str}"
-        f" &nbsp;|&nbsp; <strong>Western avg:</strong> {western_str}</p>"
+        f"<p><strong>Reranked strict cat-match:</strong> {_pct(rate)} — {verdict}</p>"
+        f"<p style='margin-top:6px'><strong>Ethnic avg (strict):</strong> {ethnic_str}"
+        f" &nbsp;|&nbsp; <strong>Western avg (strict):</strong> {western_str}</p>"
         f"<p style='margin-top:8px;font-size:12px;color:#555'>"
         f"The item tower (CLIP ViT-B/32 + SBERT) was trained on H&M western-fashion interactions. "
         f"Kurta/ethnic categories are out-of-distribution for the user tower but CLIP's visual "
@@ -568,43 +876,39 @@ def _fashor_callout_html(fashor_stats: dict) -> str:
     )
 
 
-def build_html(all_results: list[QueryResult], n_queries: int = 25, k: int = 5) -> str:
-    stats: dict[str, dict] = {
-        brand: _brand_stats([r for r in all_results if r.brand == brand])
-        for brand in BRANDS
-        if any(r.brand == brand for r in all_results)
-    }
-
-    worst_10 = sorted(all_results, key=lambda r: r.category_match_rate)[:10]
+def build_html(
+    all_results: list[QueryResult],
+    all_stats: dict[str, dict],
+    n_queries: int = 25,
+    k: int = 5,
+) -> str:
+    worst_10 = sorted(all_results, key=lambda r: r.reranked_strict_rate)[:10]
     date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    # Table of contents
     toc_html = (
         '<div class="toc">'
         "<strong>Jump to:</strong>"
         "<ul>"
-        '<li><a href="#summary">Headline Summary</a></li>'
+        '<li><a href="#comparison">Before/After Comparison</a></li>'
         '<li><a href="#worst10">Worst 10 Results</a></li>'
         + "".join(f'<li><a href="#{brand}">{brand.title()}</a></li>' for brand in BRANDS)
         + "</ul></div>"
     )
 
-    # Headline stats
-    all_rates = [r.category_match_rate for r in all_results]
-    overall_rate = float(np.mean(all_rates)) if all_rates else math.nan
-    all_deltas = [
-        r.mean_price_delta_inr for r in all_results if not math.isnan(r.mean_price_delta_inr)
-    ]
-    overall_delta = float(np.mean(all_deltas)) if all_deltas else math.nan
+    # Headline stats (reranked)
+    all_rkd_strict = [r.reranked_strict_rate for r in all_results]
+    all_rkd_affinity = [r.reranked_affinity_rate for r in all_results]
+    overall_strict = float(np.mean(all_rkd_strict)) if all_rkd_strict else math.nan
+    overall_affinity = float(np.mean(all_rkd_affinity)) if all_rkd_affinity else math.nan
     total_self = sum(1 for r in all_results if r.has_self_match)
     total_dupes = sum(r.n_near_dupes for r in all_results)
 
     stat_grid_html = (
         '<div class="stat-grid">'
-        f'<div class="stat-box"><div class="stat-val">{_pct(overall_rate)}</div>'
-        f'<div class="stat-label">Overall cat match rate ({len(all_results)} queries)</div></div>'
-        f'<div class="stat-box"><div class="stat-val">{_inr(overall_delta)}</div>'
-        f'<div class="stat-label">Mean |ΔPrice| across all queries</div></div>'
+        f'<div class="stat-box"><div class="stat-val">{_pct(overall_strict)}</div>'
+        f'<div class="stat-label">Strict cat-match (reranked, {len(all_results)} queries)</div></div>'
+        f'<div class="stat-box"><div class="stat-val">{_pct(overall_affinity)}</div>'
+        f'<div class="stat-label">Affinity cat-match (reranked, threshold≥{AFFINITY_THRESHOLD})</div></div>'
         f'<div class="stat-box"><div class="stat-val">'
         f'{"⚠ " + str(total_self) if total_self else "✓ 0"}</div>'
         f'<div class="stat-label">Self-match violations</div></div>'
@@ -613,33 +917,29 @@ def build_html(all_results: list[QueryResult], n_queries: int = 25, k: int = 5) 
         "</div>"
     )
 
-    # Per-brand sections
     brand_sections_html = ""
     for brand in BRANDS:
         brand_results = [r for r in all_results if r.brand == brand]
         if not brand_results:
             continue
-        s = stats[brand]
+        s = all_stats[brand]
         callout = _fashor_callout_html(s) if brand == "fashor" else ""
         cat_table = _per_category_table_html(s["per_category"])
         query_cards = "".join(_query_row_html(r) for r in brand_results)
         brand_sections_html += (
             f'<hr class="section-divider">'
             f'<h2 id="{_esc(brand)}">{_esc(brand.title())} — '
-            f'cat match {_match_badge(s["cat_match_rate"])} | '
-            f'{_inr(s["mean_price_delta"])} avg |ΔPrice|</h2>'
+            f'strict {_match_badge(s["rkd_strict_rate"])} | '
+            f'affinity {_match_badge(s["rkd_affinity_rate"])} | '
+            f'{_inr(s["rkd_mean_price_delta"])} avg |ΔPrice|</h2>'
             f"{callout}"
-            f"<h3>Per-Category Breakdown</h3>"
+            f"<h3>Per-Category Breakdown (sorted by reranked strict rate)</h3>"
             f"{cat_table}"
-            f"<h3>Query ↦ Top-{k} Neighbors</h3>"
+            f"<h3>Query ↦ Top-{k} Neighbors (reranked)</h3>"
             f"{query_cards}"
         )
 
-    # Worst 10
-    worst_html = "".join(
-        _query_row_html(r, is_worst=True)
-        for r in worst_10
-    )
+    worst_html = "".join(_query_row_html(r, is_worst=True) for r in worst_10)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -657,13 +957,14 @@ def build_html(all_results: list[QueryResult], n_queries: int = 25, k: int = 5) 
 
   {toc_html}
 
-  <h2 id="summary">Headline Summary</h2>
+  <h2 id="comparison">Before/After Comparison (raw FAISS vs. re-rank)</h2>
   {stat_grid_html}
-  {_summary_table_html(all_results, stats)}
+  {_comparison_table_html(all_stats)}
 
-  <h2 id="worst10">⚠ Worst 10 Results (Lowest Category-Match)</h2>
-  <p class="meta">These are the 10 query items across all brands where /similar returned the
-     fewest on-category neighbors — the primary failure-mode candidates for pre-sale inspection.</p>
+  <h2 id="worst10">⚠ Worst 10 Results (Lowest Reranked Strict Cat-Match)</h2>
+  <p class="meta">10 query items across all brands where /similar (reranked) returned the
+     fewest on-category neighbors (strict, exact-label only). Green badge = strict match;
+     yellow ~ = affinity-only; red = no match.</p>
   {worst_html}
 
   {brand_sections_html}
@@ -679,7 +980,7 @@ def build_html(all_results: list[QueryResult], n_queries: int = 25, k: int = 5) 
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Similarity-quality inspection report for Indian brand catalogs."
+        description="Before/after similarity-quality inspection for Indian brand catalogs."
     )
     p.add_argument("--output", type=Path, default=DEFAULT_OUTPUT,
                    help="Output HTML path (default: reports/similarity_eval.html)")
@@ -692,7 +993,6 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    # Ensure UTF-8 output on Windows (rupee sign ₹ not in cp1252)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
@@ -708,27 +1008,43 @@ def main() -> None:
         print(f"[{brand}]")
         results = eval_brand(brand, n_queries=args.n_queries, k=args.k, seed=args.seed)
         all_results.extend(results)
-
-        # Headline per brand
         s = _brand_stats(results)
-        print(f"  cat_match_rate={s['cat_match_rate']:.3f}  "
-              f"mean_dPrice={_inr(s['mean_price_delta'])}  "
-              f"self_match={s['self_match_count']}  "
-              f"near_dupes={s['near_dupe_count']}")
+        print(
+            f"  raw:      strict={_pct(s['raw_strict_rate'])}  "
+            f"affinity={_pct(s['raw_affinity_rate'])}  "
+            f"dPrice={_inr(s['raw_mean_price_delta'])}"
+        )
+        print(
+            f"  reranked: strict={_pct(s['rkd_strict_rate'])}  "
+            f"affinity={_pct(s['rkd_affinity_rate'])}  "
+            f"dPrice={_inr(s['rkd_mean_price_delta'])}"
+        )
         print()
 
-    # Worst 10 summary
-    worst_10 = sorted(all_results, key=lambda r: r.category_match_rate)[:10]
-    print("=== Worst 10 queries (lowest cat match rate) ===")
+    all_stats = {
+        brand: _brand_stats([r for r in all_results if r.brand == brand])
+        for brand in BRANDS
+        if any(r.brand == brand for r in all_results)
+    }
+
+    guardrails_ok = print_comparison_table(all_stats)
+
+    worst_10 = sorted(all_results, key=lambda r: r.reranked_strict_rate)[:10]
+    print("\n=== Worst 10 queries (lowest reranked strict cat-match) ===")
     for i, r in enumerate(worst_10, 1):
         print(f"  {i:2d}. {r.brand:10s} {r.query_category:30s} "
-              f"match={_pct(r.category_match_rate)}  aid={r.query_article_id}")
+              f"strict(raw={_pct(r.raw_strict_rate)} rkd={_pct(r.reranked_strict_rate)})  "
+              f"aid={r.query_article_id}")
 
     print()
-    html_content = build_html(all_results, n_queries=args.n_queries, k=args.k)
+    html_content = build_html(all_results, all_stats, n_queries=args.n_queries, k=args.k)
     args.output.write_text(html_content, encoding="utf-8")
     print(f"Report written to: {args.output}")
     print(f"Open with: start {args.output}")
+
+    if not guardrails_ok:
+        print("\n*** GUARDRAIL BREACH — do not commit until resolved ***")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

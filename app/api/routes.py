@@ -34,6 +34,7 @@ from app.api.schemas import (
 )
 from app.brands.registry import BrandState
 from app.cache import ExplanationCache, get_cache
+from app.rerank import rerank as _rerank
 from app.pricing import (
     GROQ_EST_INPUT_TOKENS,
     GROQ_EST_OUTPUT_TOKENS,
@@ -286,12 +287,25 @@ async def similar(
             detail=f"Item '{item_id}' not found in catalogue",
         )
 
-    raw_results = state.retriever.search(query_emb, k=k + 1)
-    results = [
-        RecommendedItem(item_id=str(aid), score=score)
-        for aid, score in raw_results
-        if str(aid) != item_id
-    ][:k]
+    rerank_cfg = state.config.rerank
+    pool_k = rerank_cfg.candidate_pool_size if rerank_cfg.enabled else k + 1
+    raw_results = state.retriever.search(query_emb, k=pool_k)
+
+    candidates = [(aid, score) for aid, score in raw_results if str(aid) != item_id]
+
+    if rerank_cfg.enabled:
+        try:
+            query_aid_int = int(item_id)
+        except ValueError:
+            query_aid_int = -1
+        query_meta = state.art_map.get(query_aid_int, {})
+        query_price = float(query_meta.get("price_inr") or 0.0)
+        query_cat = str(query_meta.get("category", ""))
+        candidates = _rerank(candidates, query_price, query_cat, state.art_map, rerank_cfg, k)
+    else:
+        candidates = candidates[:k]
+
+    results = [RecommendedItem(item_id=str(aid), score=score) for aid, score in candidates]
 
     latency_ms = (time.perf_counter() - t0) * 1000
     log.info(
