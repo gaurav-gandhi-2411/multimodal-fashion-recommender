@@ -8,19 +8,18 @@ api_key_env: SNITCH_API_KEY
 llm:
   provider: template
   enabled: true
-transactions_dir: data/snitch/transactions
 rerank:
   enabled: true
-  candidate_pool_size: 50
-  w_similarity: 0.70
+  candidate_pool_size: 100
+  w_similarity: 0.7
   w_price_penalty: 0.15
   w_category_affinity: 0.15
   price_norm_inr: 500.0
-  equivalent_group_bonus: 0.70
-  related_group_bonus: 0.40
+  equivalent_group_bonus: 0.7
+  related_group_bonus: 0.4
   category_groups:
-    - name: bottoms
-      members:
-        - "Trousers"
-        - "Jeans"
-        - "Cargo Pants"
+  - name: bottoms
+    members:
+    - Trousers
+    - Jeans
+    - Cargo Pants
