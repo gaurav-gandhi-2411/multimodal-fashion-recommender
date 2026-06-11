@@ -325,6 +325,9 @@ torchvision = [{ index = "pytorch-cu128", marker = "sys_platform == 'win32'" }]
 | Pydantic catalog + interaction row validation | ✅ Complete | app/ingestion/schema.py |
 | CLIENT_ONBOARDING.md | ✅ Complete | CLIENT_ONBOARDING.md |
 | Phase 2 tests: 46 ingest + 17 interaction tests | ✅ Complete | 91 passing (vs 73 pre-Phase 2) |
+| Re-rank layer over FAISS (pure-Python, per-brand price + category affinity) | ✅ Complete | app/rerank.py |
+| Before/after similarity eval (strict + affinity cat-match, guardrails) | ✅ Complete | scripts/eval_similarity_quality.py |
+| 133 tests pass (6 /similar tests fixed, rerank mock wiring) | ✅ Complete | tests/ |
 
 ---
 
@@ -501,7 +504,8 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | **Phase 2** | **Catalog Ingestion + Interaction Ingestion** | ✅ Complete | 2026-06-08 |
 | Phase 3 | Indian Brand Demo (Snitch + Fashor via Phase 2 pipeline) | — | — |
 | **Phase 4** | **Deploy + Cost + Caching** | ✅ Complete | 2026-06-09 |
-| Phase 5 | A/B Framework + Online Learning | — | — |
+| **Phase 5 (re-rank)** | **Similarity Re-rank + Quality Eval** | ✅ Complete | 2026-06-11 |
+| Phase 5 (A/B) | Champion-Challenger + Online Learning | — | — |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
 - [x] Popularity baseline numbers confirmed on temporal test split, active pool AND full pool
@@ -561,7 +565,16 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 - [x] 133 tests pass (15 new tests vs Phase 3 baseline); 1 pre-existing known failure unchanged
 - [x] DRAFT PR opened from branch `phase-4-deploy-cost-caching`
 
-### Phase 5 — Exit Criteria
+### Phase 5 (similarity re-rank) — Exit Criteria (ALL MET ✅ — 2026-06-11)
+- [x] `app/rerank.py` — pure-Python re-ranker; score = 0.70×sim - w_price×price_penalty + 0.15×category_affinity
+- [x] Per-brand `rerank:` stanza in brands/*.yaml with price weights + category-equivalence groups
+- [x] `/similar` wired to rerank layer behind `rerank.enabled` toggle; `BrandConfig` carries `RerankConfig`
+- [x] `scripts/eval_similarity_quality.py` — before/after eval; reports strict (exact) + affinity (≥0.4) cat-match + mean |ΔPrice| per pass
+- [x] All per-brand guardrails pass at n=100: Fashor strict≥58%, Fashor |ΔPrice| drops, Powerlook strict≥64%
+- [x] Test suite: 133 pass (was 127; 6 `/similar` tests fixed), 1 pre-existing failure unchanged
+- [x] DRAFT PR open from `phase-5-similarity-eval`
+
+### Phase 5 (A/B + online learning) — Exit Criteria (ORIGINAL — deferred)
 - Champion-challenger traffic split in brand config
 - Click/impression logging to Postgres (request_id → impression; click event links back)
 - `evals/` harness with Recall@K fixtures per brand
@@ -670,3 +683,49 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | No `uv.lock` in Dockerfile.cpu | Windows lock has CUDA wheels; re-resolving on Linux gives CPU torch from PyPI |
 | GCS object key == local relative path | Simplest mapping; no translation layer; bucket mirrors repo layout |
 | In-process LRU cache (not functools.lru_cache) | OrderedDict LRU is evictable and testable; functools.lru_cache is not evictable and hides the key logic |
+
+---
+
+## Phase 5 — Similarity Re-rank (complete 2026-06-11)
+
+**Branch:** `phase-5-similarity-eval` | **PR:** DRAFT open
+
+### New modules
+| Module | Purpose |
+|--------|---------|
+| `app/rerank.py` | Pure-Python re-ranker. `score = 0.70×sim - w_price×price_penalty + 0.15×cat_affinity`. `CategoryAffinityMap` builds three-tier affinity (exact 1.0 / equiv-group 0.7 / related-group 0.4 / none 0.0) from per-brand `category_groups`. No model, no GPU. |
+
+### Brand re-rank config (added to `brands/*.yaml`)
+| Brand | w_price | price_norm_inr | Category groups |
+|-------|---------|----------------|-----------------|
+| Fashor | 0.25 | ₹1,200 | ethnic_set (3P/2P/Kurta Set/Co-ord), ethnic_individual (Kurtas/Kurta/Kurti), western_dress (Dresses); ethnic_set↔ethnic_individual = related (0.4) |
+| Snitch | 0.15 | ₹500 | bottoms (Trousers/Jeans/Cargo Pants) |
+| Powerlook | 0.10 | ₹400 | none (category_groups: []) |
+
+### Before/After Eval Results (n=100 queries/brand, k=5, seed=42 — LOCKED)
+
+> **Strict is the headline metric.** Affinity is reported alongside it so taxonomy-driven improvement is auditable separately from genuine retrieval improvement. Affinity threshold = 0.4 (counts exact + equivalent-group + related-group).
+
+| Brand | Strict raw | Strict rkd | Affinity raw | Affinity rkd | \|ΔPrice\| raw | \|ΔPrice\| rkd | Guardrail |
+|-------|-----------|-----------|-------------|-------------|--------------|--------------|-----------|
+| snitch | 72% | **96%** (+24pp) | 77% | 100% (+23pp) | ₹369 | ₹158 (↓) | ✅ OK |
+| fashor | 64% | **86%** (+22pp) | 93% | 96% (+3pp) | ₹735 | ₹109 (↓) | ✅ OK |
+| powerlook | 76% | **94%** (+18pp) | 76% | 94% (+18pp) | ₹305 | ₹98 (↓) | ✅ OK |
+
+Powerlook affinity == strict because no category groups are defined — all improvement is price-sorting. Fashor raw affinity was already 93% (CLIP visual embeddings cluster ethnic styles loosely) — the strict gap (64%) was the honest pre-rerank baseline.
+
+n=25 → n=100 stability check: reranked strict moved ≤5pp for all brands. Numbers locked at n=100.
+
+### Guardrail results
+- Fashor strict 86% ≥ 58% floor ✅
+- Fashor |ΔPrice| dropped (₹735 → ₹109) ✅
+- Powerlook strict 94% ≥ 64% floor ✅
+- Fashor price-improved-but-strict-regressed advisory: **not fired** (both improved together; 0.25 weight is correct)
+
+### Decisions made in Phase 5
+| Decision | Rationale |
+|----------|-----------|
+| Report strict + affinity separately | Affinity looks better partly because we defined the equivalence groups; strict is the only number comparable to any external baseline. Never collapse to just affinity. |
+| Affinity threshold = 0.4 (related_group_bonus) | Counts all three affinity tiers. Stated explicitly in eval output so future readers can audit what "affinity match" means. |
+| Per-brand price weights (not global) | Fashor items span ₹600–₹4000; Snitch ₹400–₹1500; different normalisation constants make price penalty comparable across catalogs. |
+| Pure-Python reranker, no model | Re-rank runs at zero cost, zero latency on CPU. Feature vectors (price, category) are already in the FAISS art_map. No inference path needed. |
