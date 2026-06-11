@@ -90,7 +90,9 @@ def rerank(
     scored: list[tuple[float, int, float]] = []
 
     for art_id, sim in candidates:
-        meta = art_map.get(art_id, {})
+        # FaissRetriever.search returns str ids from the pkl; art_map keys are int — normalise.
+        _key: int | str = int(art_id) if isinstance(art_id, str) and art_id.isdigit() else art_id
+        meta = art_map.get(_key, art_map.get(art_id, {}))
 
         n_price_raw = meta.get("price_inr")
         n_price = float(n_price_raw) if n_price_raw is not None else query_price

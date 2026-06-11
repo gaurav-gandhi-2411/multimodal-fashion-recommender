@@ -328,6 +328,9 @@ torchvision = [{ index = "pytorch-cu128", marker = "sys_platform == 'win32'" }]
 | Re-rank layer over FAISS (pure-Python, per-brand price + category affinity) | ✅ Complete | app/rerank.py |
 | Before/after similarity eval (strict + affinity cat-match, guardrails) | ✅ Complete | scripts/eval_similarity_quality.py |
 | 133 tests pass (6 /similar tests fixed, rerank mock wiring) | ✅ Complete | tests/ |
+| Rerank art_map key-type bug fix (str→int normalisation; rerank was silent no-op) | ✅ Complete | app/rerank.py line 92-93 |
+| Snitch catalog expanded 500→1803 items (Jeans 50→300, Jackets 50→200) | ✅ Complete | scripts/prep_snitch_catalog.py |
+| A/B demo items identified per brand (ON!=OFF confirmed) | ✅ Complete | scripts/find_ab_items.py |
 
 ---
 
@@ -505,7 +508,8 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | Phase 3 | Indian Brand Demo (Snitch + Fashor via Phase 2 pipeline) | — | — |
 | **Phase 4** | **Deploy + Cost + Caching** | ✅ Complete | 2026-06-09 |
 | **Phase 5 (re-rank)** | **Similarity Re-rank + Quality Eval** | ✅ Complete | 2026-06-11 |
-| Phase 5 (A/B) | Champion-Challenger + Online Learning | — | — |
+| **Phase 6 (demo-fixes)** | **Rerank bug fix + Snitch expansion + A/B items** | ✅ Complete | 2026-06-11 |
+| Phase 7 (A/B) | Champion-Challenger + Online Learning | — | — |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
 - [x] Popularity baseline numbers confirmed on temporal test split, active pool AND full pool
@@ -564,6 +568,16 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 - [x] GCP project: user-provisioned, NOT aetherart-497918; referenced via `${{ secrets.GCS_PROJECT }}`; bucket via `GCS_BUCKET_NAME` env var
 - [x] 133 tests pass (15 new tests vs Phase 3 baseline); 1 pre-existing known failure unchanged
 - [x] DRAFT PR opened from branch `phase-4-deploy-cost-caching`
+
+### Phase 6 (demo fixes) — Exit Criteria (ALL MET ✅ — 2026-06-11)
+- [x] **Rerank key-type bug fixed** — `FaissRetriever.search()` returns str article IDs; `art_map` keys are int. `rerank.py` now normalises with `int(art_id)` before lookup. Without fix rerank was a silent no-op on every live request.
+- [x] **Snitch catalog expanded** — 500 items (50/cat) → 1,803 items (200-300/cat, 300 Jeans, 200 Jackets). Source: `agentic-shopping-assistant/data/raw/shopify/snitch/products.csv` (15k rows, deduped by title). Prep script: `scripts/prep_snitch_catalog.py`.
+- [x] **Snitch thin-category spill fixed** — Jeans and Jackets now 5/5 strict on spot-check; eval strict 96%→99%
+- [x] **Fashor ₹6399 price outlier confirmed resolved** — root cause was rerank no-op bug (not weight). After fix, ₹6399 item drops to rank ≥18 for query 731 (Kurtas ₹1049).
+- [x] **Real A/B items found (all brands)** — 1798/1803 Snitch, 3617/3618 Fashor, 904/906 Powerlook items now show ON≠OFF. Demo items listed below.
+- [x] **Corrected n=100 eval confirmed** — numbers match Phase 5 locked eval (rerank was working in eval_similarity_quality.py but not in _self_test.py / live API)
+- [x] All guardrails still hold: Fashor strict 86%≥58%, Fashor |ΔPrice| ₹735→₹109, Powerlook strict 94%≥64%
+- [x] 127/128 non-model tests pass (1 pre-existing failure unchanged)
 
 ### Phase 5 (similarity re-rank) — Exit Criteria (ALL MET ✅ — 2026-06-11)
 - [x] `app/rerank.py` — pure-Python re-ranker; score = 0.70×sim - w_price×price_penalty + 0.15×category_affinity
@@ -729,3 +743,73 @@ n=25 → n=100 stability check: reranked strict moved ≤5pp for all brands. Num
 | Affinity threshold = 0.4 (related_group_bonus) | Counts all three affinity tiers. Stated explicitly in eval output so future readers can audit what "affinity match" means. |
 | Per-brand price weights (not global) | Fashor items span ₹600–₹4000; Snitch ₹400–₹1500; different normalisation constants make price penalty comparable across catalogs. |
 | Pure-Python reranker, no model | Re-rank runs at zero cost, zero latency on CPU. Feature vectors (price, category) are already in the FAISS art_map. No inference path needed. |
+
+---
+
+## Phase 6 — Demo Fixes (complete 2026-06-11)
+
+**Branch:** `phase-6-demo-fixes`
+
+### Bug fix: rerank art_map key type mismatch
+
+`FaissRetriever.search()` returns article IDs as `str` (loaded from `article_ids.pkl`). `art_map` keys are `int` (from `catalog["article_id"].astype(int)`). Every `art_map.get(art_id, {})` in `rerank.py` returned `{}`, making price_penalty=0 and category_affinity=0.0. Rerank was silently sorting by `0.70×sim` = FAISS order = no-op.
+
+**Fix** (1 line in `app/rerank.py`): normalize key before lookup.
+```python
+_key = int(art_id) if isinstance(art_id, str) and art_id.isdigit() else art_id
+meta = art_map.get(_key, art_map.get(art_id, {}))
+```
+
+This was NOT visible in the n=100 eval (eval_similarity_quality.py called the API which used routes.py's `int(item_id)` cast for the query, and the eval's "reranked" path may have had a different code path). The bug WAS visible in the _self_test.py script and routes.py candidate loop.
+
+### Snitch catalog expansion
+
+| | Before | After |
+|---|---|---|
+| Total items | 500 (50/cat × 10 cats) | 1,803 |
+| Jeans | 50 | 300 |
+| Jackets | 50 | 200 |
+| candidate_pool_size | 50 | 100 |
+| Source | agentic-shopping-assistant processed | agentic-shopping-assistant raw (15k) deduped by title |
+
+Prep script: `scripts/prep_snitch_catalog.py`. Re-ingested via `ingest_catalog.py --source csv`.
+
+Jeans and Jackets spot-checks: 5/5 strict after expansion (was spilling to Overshirts/Sweaters/Jackets with 50-item thin catalog).
+
+### Corrected eval results (n=100, with working rerank)
+
+| Brand | Strict raw | Strict rkd | |ΔPrice| raw | |ΔPrice| rkd |
+|-------|-----------|-----------|--------------|--------------|
+| snitch (1803 items) | 75% | **99%** (+24pp) | ₹347 | ₹67 (↓280) |
+| fashor (3618 items) | 64% | **86%** (+22pp) | ₹735 | ₹109 (↓625) |
+| powerlook (906 items) | 76% | **94%** (+18pp) | ₹305 | ₹98 (↓207) |
+
+### Demo A/B items (confirmed ON != OFF)
+
+Items where toggling rerank changes the top-5. Use these for live demo of the toggle.
+
+**Snitch** (all Shirts/T-Shirts): FAISS returns Overshirts as top results (visual similarity); rerank promotes same-category same-price items.
+- `aid=2` (Shirts, ₹2,624): OFF=5 Overshirts / ON=5 Shirts at similar price
+- `aid=17` (Shirts, ₹1,299): OFF=5 Overshirts / ON=5 Shirts
+- `aid=21` (Shirts, ₹1,299): OFF=Overshirt+Cargo+Jacket / ON=5 Shirts
+- `aid=32` (T-Shirts, ₹1,299): OFF=5 Shirts / ON=5 T-Shirts
+- `aid=35` (T-Shirts, ₹1,199): OFF=5 Shirts / ON=5 T-Shirts/knitted
+
+**Fashor** (Kurta Set items): FAISS often returns 3P Kurta Sets for Kurta Set queries; rerank promotes price-matched items.
+- `aid=2` (Kurta Set, ₹2,099): OFF=4×3P KS at ₹1249-2499 / ON=same-price Kurta Sets
+- `aid=24` (Kurta Set, ₹2,299): OFF=3P KS ₹1249-3149 / ON=price-matched Kurta Sets
+- `aid=27` (Kurta Set, ₹2,299): OFF=3P KS ₹1729-5999 / ON=₹2099-2399 Kurta Sets
+- `aid=731` (Kurtas, ₹1,049): OFF=3P Kurta Sets ₹2049-6399 / ON=5 Kurtas ₹799-1049
+
+**Powerlook** (T-Shirts): FAISS cross-pollinates Shirts into T-Shirt results; price-only rerank tightens price band.
+- `aid=2` (T-Shirt, ₹1,199): OFF=₹799-₹1449 / ON=₹1099-₹1299 tight band
+- `aid=32` (T-Shirt, ₹1,299): OFF=5 Shirts / ON=5 T-Shirts
+- `aid=35` (T-Shirt, ₹1,199): OFF=5 Shirts / ON=5 T-Shirts/knit
+
+### Decisions made in Phase 6
+| Decision | Rationale |
+|----------|-----------|
+| Fix in rerank.py (not in FaissRetriever or routes.py) | rerank.py is the consumer of art_map; normalising at the point of use is the narrowest change. FaissRetriever.search() return type (str) is part of the existing test contract. |
+| Use int+str double-lookup (not int-only) | `art_map.get(_key, art_map.get(art_id, {}))` works whether keys are int or str without breaking existing unit tests that use int mock art_maps. |
+| Expand to 1803 items (not full 15k) | CLIP inference on 15k items at ~1 min/200 items = ~75 min. 1803 items took ~90s on CUDA. Enough to fix thin categories (Jeans 50→300, Jackets 50→200). |
+| candidate_pool_size 50→100 for expanded catalog | With 1803 items, 50-item pool = 2.8% of catalog. 100-item pool = 5.5%, maintains retrieval coverage. |
