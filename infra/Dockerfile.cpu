@@ -26,7 +26,10 @@ COPY config.yaml .
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
-RUN adduser --disabled-password --no-create-home --uid 1001 appuser
+# chown /app so the non-root appuser can write GCS-synced brand assets
+# (data/, indices/, checkpoints/) into the working dir at startup.
+RUN adduser --disabled-password --no-create-home --uid 1001 appuser \
+    && chown -R appuser /app
 USER appuser
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

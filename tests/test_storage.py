@@ -18,7 +18,12 @@ def test_sync_brand_assets_no_op_when_no_bucket_env(tmp_path: Path) -> None:
 
 
 def test_collect_brand_paths_returns_all_fields(tmp_path: Path) -> None:
-    """_collect_brand_paths extracts all file paths from brand YAML."""
+    """_collect_brand_paths extracts all file paths from brand YAML.
+
+    index_path is a directory; it must be expanded into the two files that
+    FaissRetriever.load() reads: faiss.index and article_ids.pkl.
+    The bare directory path must NOT appear in the results.
+    """
     yaml_content = """
 brand: testbrand
 display_name: Test Brand
@@ -31,11 +36,38 @@ api_key_env: TEST_API_KEY
     (tmp_path / "testbrand.yaml").write_text(yaml_content)
     paths = _collect_brand_paths(str(tmp_path))
     assert "data/test/catalog.parquet" in paths
-    assert "indices/test/active.faiss" in paths
+    # index_path expands to two constituent files, not the bare directory
+    assert "indices/test/active.faiss/faiss.index" in paths
+    assert "indices/test/active.faiss/article_ids.pkl" in paths
+    assert "indices/test/active.faiss" not in paths
     assert "checkpoints/best.pt" in paths
     assert "data/test/transactions/train.parquet" in paths
     assert "data/test/transactions/val.parquet" in paths
     assert "data/test/transactions/test.parquet" in paths
+
+
+def test_collect_brand_paths_includes_default_checkpoint(tmp_path: Path) -> None:
+    """A brand YAML that OMITS checkpoint_path must still sync the default checkpoints/best.pt.
+
+    Regression for the staging boot crash: the Indian brand yamls omit checkpoint_path,
+    so registry._load_brand torch.loads the pydantic DEFAULT (checkpoints/best.pt). The
+    collector reads the validated BrandConfig (not raw YAML), so it must request that same
+    default — otherwise the checkpoint is never synced and the container crashes with
+    FileNotFoundError: 'checkpoints/best.pt'.
+    """
+    yaml_content = """
+brand: nockpt
+display_name: No Checkpoint Brand
+catalog_path: data/nockpt/items.parquet
+index_path: indices/nockpt/active.faiss
+api_key_env: NOCKPT_API_KEY
+"""
+    (tmp_path / "nockpt.yaml").write_text(yaml_content)
+    paths = _collect_brand_paths(str(tmp_path))
+    assert "checkpoints/best.pt" in paths, (
+        "Brand YAML omitting checkpoint_path must still collect the default "
+        "checkpoints/best.pt that registry._load_brand will torch.load."
+    )
 
 
 def test_download_if_missing_skips_existing_file(tmp_path: Path) -> None:
@@ -78,13 +110,14 @@ def test_sync_brand_assets_calls_gcs_when_bucket_set(tmp_path: Path) -> None:
     brands_dir.mkdir()
     assets_root = tmp_path / "assets"
     catalog = str(assets_root / "catalog.parquet")
-    index = str(assets_root / "active.faiss")
+    # index_path is a directory; storage.py expands it to faiss.index + article_ids.pkl
+    index_dir = str(assets_root / "active.faiss")
     checkpoint = str(assets_root / "best.pt")
     yaml_content = f"""
 brand: testbrand
 display_name: Test
 catalog_path: {catalog}
-index_path: {index}
+index_path: {index_dir}
 checkpoint_path: {checkpoint}
 api_key_env: TEST_KEY
 """
@@ -101,5 +134,44 @@ api_key_env: TEST_KEY
     ):
         sync_brand_assets(brands_dir=str(brands_dir))
 
-    # download_to_filename called for each non-existing path
-    assert mock_blob.download_to_filename.call_count == 3  # catalog, index, checkpoint
+    # download_to_filename called for each non-existing path:
+    # catalog, active.faiss/faiss.index, active.faiss/article_ids.pkl, checkpoint = 4
+    assert mock_blob.download_to_filename.call_count == 4
+
+
+def _write_brand_yaml(brands_dir: Path, slug: str) -> None:
+    """Helper: write a minimal brand YAML with the given slug into brands_dir."""
+    content = f"""
+brand: {slug}
+display_name: {slug.title()}
+catalog_path: data/{slug}/catalog.parquet
+index_path: indices/{slug}/active.faiss
+checkpoint_path: checkpoints/{slug}/best.pt
+api_key_env: {slug.upper()}_API_KEY
+"""
+    (brands_dir / f"{slug}.yaml").write_text(content)
+
+
+def test_collect_brand_paths_brands_enabled_filter(tmp_path: Path) -> None:
+    """_collect_brand_paths respects BRANDS_ENABLED: only enabled brand paths returned."""
+    brands_dir = tmp_path / "brands"
+    brands_dir.mkdir()
+    _write_brand_yaml(brands_dir, "alpha")
+    _write_brand_yaml(brands_dir, "beta")
+
+    # With BRANDS_ENABLED set to "alpha" only, beta paths must be absent.
+    with patch.dict(os.environ, {"BRANDS_ENABLED": "alpha"}, clear=False):
+        paths = _collect_brand_paths(str(brands_dir))
+
+    alpha_paths = [p for p in paths if "alpha" in p]
+    beta_paths = [p for p in paths if "beta" in p]
+    assert alpha_paths, "alpha paths must be present when alpha is enabled"
+    assert not beta_paths, "beta paths must be absent when beta is not enabled"
+
+    # With BRANDS_ENABLED unset, both brands' paths must appear.
+    env_without = {k: v for k, v in os.environ.items() if k != "BRANDS_ENABLED"}
+    with patch.dict(os.environ, env_without, clear=True):
+        all_paths = _collect_brand_paths(str(brands_dir))
+
+    assert any("alpha" in p for p in all_paths), "alpha paths expected when filter unset"
+    assert any("beta" in p for p in all_paths), "beta paths expected when filter unset"

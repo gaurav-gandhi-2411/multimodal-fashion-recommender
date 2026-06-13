@@ -17,6 +17,16 @@ rerank:
   price_norm_inr: 500.0
   equivalent_group_bonus: 0.7
   related_group_bonus: 0.4
+  # Feature 1: MMR diversity — cuts near-twin "more like this" results.
+  # Ablation (n=100): w=0.20 reduces near-twin pairs with ZERO strict cat-match cost.
+  w_diversity: 0.20
+  dupe_sim_threshold: 0.92   # eval redundancy criterion; does NOT affect MMR selection
+  # Feature 2: price-band coherence — DISABLED (w_price_band=0).
+  # Ablation showed the discrete band bonus is redundant with the continuous price
+  # penalty above and cost ~1pp strict for a cosmetic same-band-rate gain. Bands kept
+  # so the eval still reports same_band_rate; re-enable only if a brand needs it.
+  price_bands_inr: [600, 1200, 2000]
+  w_price_band: 0.0
   category_groups:
   - name: bottoms
     members:

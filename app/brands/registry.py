@@ -19,6 +19,21 @@ from src.models.two_tower import TwoTowerModel
 from src.retrieval.faiss_index import FaissRetriever
 
 
+def _enabled_brands() -> set[str] | None:
+    """
+    Return the set of lower-cased brand slugs that should be loaded, or None when
+    BRANDS_ENABLED is unset/empty (meaning "all brands").
+
+    Env var format: comma-separated slugs, e.g. ``BRANDS_ENABLED=snitch,fashor``.
+    Whitespace around each slug is stripped; empty tokens are dropped.
+    """
+    raw = os.environ.get("BRANDS_ENABLED", "")
+    if not raw.strip():
+        return None
+    brands = {slug.strip().lower() for slug in raw.split(",") if slug.strip()}
+    return brands if brands else None
+
+
 class LLMBrandConfig(BaseModel):
     provider: str = "template"
     model: str = "llama-3.1-8b-instant"
@@ -137,12 +152,34 @@ def _load_brand(yaml_path: Path) -> BrandState:
 
 
 def load_registry(brands_dir: str | Path = "brands") -> BrandRegistry:
+    """
+    Load and return a BrandRegistry from all YAML files in *brands_dir*.
+
+    When the ``BRANDS_ENABLED`` env var is set (comma-separated brand slugs), only
+    brands whose ``brand:`` field matches an enabled slug are loaded; others are skipped
+    without reading their data files.  When the env var is unset or empty, all brands
+    are loaded (preserving existing behaviour).
+
+    Raises RuntimeError if no YAML files are found, or if BRANDS_ENABLED is set but
+    filters out every brand (likely misconfiguration).
+    """
+    enabled = _enabled_brands()
     registry = BrandRegistry()
     brands_path = Path(brands_dir)
     yaml_files = sorted(brands_path.glob("*.yaml"))
     if not yaml_files:
         raise RuntimeError(f"No brand YAML files found in {brands_path}")
     for yaml_path in yaml_files:
+        if enabled is not None:
+            with yaml_path.open() as f:
+                slug = yaml.safe_load(f).get("brand", "").lower()
+            if slug not in enabled:
+                continue
         state = _load_brand(yaml_path)
         registry.register(state)
+    if len(registry) == 0:
+        raise RuntimeError(
+            f"BRANDS_ENABLED={os.environ.get('BRANDS_ENABLED')!r} filtered out every brand. "
+            "Check the spelling of brand slugs against the 'brand:' field in each YAML."
+        )
     return registry

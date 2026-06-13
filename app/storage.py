@@ -35,20 +35,46 @@ def _download_if_missing(client: Any, bucket_name: str, local_path: str) -> bool
 
 
 def _collect_brand_paths(brands_dir: str) -> list[str]:
-    """Return all data file paths referenced by brand YAML configs."""
+    """
+    Return all data file paths referenced by brand YAML configs.
+
+    Paths are derived from the VALIDATED BrandConfig — not the raw YAML dict — so
+    pydantic DEFAULTS are honoured. This matters for `checkpoint_path`: brands that
+    omit it still resolve to the default `checkpoints/best.pt` that
+    registry._load_brand loads. Reading raw YAML here previously skipped that default,
+    so the checkpoint was never synced and the container crashed at torch.load. Driving
+    both the collector and the loader from the same BrandConfig prevents that drift.
+
+    For `index_path` (a directory), expands to the two constituent files that
+    FaissRetriever.load() expects: `{index_path}/faiss.index` and
+    `{index_path}/article_ids.pkl`. `transactions_dir` expands to the three split parquets.
+
+    Respects the BRANDS_ENABLED env var: when set, only paths for listed brand slugs
+    are returned (matched on the yaml `brand:` field, not filename).
+    """
+    from app.brands.registry import (  # noqa: PLC0415 — avoid circular at module level
+        BrandConfig,
+        _enabled_brands,
+    )
+
+    enabled = _enabled_brands()
     paths: list[str] = []
     for yaml_path in sorted(Path(brands_dir).glob("*.yaml")):
         with yaml_path.open() as f:
             data = yaml.safe_load(f)
-        for field in ("catalog_path", "index_path", "checkpoint_path", "embeddings_path"):
-            val = data.get(field)
+        if enabled is not None and str(data.get("brand", "")).lower() not in enabled:
+            continue
+        cfg = BrandConfig.model_validate(data)
+        for val in (cfg.catalog_path, cfg.checkpoint_path, cfg.embeddings_path):
             if val:
                 paths.append(val)
-        td = data.get("transactions_dir")
-        if td:
-            base = td.rstrip("/")
+        base = cfg.index_path.rstrip("/")
+        paths.append(f"{base}/faiss.index")
+        paths.append(f"{base}/article_ids.pkl")
+        if cfg.transactions_dir:
+            tbase = cfg.transactions_dir.rstrip("/")
             for split in ("train", "val", "test"):
-                paths.append(f"{base}/{split}.parquet")
+                paths.append(f"{tbase}/{split}.parquet")
     return paths
 
 

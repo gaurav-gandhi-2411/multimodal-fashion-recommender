@@ -5,20 +5,20 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # REQUIRED GITHUB SECRETS  (Settings → Secrets and variables → Actions → Secrets)
 # ──────────────────────────────────────────────────────────────────────────────
-#   GCS_PROJECT           — GCP project ID for this product (provision your own;
-#                           NOT aetherart-497918 or any shared project)
-#   GCS_BUCKET_NAME       — GCS bucket holding brand data assets (served at runtime)
+#   GCS_PROJECT           — GCP project ID. NEVER aetherart-497918. May be a shared
+#                           project ONLY if every resource below is name-isolated.
+#   GCS_BUCKET_NAME       — NEW, dedicated GCS bucket for this product's brand assets
+#                           (do not reuse a bucket owned by another product)
 #   GCP_WIF_PROVIDER      — Workload Identity Federation provider resource name,
-#                           e.g. projects/123456/locations/global/workloadIdentityPools/gh/providers/gh
-#   GCP_SERVICE_ACCOUNT   — SA email bound to the WIF pool; must carry roles:
-#                             - Artifact Registry Writer
-#                             - Cloud Run Developer
-#                             - Secret Manager Accessor
-#                             - Storage Object Viewer
-#   SNITCH_API_KEY        — Stored in Secret Manager; injected into Cloud Run at deploy time
-#   FASHOR_API_KEY        — Stored in Secret Manager; injected into Cloud Run at deploy time
-#   POWERLOOK_API_KEY     — Stored in Secret Manager; injected into Cloud Run at deploy time
-#   GROQ_API_KEY          — Stored in Secret Manager; injected into Cloud Run at deploy time
+#                           e.g. projects/123456/locations/global/workloadIdentityPools/fashion-rec-pool/providers/fashion-rec-provider
+#   GCP_SERVICE_ACCOUNT   — DEDICATED SA email for this service (NOT another product's SA).
+#                           Least-privilege: artifactregistry.writer on the fashion-rec repo,
+#                           run.developer, serviceAccountUser on itself, storage.objectViewer on
+#                           the new bucket, secretmanager.secretAccessor on the 4 secrets below.
+#
+# Secret Manager secret names (referenced in --set-secrets; namespaced so they cannot collide
+# in a shared project — the Cloud Run ENV VAR names stay SNITCH_API_KEY etc. for the app):
+#   fashion-rec-snitch-key, fashion-rec-fashor-key, fashion-rec-powerlook-key, fashion-rec-groq-key
 #
 # ──────────────────────────────────────────────────────────────────────────────
 # REQUIRED GITHUB VARIABLES  (Settings → Secrets and variables → Actions → Variables)
@@ -98,7 +98,7 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
-          gcloud run deploy fashion-recommender-api \
+          gcloud run deploy fashion-recommender-staging \
             --image "$IMAGE:${{ github.sha }}" \
             --region "${{ vars.GCP_REGION }}" \
             --platform managed \
@@ -109,15 +109,15 @@ jobs:
             --cpu 1 \
             --timeout 60s \
             --concurrency 80 \
-            --set-env-vars "LOG_FORMAT=json,GCS_PROJECT=${{ secrets.GCS_PROJECT }},GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }},USD_TO_INR=83.0" \
-            --set-secrets "SNITCH_API_KEY=SNITCH_API_KEY:latest,FASHOR_API_KEY=FASHOR_API_KEY:latest,POWERLOOK_API_KEY=POWERLOOK_API_KEY:latest,GROQ_API_KEY=GROQ_API_KEY:latest" \
+            --set-env-vars "^##^LOG_FORMAT=json##GCS_PROJECT=${{ secrets.GCS_PROJECT }}##GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}##USD_TO_INR=83.0##BRANDS_ENABLED=snitch,fashor,powerlook" \
+            --set-secrets "SNITCH_API_KEY=fashion-rec-snitch-key:latest,FASHOR_API_KEY=fashion-rec-fashor-key:latest,POWERLOOK_API_KEY=fashion-rec-powerlook-key:latest,GROQ_API_KEY=fashion-rec-groq-key:latest" \
             --service-account "${{ secrets.GCP_SERVICE_ACCOUNT }}" \
             --allow-unauthenticated \
             --project "${{ secrets.GCS_PROJECT }}"
 
       - name: Show Cloud Run URL
         run: |
-          gcloud run services describe fashion-recommender-api \
+          gcloud run services describe fashion-recommender-staging \
             --region "${{ vars.GCP_REGION }}" \
             --project "${{ secrets.GCS_PROJECT }}" \
             --format "value(status.url)"

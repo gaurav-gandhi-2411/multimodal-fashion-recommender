@@ -18,6 +18,14 @@ rerank:
   price_norm_inr: 400.0
   equivalent_group_bonus: 0.70
   related_group_bonus: 0.40
+  # Feature 1: MMR diversity — cuts near-twin "more like this" results.
+  # Ablation (n=100): w=0.20 reduces near-twin pairs (0.34→0.22) at no strict cost.
+  w_diversity: 0.20
+  dupe_sim_threshold: 0.92   # eval redundancy criterion; does NOT affect MMR selection
+  # Feature 2: price-band coherence — DISABLED (w_price_band=0); redundant with the
+  # continuous price penalty and cost ~1pp strict in ablation. Bands kept for the metric.
+  price_bands_inr: [600, 1000, 1400]
+  w_price_band: 0.0
   category_groups: []
 # Complete-the-Look (outfit completion): menswear separates → strong fit.
 # Co-ord (complete set) is intentionally left unslotted so co-ord queries return empty.
