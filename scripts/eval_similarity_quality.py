@@ -48,8 +48,9 @@ import yaml
 REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from app.rerank import CategoryAffinityMap, RerankConfig
-from app.rerank import rerank as _rerank_fn
+from app.occasion import tag_occasions  # noqa: E402
+from app.rerank import CategoryAffinityMap, RerankConfig  # noqa: E402
+from app.rerank import rerank as _rerank_fn  # noqa: E402
 
 BRANDS: list[str] = ["snitch", "fashor", "powerlook"]
 NEAR_DUPE_THRESHOLD = 0.995
@@ -128,6 +129,9 @@ class QueryResult:
     rkd_distinct_categories: int    # distinct categories in reranked top-k
     raw_same_band_rate: float   # fraction of raw neighbors in query's price band (nan if no bands)
     rkd_same_band_rate: float   # fraction of reranked neighbors in query's price band
+    # Feature 3: occasion awareness metrics (nan when query has no occasion tags)
+    raw_occasion_match_rate: float  # fraction of raw neighbors sharing ≥1 occasion with query
+    rkd_occasion_match_rate: float  # fraction of reranked neighbors sharing ≥1 occasion with query
 
 
 # ---------------------------------------------------------------------------
@@ -296,7 +300,7 @@ def _retrieve_reranked(
         }
 
     return _rerank_fn(candidates, query_price, query_cat, art_map, rerank_config, k,
-                      embeddings=embeddings)
+                      embeddings=embeddings, query_meta=query_meta)
 
 
 # ---------------------------------------------------------------------------
@@ -387,6 +391,49 @@ def _diversity_metrics(
     return inter_dupe, distinct_cats, same_band_rate
 
 
+def _occasion_match_rate(
+    query_meta: dict,
+    neighbors: list[NeighborResult],
+    art_map: dict[int, dict],
+    rerank_config: RerankConfig,
+) -> float:
+    """Fraction of non-self neighbors sharing ≥1 occasion tag with the query.
+
+    Returns math.nan when the query item has no occasion tags (excluded from
+    the denominator in aggregate stats).
+
+    The same lexicon + parse_explicit settings from rerank_config are used so
+    the eval measures exactly the signal the reranker acts on.
+    """
+    lex_override = rerank_config.occasion_lexicon if rerank_config.occasion_lexicon else None
+    query_occ = tag_occasions(
+        query_meta.get("title", ""),
+        query_meta.get("description", ""),
+        lex_override,
+        rerank_config.parse_explicit_occasion,
+    )
+    if not query_occ:
+        return math.nan  # untagged query — skip in aggregate
+
+    valid = [nb for nb in neighbors if not nb.is_self]
+    if not valid:
+        return 0.0
+
+    matches = 0
+    for nb in valid:
+        nb_meta = art_map.get(nb.article_id, {})
+        nb_occ = tag_occasions(
+            nb_meta.get("title", ""),
+            nb_meta.get("description", ""),
+            lex_override,
+            rerank_config.parse_explicit_occasion,
+        )
+        if query_occ & nb_occ:
+            matches += 1
+
+    return matches / len(valid)
+
+
 def eval_brand(brand: str, n_queries: int = 25, k: int = 5, seed: int = 42) -> list[QueryResult]:
     print(f"  Loading {brand}...", end=" ", flush=True)
     catalog, faiss_index, article_ids, aid_to_row, rerank_config = load_brand(brand)
@@ -428,6 +475,11 @@ def eval_brand(brand: str, n_queries: int = 25, k: int = 5, seed: int = 42) -> l
             rkd_nbs, q_price, rerank_config, faiss_index, aid_to_row
         )
 
+        # Feature 3: occasion match rates
+        q_meta = art_map.get(q_aid, {})
+        raw_omr = _occasion_match_rate(q_meta, raw_nbs, art_map, rerank_config)
+        rkd_omr = _occasion_match_rate(q_meta, rkd_nbs, art_map, rerank_config)
+
         results.append(QueryResult(
             brand=brand,
             query_article_id=q_aid,
@@ -452,6 +504,8 @@ def eval_brand(brand: str, n_queries: int = 25, k: int = 5, seed: int = 42) -> l
             rkd_distinct_categories=rkd_dcat,
             raw_same_band_rate=raw_sbr,
             rkd_same_band_rate=rkd_sbr,
+            raw_occasion_match_rate=raw_omr,
+            rkd_occasion_match_rate=rkd_omr,
         ))
 
     return results
@@ -491,6 +545,15 @@ def _brand_stats(results: list[QueryResult]) -> dict:
     raw_sbr_vals = [r.raw_same_band_rate for r in results if not math.isnan(r.raw_same_band_rate)]
     rkd_sbr_vals = [r.rkd_same_band_rate for r in results if not math.isnan(r.rkd_same_band_rate)]
 
+    # Feature 3: occasion match aggregates — only over queries that have occasion tags
+    raw_omr_vals = [
+        r.raw_occasion_match_rate for r in results if not math.isnan(r.raw_occasion_match_rate)
+    ]
+    rkd_omr_vals = [
+        r.rkd_occasion_match_rate for r in results if not math.isnan(r.rkd_occasion_match_rate)
+    ]
+    n_tagged_queries = len(raw_omr_vals)  # queries with >=1 occasion tag
+
     return {
         "n_queries": len(results),
         "raw_strict_rate": float(np.mean(raw_strict)) if raw_strict else math.nan,
@@ -512,6 +575,10 @@ def _brand_stats(results: list[QueryResult]) -> dict:
         ),
         "raw_same_band_rate": float(np.mean(raw_sbr_vals)) if raw_sbr_vals else math.nan,
         "rkd_same_band_rate": float(np.mean(rkd_sbr_vals)) if rkd_sbr_vals else math.nan,
+        # Feature 3: occasion awareness metrics
+        "raw_occasion_match_rate": float(np.mean(raw_omr_vals)) if raw_omr_vals else math.nan,
+        "rkd_occasion_match_rate": float(np.mean(rkd_omr_vals)) if rkd_omr_vals else math.nan,
+        "n_tagged_queries": n_tagged_queries,
         "per_category": {
             cat: {
                 "n": data["n"],
@@ -655,7 +722,7 @@ def print_comparison_table(all_stats: dict[str, dict]) -> bool:
         for msg in messages:
             print(f"  {'':>{col_brand}}   {msg}")
 
-        # Diversity / coherence sub-row (new Feature 1 + 2 metrics)
+        # Diversity / coherence sub-row (Feature 1 + 2 metrics)
         raw_idp = s.get("raw_inter_dupe_pairs", 0)
         rkd_idp = s.get("rkd_inter_dupe_pairs", 0)
         raw_dc = s.get("raw_distinct_categories_mean", math.nan)
@@ -673,6 +740,22 @@ def print_comparison_table(all_stats: dict[str, dict]) -> bool:
             f"distinct_cats(mean): {dc_str}  "
             f"same_band_rate(raw={_fmt_sbr(raw_sbr)} rkd={_fmt_sbr(rkd_sbr)})"
         )
+
+        # Occasion awareness sub-row (Feature 3 metric)
+        raw_omr = s.get("raw_occasion_match_rate", math.nan)
+        rkd_omr = s.get("rkd_occasion_match_rate", math.nan)
+        n_tagged = s.get("n_tagged_queries", 0)
+        if not math.isnan(raw_omr) and not math.isnan(rkd_omr):
+            print(
+                f"  {'':>{col_brand}}   "
+                f"occasion_match(raw={_pct(raw_omr)} rkd={_pct(rkd_omr)})  "
+                f"tagged_queries={n_tagged}"
+            )
+        else:
+            print(
+                f"  {'':>{col_brand}}   "
+                f"occasion_match: n/a (no queries tagged)  tagged_queries={n_tagged}"
+            )
 
     print(sep)
     return all_ok

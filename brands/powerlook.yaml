@@ -26,6 +26,10 @@ rerank:
   # continuous price penalty and cost ~1pp strict in ablation. Bands kept for the metric.
   price_bands_inr: [600, 1000, 1400]
   w_price_band: 0.0
+  # Feature 3: occasion/seasonal awareness at 0.08 — occ_match 34%->78% with NO strict cost
+  # (slight price loosening). Keyword lexicon only; ethnic/traditional excluded (non-discriminating).
+  w_occasion: 0.08
+  parse_explicit_occasion: false
   category_groups: []
 # Complete-the-Look (outfit completion): menswear separates → strong fit.
 # Co-ord (complete set) is intentionally left unslotted so co-ord queries return empty.

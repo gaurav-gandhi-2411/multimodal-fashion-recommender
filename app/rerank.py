@@ -31,6 +31,14 @@ class RerankConfig(BaseModel):
     price_bands_inr: list[float] = Field(default_factory=list)
     # Bonus added when candidate lands in the same price band as the query
     w_price_band: float = 0.0
+    # Feature: occasion/seasonal awareness (0.0 = OFF — backward compatible default)
+    # Boost candidates that share at least one occasion tag with the query item.
+    w_occasion: float = 0.0
+    # When True, attempt to parse the explicit "Occasion : <value>" field (Snitch format)
+    # in addition to the keyword lexicon.
+    parse_explicit_occasion: bool = False
+    # Per-brand keyword lexicon override.  Empty dict → use DEFAULT_OCCASION_LEXICON.
+    occasion_lexicon: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class CategoryAffinityMap:
@@ -102,6 +110,7 @@ def rerank(
     k: int,
     *,
     embeddings: dict | None = None,
+    query_meta: dict[str, Any] | None = None,
 ) -> list[tuple[int, float]]:
     """Re-rank FAISS candidates by weighted score and return top-k.
 
@@ -109,6 +118,7 @@ def rerank(
                  - w_price_penalty * price_penalty
                  + w_category_affinity * affinity
                  [+ w_price_band  (Feature 2: same price-band bonus)]
+                 [+ w_occasion    (Feature 3: occasion/seasonal awareness)]
 
     When config.w_diversity > 0 and embeddings are supplied, greedy MMR is
     applied over the candidate set using their 256-d L2-normalised FAISS
@@ -119,12 +129,35 @@ def rerank(
     Candidates missing from embeddings fall back to base_score (max_cosine=0).
     When w_diversity == 0 or embeddings is None, the function behaves exactly
     as before this change was introduced — output is identical.
+
+    Feature 3 — occasion boost (w_occasion > 0 and query_meta is not None):
+    Tags are mined from title + description text via the per-brand lexicon
+    (defaulting to DEFAULT_OCCASION_LEXICON).  Candidates that share at least
+    one occasion tag with the query item receive +w_occasion added to base_score
+    BEFORE the MMR step, so diversity still operates on occasion-adjusted scores.
+    When w_occasion == 0 or query_meta is None, behaviour is byte-identical to
+    previous behaviour.
     """
+    from app.occasion import tag_occasions  # local import avoids circular dependency
+
     affinity_map = CategoryAffinityMap(config)
 
     # Pre-compute price-band index for query (Feature 2)
     use_price_band = bool(config.price_bands_inr) and config.w_price_band > 0.0
     query_band = _price_band_index(query_price, config.price_bands_inr) if use_price_band else -1
+
+    # Feature 3: occasion awareness — compute query occasions once, outside the candidate loop.
+    use_occasion = config.w_occasion > 0.0 and query_meta is not None
+    query_occ: frozenset[str] = frozenset()
+    lex_override: dict[str, list[str]] | None = None
+    if use_occasion:
+        lex_override = config.occasion_lexicon if config.occasion_lexicon else None
+        query_occ = tag_occasions(
+            query_meta.get("title", ""),  # type: ignore[union-attr]
+            query_meta.get("description", ""),  # type: ignore[union-attr]
+            lex_override,
+            config.parse_explicit_occasion,
+        )
 
     scored: list[tuple[float, int, float]] = []
 
@@ -154,6 +187,17 @@ def rerank(
             cand_band = _price_band_index(n_price, config.price_bands_inr)
             if cand_band == query_band:
                 base_score += config.w_price_band
+
+        # Feature 3: occasion/seasonal awareness boost
+        if use_occasion and query_occ:
+            cand_occ = tag_occasions(
+                meta.get("title", ""),
+                meta.get("description", ""),
+                lex_override,
+                config.parse_explicit_occasion,
+            )
+            if query_occ & cand_occ:  # non-empty intersection = shared occasion
+                base_score += config.w_occasion
 
         scored.append((base_score, art_id, sim))
 

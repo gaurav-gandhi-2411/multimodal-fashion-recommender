@@ -321,6 +321,7 @@ async def similar(
         candidates = _rerank(
             candidates, query_price, query_cat, state.art_map, rerank_cfg, k,
             embeddings=embeddings,
+            query_meta=query_meta,
         )
     else:
         candidates = candidates[:k]
