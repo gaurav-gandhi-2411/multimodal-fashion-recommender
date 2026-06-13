@@ -275,4 +275,6 @@ def test_similar_route_applies_diversity_end_to_end() -> None:
         f"Expected MMR to return ['10','20'] (near-dup '11' demoted for diverse '20'), "
         f"got {ids}. Diversity is not being applied on the live /similar route."
     )
-    assert "11" not in ids, "Near-duplicate '11' survived in the HTTP response — MMR not applied on serve path."
+    assert "11" not in ids, (
+        "Near-duplicate '11' survived in the HTTP response — MMR not applied on serve path."
+    )
