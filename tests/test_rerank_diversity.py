@@ -212,3 +212,67 @@ def test_price_band_bonus_changes_order() -> None:
         f"Price-band bonus did not change output: ON={ids_on} OFF={ids_off}. "
         "Feature may be a no-op."
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 4 — SERVE-PATH PROOF: diversity runs through the live /similar HTTP route
+# ---------------------------------------------------------------------------
+# This is the Phase-6-lesson guard: the eval and the rerank() unit tests prove the
+# FUNCTION works, but the no-op bug was a SERVE-path divergence. This test calls
+# GET /v1/{brand}/item/{id}/similar via the FastAPI test client and asserts the HTTP
+# response reflects MMR — a near-duplicate that raw FAISS ranks ABOVE a diverse item
+# is demoted out of the top-k in the actual API response.
+
+
+def test_similar_route_applies_diversity_end_to_end() -> None:
+    from unittest.mock import MagicMock, patch
+
+    from fastapi.testclient import TestClient
+
+    # Embedding rows: query(0); A(1) and A2(2) are near-duplicates (cos≈0.999);
+    # B(3) is diverse. Raw FAISS sim order: A(0.80) > A2(0.79) > B(0.70).
+    emb = np.stack([
+        _normed([1.0, 0.0, 0.0, 0.0]),   # row 0 — query item (aid 1)
+        _normed([0.80, 0.60, 0.0, 0.0]),  # row 1 — A   (aid 10)
+        _normed([0.79, 0.61, 0.05, 0.0]),  # row 2 — A2  (aid 11) near-dup of A
+        _normed([0.70, 0.0, 0.714, 0.0]),  # row 3 — B   (aid 20) diverse
+    ])
+
+    state = MagicMock()
+    state.api_key = "test-key"
+    state.config.brand = "tb"
+    # Diversity ON; price/category disabled so only sim + MMR drive the order.
+    state.config.rerank = RerankConfig(
+        enabled=True, candidate_pool_size=10,
+        w_similarity=0.70, w_price_penalty=0.0, w_category_affinity=0.0,
+        w_diversity=0.5, dupe_sim_threshold=0.92, price_bands_inr=[], w_price_band=0.0,
+    )
+    state.art_map = {
+        10: {"category": "X", "price_inr": 1000.0},
+        11: {"category": "X", "price_inr": 1000.0},
+        20: {"category": "X", "price_inr": 1000.0},
+    }
+    state.faiss_aid_to_row = {1: 0, 10: 1, 11: 2, 20: 3}
+    # Raw FAISS order ranks the near-dup A2 (0.79) ABOVE the diverse B (0.70).
+    state.retriever.search.return_value = [(10, 0.80), (11, 0.79), (20, 0.70)]
+    state.retriever.index.reconstruct.side_effect = lambda row: emb[row]
+
+    registry = MagicMock()
+    registry.get.side_effect = lambda b: state if b == "tb" else None
+    registry.brand_names.return_value = ["tb"]
+
+    with patch("app.api.main.load_registry", return_value=registry):
+        from app.api.main import app
+
+        with TestClient(app) as client:
+            resp = client.get("/v1/tb/item/1/similar?k=2", headers={"X-Api-Key": "test-key"})
+
+    assert resp.status_code == 200, resp.text
+    ids = [r["item_id"] for r in resp.json()["results"]]
+    # Raw FAISS top-2 would be [10, 11] (A + its near-dup). MMR must demote the near-dup
+    # 11 and promote the diverse item 20 — proving diversity ran on the SERVE path.
+    assert ids == ["10", "20"], (
+        f"Expected MMR to return ['10','20'] (near-dup '11' demoted for diverse '20'), "
+        f"got {ids}. Diversity is not being applied on the live /similar route."
+    )
+    assert "11" not in ids, "Near-duplicate '11' survived in the HTTP response — MMR not applied on serve path."
