@@ -183,6 +183,18 @@ def test_complete_route_returns_complementary_outfit() -> None:
     assert set(cats.keys()) == {"2", "3"}
     assert sorted(body["slots_covered"]) == ["BOTTOM", "LAYER"]
 
+    # SERVE-PATH PROOF (Phase-6 lesson): assert on the actual garment CATEGORY each
+    # returned item carries — NONE may equal the query's category ("Shirts"). This
+    # proves /complete returns COMPLEMENTARY items, not same-category /similar items,
+    # on the live HTTP route — not only in the eval harness.
+    id_to_category = {str(aid): meta["category"] for aid, meta in state.art_map.items()}
+    returned_categories = {id_to_category[item_id] for item_id in cats}
+    assert "Shirts" not in returned_categories, (
+        f"/complete returned a same-category (Shirts) item: {returned_categories}. "
+        "Complete-the-Look must return complementary categories on the serve path."
+    )
+    assert returned_categories == {"Jeans", "Jackets"}
+
 
 def test_complete_route_disabled_brand_returns_enabled_false() -> None:
     """A brand with complete.enabled=false returns 200 with enabled=False, empty results."""
