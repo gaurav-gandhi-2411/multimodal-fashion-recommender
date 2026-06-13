@@ -109,7 +109,7 @@ jobs:
             --cpu 1 \
             --timeout 60s \
             --concurrency 80 \
-            --set-env-vars "LOG_FORMAT=json,GCS_PROJECT=${{ secrets.GCS_PROJECT }},GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }},USD_TO_INR=83.0" \
+            --set-env-vars "^##^LOG_FORMAT=json##GCS_PROJECT=${{ secrets.GCS_PROJECT }}##GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}##USD_TO_INR=83.0##BRANDS_ENABLED=snitch,fashor,powerlook" \
             --set-secrets "SNITCH_API_KEY=SNITCH_API_KEY:latest,FASHOR_API_KEY=FASHOR_API_KEY:latest,POWERLOOK_API_KEY=POWERLOOK_API_KEY:latest,GROQ_API_KEY=GROQ_API_KEY:latest" \
             --service-account "${{ secrets.GCP_SERVICE_ACCOUNT }}" \
             --allow-unauthenticated \
