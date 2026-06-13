@@ -25,8 +25,10 @@ from app.api.metrics import (
     REQUEST_LATENCY,
 )
 from app.api.schemas import (
+    CompleteResponse,
     HealthBrand,
     HealthResponse,
+    OutfitItem,
     RecommendedItem,
     RecommendRequest,
     RecommendResponse,
@@ -34,6 +36,7 @@ from app.api.schemas import (
 )
 from app.brands.registry import BrandState
 from app.cache import ExplanationCache, get_cache
+from app.complete import build_slot_index, complete_the_look
 from app.pricing import (
     GROQ_EST_INPUT_TOKENS,
     GROQ_EST_OUTPUT_TOKENS,
@@ -341,6 +344,157 @@ async def similar(
         brand=brand,
         query_item_id=item_id,
         results=results,
+        latency_ms=round(latency_ms, 2),
+    )
+
+
+@router.get("/v1/{brand}/item/{item_id}/complete", response_model=CompleteResponse)
+async def complete(
+    brand: str,
+    item_id: str,
+    *,
+    state: Annotated[BrandState, Depends(require_brand)],
+) -> CompleteResponse:
+    """Return complementary-category items that visually complete an outfit.
+
+    This endpoint implements a visual + price coordination heuristic (NOT a learned
+    outfit-compatibility model). It uses CLIP cosine similarity and price proximity
+    to rank candidates drawn from rule-based garment slots defined in brands/{brand}.yaml.
+
+    Returns enabled=False (200, not an error) when the brand has complete disabled.
+    Returns an empty results list when the query item's category has no complement slots.
+    """
+    t0 = time.perf_counter()
+    request_id = str(uuid.uuid4())
+    log = logger.bind(request_id=request_id, brand=brand)
+
+    query_emb = _get_item_embedding(item_id, state)
+    if query_emb is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Item '{item_id}' not found in catalogue",
+        )
+
+    cfg = state.config.complete
+    if not cfg.enabled:
+        latency_ms = (time.perf_counter() - t0) * 1000
+        log.info(
+            "complete",
+            query_item_id=item_id,
+            enabled=False,
+            n_results=0,
+            latency_ms=round(latency_ms, 2),
+            usd_cost=0.0,
+        )
+        REQUEST_COUNT.labels(brand=brand, endpoint="complete", status="200").inc()
+        REQUEST_LATENCY.labels(brand=brand, endpoint="complete").observe(latency_ms / 1000)
+        return CompleteResponse(
+            request_id=request_id,
+            brand=brand,
+            query_item_id=item_id,
+            enabled=False,
+            results=[],
+            slots_covered=[],
+            latency_ms=round(latency_ms, 2),
+        )
+
+    try:
+        query_aid = int(item_id)
+    except ValueError:
+        query_aid = -1
+
+    query_meta = state.art_map.get(query_aid, {})
+    query_cat = str(query_meta.get("category", ""))
+    query_price = float(query_meta.get("price_inr") or 0.0)
+
+    # Determine which slots are complementary to the query slot so we can filter candidates
+    slot_index = build_slot_index(cfg)
+    query_slot = slot_index.get(query_cat)
+
+    if query_slot is None:
+        # Query category not in any configured slot — return empty (but enabled=True)
+        latency_ms = (time.perf_counter() - t0) * 1000
+        log.info(
+            "complete",
+            query_item_id=item_id,
+            enabled=True,
+            query_slot="unknown",
+            n_results=0,
+            latency_ms=round(latency_ms, 2),
+            usd_cost=0.0,
+        )
+        REQUEST_COUNT.labels(brand=brand, endpoint="complete", status="200").inc()
+        REQUEST_LATENCY.labels(brand=brand, endpoint="complete").observe(latency_ms / 1000)
+        return CompleteResponse(
+            request_id=request_id,
+            brand=brand,
+            query_item_id=item_id,
+            enabled=True,
+            results=[],
+            slots_covered=[],
+            latency_ms=round(latency_ms, 2),
+        )
+
+    target_slots = set(cfg.complements.get(query_slot, []))
+    # Categories that belong to any complementary slot
+    complement_cats: set[str] = {
+        cat for slot in cfg.slots if slot.name in target_slots for cat in slot.categories
+    }
+
+    # Assemble candidates: iterate art_map, keep items in complementary categories
+    # that are indexed in FAISS (so we can retrieve their embedding).
+    assert state.item_embeddings is not None  # guaranteed by _load_brand
+    candidates: list[tuple[str, str, float, np.ndarray]] = []
+    for cand_aid, meta in state.art_map.items():
+        if cand_aid == query_aid:
+            continue
+        cand_cat = str(meta.get("category", ""))
+        if cand_cat not in complement_cats:
+            continue
+        row = state.faiss_aid_to_row.get(int(cand_aid))
+        if row is None:
+            continue
+        cand_price = float(meta.get("price_inr") or 0.0)
+        emb: np.ndarray = state.item_embeddings[row]
+        candidates.append((str(cand_aid), cand_cat, cand_price, emb))
+
+    raw_results = complete_the_look(query_cat, query_emb, query_price, candidates, cfg)
+
+    outfit_items: list[OutfitItem] = []
+    for art_id, score, slot_name in raw_results:
+        try:
+            meta_aid = int(art_id)
+        except (ValueError, TypeError):
+            meta_aid = art_id  # type: ignore[assignment]
+        meta = state.art_map.get(meta_aid, {})
+        pdp_url: str | None = meta.get("pdp_url") or None
+        outfit_items.append(
+            OutfitItem(item_id=str(art_id), score=round(score, 6), slot=slot_name, pdp_url=pdp_url)
+        )
+
+    slots_covered = sorted({item.slot for item in outfit_items})
+    latency_ms = (time.perf_counter() - t0) * 1000
+    log.info(
+        "complete",
+        query_item_id=item_id,
+        enabled=True,
+        query_slot=query_slot,
+        n_candidates=len(candidates),
+        n_results=len(outfit_items),
+        slots_covered=slots_covered,
+        latency_ms=round(latency_ms, 2),
+        usd_cost=0.0,
+    )
+    REQUEST_COUNT.labels(brand=brand, endpoint="complete", status="200").inc()
+    REQUEST_LATENCY.labels(brand=brand, endpoint="complete").observe(latency_ms / 1000)
+
+    return CompleteResponse(
+        request_id=request_id,
+        brand=brand,
+        query_item_id=item_id,
+        enabled=True,
+        results=outfit_items,
+        slots_covered=slots_covered,
         latency_ms=round(latency_ms, 2),
     )
 

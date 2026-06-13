@@ -39,6 +39,23 @@ class SimilarResponse(BaseModel):
     latency_ms: float
 
 
+class OutfitItem(BaseModel):
+    item_id: str
+    score: float
+    slot: str
+    pdp_url: str | None = None
+
+
+class CompleteResponse(BaseModel):
+    request_id: str
+    brand: str
+    query_item_id: str
+    enabled: bool  # False when the brand has complete disabled (e.g. fashor)
+    results: list[OutfitItem]
+    slots_covered: list[str]
+    latency_ms: float
+
+
 class HealthBrand(BaseModel):
     brand: str
     display_name: str

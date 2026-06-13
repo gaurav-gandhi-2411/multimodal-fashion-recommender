@@ -46,3 +46,9 @@ rerank:
       members:
         - "Dresses"
         - "Dress"
+# Complete-the-Look: DISABLED. Fashor's catalog is ~90% complete ethnic sets
+# (3P/2P Kurta Set = top+bottom+dupatta already a full outfit); only 3 standalone
+# Bottom items exist, so outfit completion would be degenerate. Re-enable with
+# slots/complements if separates (bottoms, dupattas, footwear) are added later.
+complete:
+  enabled: false
