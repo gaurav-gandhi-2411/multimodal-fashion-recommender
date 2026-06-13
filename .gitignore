@@ -19,4 +19,6 @@ checkpoints/
 notes/
 staging_path.txt
 .claude/
+# Local deploy script — references project IDs / SA emails; never commit
+scripts/deploy_staging.ps1
 
