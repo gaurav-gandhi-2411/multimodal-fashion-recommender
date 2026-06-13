@@ -121,6 +121,13 @@ class QueryResult:
     reranked_mean_price_delta: float
     has_self_match: bool    # reranked pass
     n_near_dupes: int       # reranked pass
+    # Diversity metrics (Feature 1 / Feature 2 eval)
+    raw_inter_dupe_pairs: int       # unordered pairs in raw top-k with cosine >= dupe_sim_threshold
+    rkd_inter_dupe_pairs: int       # same, reranked top-k
+    raw_distinct_categories: int    # distinct categories in raw top-k
+    rkd_distinct_categories: int    # distinct categories in reranked top-k
+    raw_same_band_rate: float   # fraction of raw neighbors in query's price band (nan if no bands)
+    rkd_same_band_rate: float   # fraction of reranked neighbors in query's price band
 
 
 # ---------------------------------------------------------------------------
@@ -277,12 +284,57 @@ def _retrieve_reranked(
     query_meta = art_map.get(query_aid, {})
     query_price = float(query_meta.get("price_inr") or 0.0)
     query_cat = str(query_meta.get("category", ""))
-    return _rerank_fn(candidates, query_price, query_cat, art_map, rerank_config, k)
+
+    # Build candidate embeddings from the same FAISS index for MMR diversity (Feature 1).
+    # Keyed by the same int art_id used in candidates so rerank() key normalisation is consistent.
+    embeddings: dict[int, np.ndarray] | None = None
+    if rerank_config.w_diversity > 0.0:
+        embeddings = {
+            aid: faiss_index.reconstruct(aid_to_row[aid])
+            for aid, _ in candidates
+            if aid in aid_to_row
+        }
+
+    return _rerank_fn(candidates, query_price, query_cat, art_map, rerank_config, k,
+                      embeddings=embeddings)
 
 
 # ---------------------------------------------------------------------------
 # Per-brand evaluation
 # ---------------------------------------------------------------------------
+
+
+def _inter_dupe_pairs(
+    neighbor_aids: list[int],
+    faiss_index: faiss.Index,
+    aid_to_row: dict[int, int],
+    dupe_sim_threshold: float,
+) -> int:
+    """Count unordered pairs among neighbor_aids with pairwise cosine >= dupe_sim_threshold.
+
+    Embeddings are reconstructed from the FAISS index (L2-normalised, so cosine = dot product).
+    Pairs where either item is missing from the index are skipped.
+    """
+    vecs: list[np.ndarray] = []
+    for aid in neighbor_aids:
+        row = aid_to_row.get(aid)
+        if row is not None:
+            vecs.append(faiss_index.reconstruct(row).astype(np.float32))
+
+    n = len(vecs)
+    if n < 2:
+        return 0
+
+    matrix = np.stack(vecs)  # (n, dim)
+    # Dot product matrix = cosine matrix for L2-normalised vectors
+    cos_matrix = matrix @ matrix.T  # (n, n)
+
+    count = 0
+    for i in range(n):
+        for j in range(i + 1, n):
+            if cos_matrix[i, j] >= dupe_sim_threshold:
+                count += 1
+    return count
 
 
 def _neighbor_metrics(
@@ -297,6 +349,42 @@ def _neighbor_metrics(
     deltas = [abs(query_price - nb.price_inr) for nb in valid if nb.price_inr > 0 and query_price > 0]
     mean_delta = float(np.mean(deltas)) if deltas else math.nan
     return strict_rate, affinity_rate, mean_delta
+
+
+def _diversity_metrics(
+    neighbors: list[NeighborResult],
+    query_price: float,
+    rerank_config: RerankConfig,
+    faiss_index: faiss.Index,
+    aid_to_row: dict[int, int],
+) -> tuple[int, int, float]:
+    """Compute diversity/coherence metrics for a list of neighbors.
+
+    Returns:
+        inter_dupe_pairs: unordered pairs with cosine >= dupe_sim_threshold
+        distinct_categories: count of distinct category labels in top-k
+        same_band_rate: fraction of neighbors in query's price band (math.nan if no bands)
+    """
+    valid = [nb for nb in neighbors if not nb.is_self]
+    aids = [nb.article_id for nb in valid]
+
+    inter_dupe = _inter_dupe_pairs(aids, faiss_index, aid_to_row, rerank_config.dupe_sim_threshold)
+
+    distinct_cats = len({nb.category for nb in valid})
+
+    if rerank_config.price_bands_inr and query_price > 0:
+        from app.rerank import _price_band_index  # local import; already loaded via rerank import
+        query_band = _price_band_index(query_price, rerank_config.price_bands_inr)
+        in_band = sum(
+            1 for nb in valid
+            if nb.price_inr > 0
+            and _price_band_index(nb.price_inr, rerank_config.price_bands_inr) == query_band
+        )
+        same_band_rate = in_band / len(valid) if valid else math.nan
+    else:
+        same_band_rate = math.nan
+
+    return inter_dupe, distinct_cats, same_band_rate
 
 
 def eval_brand(brand: str, n_queries: int = 25, k: int = 5, seed: int = 42) -> list[QueryResult]:
@@ -333,6 +421,13 @@ def eval_brand(brand: str, n_queries: int = 25, k: int = 5, seed: int = 42) -> l
         raw_strict, raw_affinity, raw_delta = _neighbor_metrics(raw_nbs, q_price)
         rkd_strict, rkd_affinity, rkd_delta = _neighbor_metrics(rkd_nbs, q_price)
 
+        raw_idp, raw_dcat, raw_sbr = _diversity_metrics(
+            raw_nbs, q_price, rerank_config, faiss_index, aid_to_row
+        )
+        rkd_idp, rkd_dcat, rkd_sbr = _diversity_metrics(
+            rkd_nbs, q_price, rerank_config, faiss_index, aid_to_row
+        )
+
         results.append(QueryResult(
             brand=brand,
             query_article_id=q_aid,
@@ -351,6 +446,12 @@ def eval_brand(brand: str, n_queries: int = 25, k: int = 5, seed: int = 42) -> l
             reranked_mean_price_delta=rkd_delta,
             has_self_match=any(nb.is_self for nb in rkd_nbs),
             n_near_dupes=sum(1 for nb in rkd_nbs if nb.is_near_dupe),
+            raw_inter_dupe_pairs=raw_idp,
+            rkd_inter_dupe_pairs=rkd_idp,
+            raw_distinct_categories=raw_dcat,
+            rkd_distinct_categories=rkd_dcat,
+            raw_same_band_rate=raw_sbr,
+            rkd_same_band_rate=rkd_sbr,
         ))
 
     return results
@@ -386,6 +487,10 @@ def _brand_stats(results: list[QueryResult]) -> dict:
         per_cat[cat]["raw_affinity"].append(r.raw_affinity_rate)
         per_cat[cat]["rkd_affinity"].append(r.reranked_affinity_rate)
 
+    # Diversity / coherence aggregates
+    raw_sbr_vals = [r.raw_same_band_rate for r in results if not math.isnan(r.raw_same_band_rate)]
+    rkd_sbr_vals = [r.rkd_same_band_rate for r in results if not math.isnan(r.rkd_same_band_rate)]
+
     return {
         "n_queries": len(results),
         "raw_strict_rate": float(np.mean(raw_strict)) if raw_strict else math.nan,
@@ -396,6 +501,17 @@ def _brand_stats(results: list[QueryResult]) -> dict:
         "rkd_mean_price_delta": float(np.mean(rkd_deltas)) if rkd_deltas else math.nan,
         "self_match_count": sum(1 for r in results if r.has_self_match),
         "near_dupe_count": sum(r.n_near_dupes for r in results),
+        # New diversity/coherence metrics (Feature 1 + 2)
+        "raw_inter_dupe_pairs": sum(r.raw_inter_dupe_pairs for r in results),
+        "rkd_inter_dupe_pairs": sum(r.rkd_inter_dupe_pairs for r in results),
+        "raw_distinct_categories_mean": float(
+            np.mean([r.raw_distinct_categories for r in results])
+        ),
+        "rkd_distinct_categories_mean": float(
+            np.mean([r.rkd_distinct_categories for r in results])
+        ),
+        "raw_same_band_rate": float(np.mean(raw_sbr_vals)) if raw_sbr_vals else math.nan,
+        "rkd_same_band_rate": float(np.mean(rkd_sbr_vals)) if rkd_sbr_vals else math.nan,
         "per_category": {
             cat: {
                 "n": data["n"],
@@ -483,6 +599,11 @@ def _delta_inr(before: float, after: float) -> str:
     return f"{arrow}{abs(before - after):,.0f}"
 
 
+def _fmt_sbr(v: float) -> str:
+    """Format same-band rate or return 'n/a' when not configured."""
+    return _pct(v) if not math.isnan(v) else "n/a"
+
+
 def print_comparison_table(all_stats: dict[str, dict]) -> bool:
     """Print the before/after CLI table. Returns True if all hard guardrails pass."""
     col_brand = 12
@@ -533,6 +654,25 @@ def print_comparison_table(all_stats: dict[str, dict]) -> bool:
         )
         for msg in messages:
             print(f"  {'':>{col_brand}}   {msg}")
+
+        # Diversity / coherence sub-row (new Feature 1 + 2 metrics)
+        raw_idp = s.get("raw_inter_dupe_pairs", 0)
+        rkd_idp = s.get("rkd_inter_dupe_pairs", 0)
+        raw_dc = s.get("raw_distinct_categories_mean", math.nan)
+        rkd_dc = s.get("rkd_distinct_categories_mean", math.nan)
+        raw_sbr = s.get("raw_same_band_rate", math.nan)
+        rkd_sbr = s.get("rkd_same_band_rate", math.nan)
+        dc_str = (
+            f"{raw_dc:.1f} → {rkd_dc:.1f}"
+            if not math.isnan(raw_dc) and not math.isnan(rkd_dc)
+            else "—"
+        )
+        print(
+            f"  {'':>{col_brand}}   "
+            f"inter_dupe_pairs(raw={raw_idp} rkd={rkd_idp})  "
+            f"distinct_cats(mean): {dc_str}  "
+            f"same_band_rate(raw={_fmt_sbr(raw_sbr)} rkd={_fmt_sbr(rkd_sbr)})"
+        )
 
     print(sep)
     return all_ok

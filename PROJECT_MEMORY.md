@@ -517,7 +517,8 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | **Phase 4** | **Deploy + Cost + Caching** | ✅ Complete | 2026-06-09 |
 | **Phase 5 (re-rank)** | **Similarity Re-rank + Quality Eval** | ✅ Complete | 2026-06-11 |
 | **Phase 6 (demo-fixes)** | **Rerank bug fix + Snitch expansion + A/B items** | ✅ Complete | 2026-06-11 |
-| Phase 7 (A/B) | Champion-Challenger + Online Learning | — | — |
+| **Phase 7 (deploy + diversity)** | **Deploy-enablement fixes (PR #5) + MMR diversity rerank (PR #6)** | 🟡 In progress | 2026-06-13 |
+| Phase 8 (A/B) | Champion-Challenger + Online Learning | — | — |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
 - [x] Popularity baseline numbers confirmed on temporal test split, active pool AND full pool
@@ -821,3 +822,83 @@ Items where toggling rerank changes the top-5. Use these for live demo of the to
 | Use int+str double-lookup (not int-only) | `art_map.get(_key, art_map.get(art_id, {}))` works whether keys are int or str without breaking existing unit tests that use int mock art_maps. |
 | Expand to 1803 items (not full 15k) | CLIP inference on 15k items at ~1 min/200 items = ~75 min. 1803 items took ~90s on CUDA. Enough to fix thin categories (Jeans 50→300, Jackets 50→200). |
 | candidate_pool_size 50→100 for expanded catalog | With 1803 items, 50-item pool = 2.8% of catalog. 100-item pool = 5.5%, maintains retrieval coverage. |
+
+---
+
+## Phase 7 — Deploy-enablement + MMR Diversity (in progress, 2026-06-13)
+
+Two tracks. Track A = get it LIVE (gated on human GCP step). Track B = make it amazing
+(researched roadmap approved: build order 1+2 → 3 → 4 → 5).
+
+### Track A — Deploy-enablement (PR #5, branch `phase-7-deploy-enablement`, DRAFT)
+
+Audited the never-run deploy path and found **4 startup blockers** that would each crash
+Cloud Run on first boot (none caught by tests because no deploy ever ran):
+
+1. **GCS index-dir sync (silent + fatal).** `index_path` is a *directory*
+   (`indices/<brand>/active.faiss/` with `faiss.index` + `article_ids.pkl`). `app/storage.py`
+   collected the bare dir and tried `download_to_filename` on it → 404 on the dir key, and the
+   two files the app reads were never fetched. Fixed: `_collect_brand_paths` expands index_path
+   → both files.
+2. **Non-root can't write synced assets.** `infra/Dockerfile.cpu` copies as root then drops to
+   `appuser` (uid 1001); the startup GCS sync writes `/app/{data,indices,checkpoints}` which
+   appuser couldn't create under root-owned `/app`. Fixed: `chown -R /app appuser`.
+3. **H&M crashes startup.** `brands/h_and_m.yaml` ships in the image but has no `HM_API_KEY`
+   secret and `load_registry` raises on any unset `api_key_env`. Fixed: added backward-compatible
+   `BRANDS_ENABLED` env filter (unset = all brands) applied in BOTH `load_registry` and
+   `_collect_brand_paths`. `deploy.yml` sets `BRANDS_ENABLED=snitch,fashor,powerlook`.
+4. **gcloud comma mis-parse.** `--set-env-vars` splits on commas → brand list corrupted.
+   Fixed: gcloud `^##^` custom-delimiter syntax.
+
+**Deploy scope decision:** live service returns **3 brands** (Snitch, Fashor, Powerlook) — H&M
+is the eval/training brand (no tenant key, heavy data), intentionally excluded. Region:
+asia-south1 (Mumbai). Asset upload total ~33 MB (14 MB brand data + 19 MB checkpoint).
+**STATUS: awaiting human GCP provisioning + secrets + asset upload + deploy.yml trigger.**
+No live URL yet. Tests: `tests/test_brand_filter.py` (9) + `tests/test_storage.py` updates.
+
+### Track B #1 — MMR Diversity (PR #6, branch `phase-7-diversity`, DRAFT)
+
+`app/rerank.py` gains greedy **Maximal Marginal Relevance** diversity over candidate 256-d FAISS
+embeddings: `score_mmr = base_score - w_diversity * max_cosine_to_selected`. Lives inside
+`rerank()` — the SAME function both the live `/similar` route and `eval_similarity_quality.py`
+call. Both call sites now reconstruct candidate vectors from the SAME FAISS index, which also
+**narrows the eval/route divergence tech-debt** for this path.
+
+New `RerankConfig` fields (all default OFF → existing behaviour byte-identical when unset):
+`w_diversity` (0.0), `dupe_sim_threshold` (0.97), `price_bands_inr` ([]), `w_price_band` (0.0).
+`rerank()` gains keyword-only `embeddings=None`. `dupe_sim_threshold` drives only the eval
+redundancy metric, NOT MMR selection (penalty is continuous).
+
+**Locked eval — n=100, k=5, seed=42, w_diversity=0.20 per brand:**
+
+| Brand | Strict raw→rkd | near-twin pairs (cos≥0.92) raw→rkd | \|ΔPrice\| rkd | Guardrail |
+|-------|----------------|------------------------------------|----------------|-----------|
+| snitch | 75% → **99%** (= Phase 6) | 118 → **37** (−69%) | ₹65 | ✅ OK |
+| fashor | 64% → **87%** (Phase 6: 86%) | 359 → **203** (−43%) | ₹109 | ✅ OK |
+| powerlook | 76% → **94%** (= Phase 6) | 55 → **17** (−69%) | ₹95 | ✅ OK |
+
+Diversity cuts near-twin pairs 43–69% with **strict cat-match held at the locked Phase 6
+numbers** (no relevance cost) and |ΔPrice| unchanged. Near-twins genuinely exist: 41% (snitch) /
+68% (fashor) / 21% (powerlook) of raw result sets contain a pair ≥0.93 (the ceiling on what
+diversity could remove). Eval extended with `inter_dupe_pairs`, `distinct_categories`,
+`same_band_rate` (raw vs reranked), printed alongside the existing strict/affinity/|ΔPrice|.
+
+### Track B #2 — Price-band coherence: EVALUATED then DISABLED (honest negative result)
+
+Implemented (`price_bands_inr` + `w_price_band` same-band bonus) but **disabled by default
+(`w_price_band=0`)**. Ablation harness `scripts/ablate_rerank.py` isolated each feature's
+marginal effect at n=100 and showed the discrete band bonus is **redundant with the existing
+continuous price penalty** and cost ~1pp strict cat-match every brand for only a cosmetic
+same-band-rate gain (the price penalty already drives |ΔPrice| down). Code + config retained so
+it can be enabled per brand if a catalog ever needs it. Documented rather than silently shipped —
+this is the explicit Phase 6 lesson applied (no feature ships claiming a win it doesn't earn).
+
+### Decisions made in Phase 7
+| Decision | Rationale |
+|----------|-----------|
+| `BRANDS_ENABLED` filter (unset=all) over deleting h_and_m.yaml | Backward-compatible; local dev/eval still loads all brands; deploy restricts via env. Additive, no behaviour change when unset. |
+| Deploy only 3 Indian brands | Matches the 4 secrets already in deploy.yml; H&M needs HM_API_KEY + GBs of data; H&M is eval brand, not a sellable tenant. |
+| Put diversity inside `rerank()`, pass embeddings from both call sites | Eval must measure the live path (Phase 6 lesson). Reconstructing from the same FAISS index also narrows the known eval/route divergence. |
+| MMR penalty continuous (not threshold-gated) | Simpler, smoother; `dupe_sim_threshold` reserved for the eval metric so .92 vs .97 don't change rankings. |
+| w_diversity=0.20 | Ablation: 0.15 and 0.25 both held strict; 0.20 is a safe middle giving 43–69% near-twin reduction with zero strict cost. |
+| Disable price-band (w_price_band=0) | Ablation proved it redundant with the price penalty and −1pp strict. Honest negative result; feature kept available, not enabled. |

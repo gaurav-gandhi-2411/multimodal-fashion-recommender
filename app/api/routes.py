@@ -34,13 +34,13 @@ from app.api.schemas import (
 )
 from app.brands.registry import BrandState
 from app.cache import ExplanationCache, get_cache
-from app.rerank import rerank as _rerank
 from app.pricing import (
     GROQ_EST_INPUT_TOKENS,
     GROQ_EST_OUTPUT_TOKENS,
     groq_call_cost_usd,
     usd_to_inr,
 )
+from app.rerank import rerank as _rerank
 
 _SEQ_LEN = 20
 
@@ -301,7 +301,24 @@ async def similar(
         query_meta = state.art_map.get(query_aid_int, {})
         query_price = float(query_meta.get("price_inr") or 0.0)
         query_cat = str(query_meta.get("category", ""))
-        candidates = _rerank(candidates, query_price, query_cat, state.art_map, rerank_cfg, k)
+
+        # Build candidate embeddings for MMR diversity (Feature 1).
+        # Reconstruct from the same FAISS index the eval uses so prod == eval path.
+        embeddings: dict | None = None
+        if rerank_cfg.w_diversity > 0.0:
+            embeddings = {}
+            for aid, _ in candidates:
+                try:
+                    row = state.faiss_aid_to_row.get(int(aid))
+                except (TypeError, ValueError):
+                    row = None
+                if row is not None:
+                    embeddings[aid] = state.retriever.index.reconstruct(row)
+
+        candidates = _rerank(
+            candidates, query_price, query_cat, state.art_map, rerank_cfg, k,
+            embeddings=embeddings,
+        )
     else:
         candidates = candidates[:k]
 
