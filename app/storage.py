@@ -35,15 +35,36 @@ def _download_if_missing(client: Any, bucket_name: str, local_path: str) -> bool
 
 
 def _collect_brand_paths(brands_dir: str) -> list[str]:
-    """Return all data file paths referenced by brand YAML configs."""
+    """
+    Return all data file paths referenced by brand YAML configs.
+
+    For `index_path` (a directory), expands to the two constituent files that
+    FaissRetriever.load() expects: `{index_path}/faiss.index` and
+    `{index_path}/article_ids.pkl`. All other fields are treated as plain file paths.
+
+    Respects the BRANDS_ENABLED env var: when set, only paths for listed brand slugs
+    are returned (matched on the yaml `brand:` field, not filename).
+    """
+    from app.brands.registry import (
+        _enabled_brands,  # noqa: PLC0415 — avoid circular at module level
+    )
+
+    enabled = _enabled_brands()
     paths: list[str] = []
     for yaml_path in sorted(Path(brands_dir).glob("*.yaml")):
         with yaml_path.open() as f:
             data = yaml.safe_load(f)
-        for field in ("catalog_path", "index_path", "checkpoint_path", "embeddings_path"):
+        if enabled is not None and data.get("brand", "").lower() not in enabled:
+            continue
+        for field in ("catalog_path", "checkpoint_path", "embeddings_path"):
             val = data.get(field)
             if val:
                 paths.append(val)
+        idx = data.get("index_path")
+        if idx:
+            base = idx.rstrip("/")
+            paths.append(f"{base}/faiss.index")
+            paths.append(f"{base}/article_ids.pkl")
         td = data.get("transactions_dir")
         if td:
             base = td.rstrip("/")
