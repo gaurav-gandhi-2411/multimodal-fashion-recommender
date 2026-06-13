@@ -517,7 +517,7 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | **Phase 4** | **Deploy + Cost + Caching** | ✅ Complete | 2026-06-09 |
 | **Phase 5 (re-rank)** | **Similarity Re-rank + Quality Eval** | ✅ Complete | 2026-06-11 |
 | **Phase 6 (demo-fixes)** | **Rerank bug fix + Snitch expansion + A/B items** | ✅ Complete | 2026-06-11 |
-| **Phase 7 (deploy + diversity)** | **Deploy-enablement fixes (PR #5) + MMR diversity rerank (PR #6)** | 🟡 In progress | 2026-06-13 |
+| **Phase 7 (LIVE + ranking features)** | **Deploy LIVE (Cloud Run); diversity #6, complete-the-look #7, occasion #4** | 🟢 Live; occasion PR open | 2026-06-14 |
 | Phase 8 (A/B) | Champion-Challenger + Online Learning | — | — |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
@@ -825,7 +825,7 @@ Items where toggling rerank changes the top-5. Use these for live demo of the to
 
 ---
 
-## Phase 7 — Deploy-enablement + MMR Diversity (in progress, 2026-06-13)
+## Phase 7 — Live deploy + ranking features (LIVE 2026-06-14)
 
 Two tracks. Track A = get it LIVE (gated on human GCP step). Track B = make it amazing
 (researched roadmap approved: build order 1+2 → 3 → 4 → 5).
@@ -893,9 +893,47 @@ same-band-rate gain (the price penalty already drives |ΔPrice| down). Code + co
 it can be enabled per brand if a catalog ever needs it. Documented rather than silently shipped —
 this is the explicit Phase 6 lesson applied (no feature ships claiming a win it doesn't earn).
 
+### Track A — LIVE (deployed 2026-06-13/14)
+
+**Live staging URL:** `https://fashion-recommender-staging-rm7rz66wza-el.a.run.app` (Cloud Run, asia-south1).
+- `/health` returns 3 brands; `/similar`, `/complete`, `/metrics/` all work; bad key → 401.
+- Deployed into the SHARED project **iconic-reactor-496423-m4** (also runs agentic-shopping-assistant),
+  name-isolated: svc `fashion-recommender-staging`, bucket `fashion-rec-staging-iconic-reactor-496423-m4`,
+  AR repo `fashion-rec`, SA `fashion-rec-deployer`, WIF pool `fashion-rec-pool`, secrets `fashion-rec-{brand}-key`.
+- Provisioned via `scripts/deploy_staging.ps1` (gitignored, idempotent `-Resume`). `--allow-unauthenticated`
+  warns because the least-privilege SA (`run.developer`) can't set IAM policy; the `allUsers`→`run.invoker`
+  binding was set once as owner and persists across redeploys.
+- **5th boot blocker (found live, PR #9):** `storage._collect_brand_paths` read raw YAML and skipped the
+  pydantic-default `checkpoint_path` → `checkpoints/best.pt` never synced → `FileNotFoundError` at torch.load.
+  Fixed by deriving paths from a validated `BrandConfig` (collector and loader can't drift). Same divergence
+  class as the Phase 6 no-op; 153 green tests missed it because no deploy had ever run.
+
+### Track B #3 — Complete-the-Look (PR #7, LIVE)
+
+New `GET /v1/{brand}/item/{id}/complete` returns COMPLEMENTARY-category items forming an outfit (inverse of
+/similar). `app/complete.py` (pure) scored by visual (CLIP cosine) + price coherence over rule-based garment
+SLOTS in yaml; honest heuristic, not a learned compatibility model. `BrandState` preloads the L2-normalised
+embedding matrix via `reconstruct_n`. Locked eval (n=100): snitch same-cat 74→0% / complementary 16→100% /
+slot-cov 2.0/3; powerlook 78→0% / 7→100% / 2.9/4. **Fashor disabled** (ethnic sets are already complete
+outfits; only 3 standalone Bottoms). Live: snitch Shirt → jackets+trousers+jeans with real PDP links.
+
+### Track B #4 — Occasion/seasonal awareness (PR #8/occasion branch)
+
+`app/occasion.py` mines occasion tags (casual/festive/formal/vacation/party) from title+description via a
+per-brand lexicon (+ Snitch's explicit `Occasion :` field). Boost `+w_occasion` when query & candidate share
+an occasion — inside the shared `rerank()` (query tags from `query_meta`, candidate tags from `art_map` text,
+so eval == serve). ethnic/traditional deliberately excluded (on ~60% of Fashor items → non-discriminating).
+Locked eval (n=100): **fashor w=0.08** occ_match 54→94% for −2pp strict (85%, above floor); **powerlook w=0.08**
+37→77% no strict cost; **snitch DISABLED** (near-no-op — ~93% already "casual", +slight price loosening).
+`occasion_match` is partly self-fulfilling (we optimise it); the independent check is strict, which only dips
+2pp on Fashor. User signed off on the Fashor occasion-vs-strict tradeoff (it's the India differentiator).
+
 ### Decisions made in Phase 7
 | Decision | Rationale |
 |----------|-----------|
+| Reuse shared project iconic-reactor-496423-m4, fully name-isolated | User chose it; every resource namespaced + resource-scoped IAM so it can't touch agentic-shopping-assistant. NEVER aetherart-497918. |
+| Deploy #5 (fixes) ALONE first, then layer features | A boot failure then has an unambiguous cause — caught the 5th blocker cleanly. |
+| Occasion: Fashor+Powerlook 0.08, Snitch off | Ablation knee: 0.08 gives ~all the occasion_match gain at least strict cost; Snitch is a no-op (93% baseline). |
 | `BRANDS_ENABLED` filter (unset=all) over deleting h_and_m.yaml | Backward-compatible; local dev/eval still loads all brands; deploy restricts via env. Additive, no behaviour change when unset. |
 | Deploy only 3 Indian brands | Matches the 4 secrets already in deploy.yml; H&M needs HM_API_KEY + GBs of data; H&M is eval brand, not a sellable tenant. |
 | Put diversity inside `rerank()`, pass embeddings from both call sites | Eval must measure the live path (Phase 6 lesson). Reconstructing from the same FAISS index also narrows the known eval/route divergence. |

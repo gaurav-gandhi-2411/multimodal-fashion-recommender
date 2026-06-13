@@ -27,6 +27,12 @@ rerank:
   # so the eval still reports same_band_rate; re-enable only if a brand needs it.
   price_bands_inr: [600, 1200, 2000]
   w_price_band: 0.0
+  # Feature 3: occasion/seasonal awareness — DISABLED (w_occasion=0). Ablation showed it's a
+  # near-no-op on Snitch: ~93% of items already tag "casual", so occasion_match is already 93%
+  # before any boost (only +7pp headroom) and it slightly worsened price coherence. parse_explicit
+  # left on so re-enabling is one weight change. (ethnic/traditional excluded — non-discriminating.)
+  w_occasion: 0.0
+  parse_explicit_occasion: true
   category_groups:
   - name: bottoms
     members:

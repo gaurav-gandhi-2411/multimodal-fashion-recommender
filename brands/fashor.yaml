@@ -26,6 +26,13 @@ rerank:
   # continuous price penalty and cost ~1pp strict in ablation. Bands kept for the metric.
   price_bands_inr: [900, 1800, 3000]
   w_price_band: 0.0
+  # Feature 3: occasion/seasonal awareness — festive vs everyday vs work is the primary
+  # discriminator for Fashor (ethnic brand). "ethnic"/"traditional" are intentionally
+  # excluded from the lexicon — they appear on ~60% of items and do not discriminate.
+  # Tuned to the knee 0.08: occ_match 59%->94% (+35pp) for only -2pp strict (87%->85%,
+  # above the 58% floor). The India differentiator — festive queries return festive items.
+  w_occasion: 0.08
+  parse_explicit_occasion: false
   category_groups:
     - name: ethnic_set
       members:
