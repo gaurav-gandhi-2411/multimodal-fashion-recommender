@@ -19,3 +19,25 @@ rerank:
   equivalent_group_bonus: 0.70
   related_group_bonus: 0.40
   category_groups: []
+# Complete-the-Look (outfit completion): menswear separates → strong fit.
+# Co-ord (complete set) is intentionally left unslotted so co-ord queries return empty.
+complete:
+  enabled: true
+  per_slot: 2
+  max_items: 6
+  w_style: 0.7
+  w_price: 0.3
+  price_norm_inr: 400.0
+  slots:
+  - name: TOP
+    categories: [Shirt, T-Shirt, Vest]
+  - name: BOTTOM
+    categories: [Bottom]
+  - name: LAYER
+    categories: [Jacket, Track-Suit]
+  - name: ACCESSORY
+    categories: [Belts, Accessories]
+  complements:
+    TOP: [BOTTOM, LAYER, ACCESSORY]
+    BOTTOM: [TOP, LAYER]
+    LAYER: [TOP, BOTTOM]

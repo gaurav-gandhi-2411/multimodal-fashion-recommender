@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import torch
 import yaml
@@ -12,6 +13,7 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from app.complete import CompleteConfig
 from app.rerank import RerankConfig
 from src.models.two_tower import TwoTowerModel
 from src.retrieval.faiss_index import FaissRetriever
@@ -35,6 +37,7 @@ class BrandConfig(BaseModel):
     pdp_url_template: str | None = None
     llm: LLMBrandConfig = Field(default_factory=LLMBrandConfig)
     rerank: RerankConfig = Field(default_factory=RerankConfig)
+    complete: CompleteConfig = Field(default_factory=CompleteConfig)
 
 
 @dataclass
@@ -48,6 +51,11 @@ class BrandState:
     device: torch.device
     user_history: pd.DataFrame | None
     api_key: str
+    # Prebuilt embedding matrix for O(1) lookup by FAISS row index.
+    # Shape: (n_items, emb_dim) float32. Populated in _load_brand via reconstruct_n.
+    item_embeddings: np.ndarray | None = field(default=None)
+    # Inverse of faiss_aid_to_row: maps row index -> article_id (int).
+    faiss_row_to_aid: dict[int, int] | None = field(default=None)
 
 
 class BrandRegistry:
@@ -106,6 +114,13 @@ def _load_brand(yaml_path: Path) -> BrandState:
             "Set it before starting the server."
         )
 
+    # Preload the entire embedding matrix for O(1) candidate scoring in complete_the_look.
+    # IndexFlatIP stores the original L2-normalised vectors verbatim; reconstruct_n returns
+    # them in FAISS row order (same ordering as faiss_aid_to_row values).
+    n_total = retriever.index.ntotal
+    item_embeddings: np.ndarray = retriever.index.reconstruct_n(0, n_total).astype(np.float32)
+    faiss_row_to_aid: dict[int, int] = {row: int(aid) for aid, row in faiss_aid_to_row.items()}
+
     return BrandState(
         config=config,
         catalog=catalog,
@@ -116,6 +131,8 @@ def _load_brand(yaml_path: Path) -> BrandState:
         device=device,
         user_history=history,
         api_key=api_key,
+        item_embeddings=item_embeddings,
+        faiss_row_to_aid=faiss_row_to_aid,
     )
 
 

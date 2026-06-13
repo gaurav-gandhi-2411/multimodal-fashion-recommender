@@ -23,3 +23,23 @@ rerank:
     - Trousers
     - Jeans
     - Cargo Pants
+# Complete-the-Look (outfit completion): menswear separates → strong fit.
+# Query a TOP → returns coordinated BOTTOM + LAYER items (visual+price heuristic).
+complete:
+  enabled: true
+  per_slot: 2
+  max_items: 6
+  w_style: 0.7
+  w_price: 0.3
+  price_norm_inr: 500.0
+  slots:
+  - name: TOP
+    categories: [Shirts, T-Shirts]
+  - name: BOTTOM
+    categories: [Jeans, Trousers, Cargo Pants, Shorts]
+  - name: LAYER
+    categories: [Jackets, Overshirt, Sweaters, Hoodies]
+  complements:
+    TOP: [BOTTOM, LAYER]
+    BOTTOM: [TOP, LAYER]
+    LAYER: [TOP, BOTTOM]
