@@ -46,6 +46,30 @@ api_key_env: TEST_API_KEY
     assert "data/test/transactions/test.parquet" in paths
 
 
+def test_collect_brand_paths_includes_default_checkpoint(tmp_path: Path) -> None:
+    """A brand YAML that OMITS checkpoint_path must still sync the default checkpoints/best.pt.
+
+    Regression for the staging boot crash: the Indian brand yamls omit checkpoint_path,
+    so registry._load_brand torch.loads the pydantic DEFAULT (checkpoints/best.pt). The
+    collector reads the validated BrandConfig (not raw YAML), so it must request that same
+    default — otherwise the checkpoint is never synced and the container crashes with
+    FileNotFoundError: 'checkpoints/best.pt'.
+    """
+    yaml_content = """
+brand: nockpt
+display_name: No Checkpoint Brand
+catalog_path: data/nockpt/items.parquet
+index_path: indices/nockpt/active.faiss
+api_key_env: NOCKPT_API_KEY
+"""
+    (tmp_path / "nockpt.yaml").write_text(yaml_content)
+    paths = _collect_brand_paths(str(tmp_path))
+    assert "checkpoints/best.pt" in paths, (
+        "Brand YAML omitting checkpoint_path must still collect the default "
+        "checkpoints/best.pt that registry._load_brand will torch.load."
+    )
+
+
 def test_download_if_missing_skips_existing_file(tmp_path: Path) -> None:
     """_download_if_missing returns False when file already exists locally."""
     existing = tmp_path / "data" / "file.parquet"
