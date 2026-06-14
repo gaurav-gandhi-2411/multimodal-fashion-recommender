@@ -73,6 +73,10 @@ torch = [
 ]
 torchvision = [
     { index = "pytorch-cu128", marker = "sys_platform == 'win32'" },
+    # Linux (Docker serving image, [ml] extra) MUST use the same pytorch-cpu index as torch.
+    # Otherwise torchvision resolves from PyPI with a mismatched ABI and open_clip fails with
+    # "operator torchvision::nms does not exist" (this broke the first visual-search build).
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
 ]
 
 [tool.hatch.build.targets.wheel]
