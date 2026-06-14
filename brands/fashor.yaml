@@ -3,6 +3,7 @@ display_name: Fashor
 catalog_path: data/fashor/items.parquet
 index_path: indices/fashor/active.faiss
 embeddings_path: indices/fashor/item_emb.npy
+visual_index_path: indices/fashor/visual.faiss
 pdp_url_template: null
 api_key_env: FASHOR_API_KEY
 llm:

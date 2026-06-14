@@ -50,6 +50,9 @@ class BrandConfig(BaseModel):
     api_key_env: str
     embeddings_path: str | None = None
     pdp_url_template: str | None = None
+    # Optional per-brand CLIP-512 visual index (IndexFlatIP over 512-d L2-norm vectors).
+    # When set, the visual-search route uses this index instead of the fused-tower index.
+    visual_index_path: str | None = None
     llm: LLMBrandConfig = Field(default_factory=LLMBrandConfig)
     rerank: RerankConfig = Field(default_factory=RerankConfig)
     complete: CompleteConfig = Field(default_factory=CompleteConfig)
@@ -71,6 +74,9 @@ class BrandState:
     item_embeddings: np.ndarray | None = field(default=None)
     # Inverse of faiss_aid_to_row: maps row index -> article_id (int).
     faiss_row_to_aid: dict[int, int] | None = field(default=None)
+    # Per-brand CLIP-512 visual index (IndexFlatIP, 512-d L2-normalised).
+    # None when config.visual_index_path is unset or the directory does not exist yet.
+    visual_retriever: FaissRetriever | None = field(default=None)
 
 
 class BrandRegistry:
@@ -136,6 +142,22 @@ def _load_brand(yaml_path: Path) -> BrandState:
     item_embeddings: np.ndarray = retriever.index.reconstruct_n(0, n_total).astype(np.float32)
     faiss_row_to_aid: dict[int, int] = {row: int(aid) for aid, row in faiss_aid_to_row.items()}
 
+    # Load the per-brand CLIP-512 visual index when configured and the directory exists.
+    # Absence is non-fatal: the visual-search route returns HTTP 503 for unconfigured brands.
+    visual_retriever: FaissRetriever | None = None
+    if config.visual_index_path:
+        visual_index_dir = Path(config.visual_index_path)
+        if visual_index_dir.is_dir():
+            visual_retriever = FaissRetriever.load(config.visual_index_path)
+        else:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "visual_index_path configured but directory not found; "
+                "visual search will return 503 for brand %r until the index is built. "
+                "Run scripts/build_visual_index.py to create it.",
+                config.brand,
+            )
+
     return BrandState(
         config=config,
         catalog=catalog,
@@ -148,6 +170,7 @@ def _load_brand(yaml_path: Path) -> BrandState:
         api_key=api_key,
         item_embeddings=item_embeddings,
         faiss_row_to_aid=faiss_row_to_aid,
+        visual_retriever=visual_retriever,
     )
 
 

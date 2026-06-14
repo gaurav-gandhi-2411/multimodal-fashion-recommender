@@ -71,6 +71,11 @@ def _collect_brand_paths(brands_dir: str) -> list[str]:
         base = cfg.index_path.rstrip("/")
         paths.append(f"{base}/faiss.index")
         paths.append(f"{base}/article_ids.pkl")
+        # Sync the per-brand CLIP-512 visual index when configured.
+        if cfg.visual_index_path:
+            vbase = cfg.visual_index_path.rstrip("/")
+            paths.append(f"{vbase}/faiss.index")
+            paths.append(f"{vbase}/article_ids.pkl")
         if cfg.transactions_dir:
             tbase = cfg.transactions_dir.rstrip("/")
             for split in ("train", "val", "test"):

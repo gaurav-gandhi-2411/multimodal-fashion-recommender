@@ -9,7 +9,7 @@ from typing import Annotated
 import numpy as np
 import structlog
 import torch
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -33,6 +33,7 @@ from app.api.schemas import (
     RecommendRequest,
     RecommendResponse,
     SimilarResponse,
+    VisualSearchResponse,
 )
 from app.brands.registry import BrandState
 from app.cache import ExplanationCache, get_cache
@@ -496,6 +497,90 @@ async def complete(
         enabled=True,
         results=outfit_items,
         slots_covered=slots_covered,
+        latency_ms=round(latency_ms, 2),
+    )
+
+
+@router.post("/v1/{brand}/visual-search", response_model=VisualSearchResponse)
+async def visual_search(
+    brand: str,
+    image: UploadFile = File(...),  # noqa: B008
+    k: int = 10,
+    *,
+    state: Annotated[BrandState, Depends(require_brand)],
+) -> VisualSearchResponse:
+    """Return the top-k catalogue items most similar to an uploaded query image.
+
+    Encoding path (pure CLIP-512):
+      CLIP ViT-B/32(image) -> 512-d L2-normalised -> FAISS inner-product search
+      against the brand's per-brand visual index (indices/{brand}/visual.faiss).
+
+    No item tower, no SBERT, no rerank: the uploaded image has no metadata
+    (category, price, occasion) so the reranker would silently no-op at best or
+    skew results against an unknown query_cat at worst.
+
+    Returns HTTP 503 when the brand has no visual index configured or built yet.
+    """
+    t0 = time.perf_counter()
+    request_id = str(uuid.uuid4())
+    log = logger.bind(request_id=request_id, brand=brand)
+
+    if state.visual_retriever is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                f"Visual search not configured for brand '{brand}'. "
+                "Run scripts/build_visual_index.py and set visual_index_path in the brand YAML."
+            ),
+        )
+
+    # Validate and read image bytes upfront
+    raw_bytes = await image.read()
+    if not raw_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is empty",
+        )
+
+    from app.visual import encode_query_image
+
+    try:
+        query_emb = encode_query_image(raw_bytes)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid image: {exc}",
+        ) from exc
+
+    raw_results = state.visual_retriever.search(query_emb, k)
+
+    results: list[RecommendedItem] = []
+    for art_id, score in raw_results:
+        try:
+            aid = int(art_id)
+        except (ValueError, TypeError):
+            aid = art_id  # type: ignore[assignment]
+        meta = state.art_map.get(aid, {})
+        pdp_url: str | None = meta.get("pdp_url") or None
+        results.append(
+            RecommendedItem(item_id=str(art_id), score=score, pdp_url=pdp_url)
+        )
+
+    latency_ms = (time.perf_counter() - t0) * 1000
+    log.info(
+        "visual_search",
+        filename=image.filename,
+        n_results=len(results),
+        latency_ms=round(latency_ms, 2),
+        usd_cost=0,
+    )
+    REQUEST_COUNT.labels(brand=brand, endpoint="visual_search", status="200").inc()
+    REQUEST_LATENCY.labels(brand=brand, endpoint="visual_search").observe(latency_ms / 1000)
+
+    return VisualSearchResponse(
+        request_id=request_id,
+        brand=brand,
+        results=results,
         latency_ms=round(latency_ms, 2),
     )
 
