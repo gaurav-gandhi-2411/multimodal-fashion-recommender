@@ -22,9 +22,7 @@ ENV PYTHONUNBUFFERED=1
 
 # Application source (no ML pipeline scripts, no notebooks)
 COPY src/ src/
-COPY app/__init__.py app/
-COPY app/api/ app/api/
-COPY app/brands/ app/brands/
+COPY app/ app/
 COPY brands/ brands/
 COPY config.yaml .
 
