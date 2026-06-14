@@ -928,6 +928,21 @@ Locked eval (n=100): **fashor w=0.08** occ_match 54→94% for −2pp strict (85%
 `occasion_match` is partly self-fulfilling (we optimise it); the independent check is strict, which only dips
 2pp on Fashor. User signed off on the Fashor occasion-vs-strict tradeoff (it's the India differentiator).
 
+### Track B #5 — Visual search (PR #12, branch `phase-7-visual-search`)
+
+New `POST /v1/{brand}/visual-search` (image upload → similar items). FIRST build used the fused item tower with
+empty text — it FAILED quality (self-retrieval 6–14%: an item's own image didn't even find itself; cat-match
+15–55%). Root cause: the tower heavily weights text, so zeroing it lands the query off-manifold. **Rebuilt on
+pure CLIP-512**: `app/visual.py::encode_query_image` returns the raw CLIP-512 (no tower, no SBERT) searched
+against a NEW per-brand `indices/{brand}/visual.faiss` IndexFlatIP (built by `scripts/build_visual_index.py`
+from local catalog images, uploaded to the bucket; synced via storage.py like the fused index).
+Locked eval (n=50, pure CLIP-512): **self-retrieval 100% all brands** (the fix); cat-match@5 snitch 81% /
+fashor 64% / powerlook 81% (vs 15/29/55% for the fused version). Note cat-match UNDERSTATES visual search —
+cross-category visual matches (black shirt → black overshirt) are desirable. No rerank (external image has no
+metadata). Infra: serving image adds the `[ml]` extra + bakes CLIP ViT-B/32 weights (no cold-start download);
+Cloud Run bumped 2Gi→4Gi; encoders lazy-load only on first /visual-search call (other endpoints unaffected).
+h_and_m has no visual index → 503. This is the only feature that needed a runtime encoder + infra change.
+
 ### Decisions made in Phase 7
 | Decision | Rationale |
 |----------|-----------|

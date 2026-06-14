@@ -8,7 +8,9 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml ./
-RUN uv sync --no-dev --no-install-project
+# Install base deps + the [ml] extra so open-clip-torch, sentence-transformers,
+# and transformers are available for the /visual-search endpoint.
+RUN uv sync --no-dev --no-install-project --extra ml
 
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM python:3.11-slim AS runtime
@@ -19,6 +21,15 @@ ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
+# Cache directories that CLIP and SBERT write model weights into.
+# Located under /app so they fall inside the chown-ed subtree below and are
+# readable/writeable by the non-root appuser.
+# HF_HOME covers sentence-transformers (uses HuggingFace Hub download path).
+# TORCH_HOME covers open_clip's torch-hub fallback (not used by openai pretrained
+# which goes through HF, but set defensively for any torch.hub call).
+ENV HF_HOME=/app/.cache/hf
+ENV TORCH_HOME=/app/.cache/torch
+
 COPY src/ src/
 COPY app/ app/
 COPY brands/ brands/
@@ -26,8 +37,26 @@ COPY config.yaml .
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
+# Create cache directories before baking weights so the write succeeds as root.
+RUN mkdir -p /app/.cache/hf /app/.cache/torch
+
+# ── Bake model weights at build time ─────────────────────────────────────────
+# Cloud Run min-instances=0 means every cold start would otherwise re-download
+# ~350 MB of CLIP weights from the internet on first /visual-search call.
+# Baking them into the image layer eliminates that per-cold-start latency hit.
+#
+# open_clip uses HuggingFace Hub for the 'openai' pretrained ViT-B/32 weights;
+# HF_HOME controls where it caches.
+#
+# SBERT (all-MiniLM-L6-v2) is intentionally NOT baked: the visual-search route
+# no longer uses SBERT (pure CLIP-512 path). sentence-transformers remains
+# installed via --extra ml in case other tooling needs it, but downloading its
+# weights at image build time would add ~90 MB for zero serving benefit.
+RUN python -c "import open_clip; open_clip.create_model_and_transforms('ViT-B-32', pretrained='openai')"
+
 # chown /app so the non-root appuser can write GCS-synced brand assets
 # (data/, indices/, checkpoints/) into the working dir at startup.
+# The cache dirs created above are inside /app and are covered by this chown.
 RUN adduser --disabled-password --no-create-home --uid 1001 appuser \
     && chown -R appuser /app
 USER appuser

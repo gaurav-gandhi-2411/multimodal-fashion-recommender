@@ -56,6 +56,13 @@ class CompleteResponse(BaseModel):
     latency_ms: float
 
 
+class VisualSearchResponse(BaseModel):
+    request_id: str
+    brand: str
+    results: list[RecommendedItem]
+    latency_ms: float
+
+
 class HealthBrand(BaseModel):
     brand: str
     display_name: str
