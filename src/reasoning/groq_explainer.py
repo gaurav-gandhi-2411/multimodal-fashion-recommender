@@ -84,6 +84,15 @@ class GroqExplainer:
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"].strip()
 
+    @staticmethod
+    def _item_label(item: dict) -> str:
+        """Build a human-readable label from either the H&M or Indian-brand catalog schema."""
+        name = item.get("prod_name") or item.get("title") or "item"
+        cat = item.get("product_type_name") or item.get("category") or ""
+        colour = item.get("colour_group_name") or ""
+        detail = " ".join(p for p in (colour, cat) if p)
+        return f"{name} ({detail})" if detail else name
+
     def _fallback_template(
         self, user_history: list[dict], rec_item: dict
     ) -> str:
@@ -95,9 +104,9 @@ class GroqExplainer:
                 if (h.get("colour_group_name") or "").strip()
             ]
             types = [
-                (h.get("product_type_name") or "").strip()
+                (h.get("product_type_name") or h.get("category") or "").strip()
                 for h in recent
-                if (h.get("product_type_name") or "").strip()
+                if (h.get("product_type_name") or h.get("category") or "").strip()
             ]
             top_colour = Counter(colours).most_common(1)[0][0] if colours else ""
             top_type   = Counter(types).most_common(1)[0][0] if types else ""
@@ -112,7 +121,9 @@ class GroqExplainer:
                 style_signal = ""
 
             rec_colour = (rec_item.get("colour_group_name") or "").strip().lower()
-            rec_type   = (rec_item.get("product_type_name") or "").strip().lower()
+            rec_type   = (
+                rec_item.get("product_type_name") or rec_item.get("category") or ""
+            ).strip().lower()
             descriptor = " ".join(p for p in (rec_colour, rec_type) if p) or "item"
 
             if style_signal:
@@ -131,14 +142,12 @@ class GroqExplainer:
 
     def _build_prompt(self, user_history: list[dict], rec_item: dict) -> str:
         history_str = "\n".join(
-            f"- {h['prod_name']} ({h['colour_group_name']} {h['product_type_name']})"
-            for h in user_history[-5:]
+            f"- {self._item_label(h)}" for h in user_history[-5:]
         )
         return (
             "You are a concise fashion assistant. A user recently browsed these items:\n\n"
             f"{history_str}\n\n"
-            f"We are recommending: {rec_item['prod_name']} "
-            f"({rec_item['colour_group_name']} {rec_item['product_type_name']})\n\n"
+            f"We are recommending: {self._item_label(rec_item)}\n\n"
             "In ONE sentence (max 25 words), explain why this recommendation fits the user's style. "  # noqa: E501
             "Be specific about patterns (e.g., colour, product category, style). "
             "Do not use bullet points. Do not start with 'This' or 'The'."
