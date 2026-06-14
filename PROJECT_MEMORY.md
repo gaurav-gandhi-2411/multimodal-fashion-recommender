@@ -517,7 +517,7 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | **Phase 4** | **Deploy + Cost + Caching** | ✅ Complete | 2026-06-09 |
 | **Phase 5 (re-rank)** | **Similarity Re-rank + Quality Eval** | ✅ Complete | 2026-06-11 |
 | **Phase 6 (demo-fixes)** | **Rerank bug fix + Snitch expansion + A/B items** | ✅ Complete | 2026-06-11 |
-| **Phase 7 (LIVE + ranking features)** | **Deploy LIVE (Cloud Run); diversity #6, complete-the-look #7, occasion #4** | 🟢 Live; occasion PR open | 2026-06-14 |
+| **Phase 7 (LIVE + ranking features)** | **Deploy LIVE (Cloud Run); diversity #6, complete-the-look #7, occasion #10, visual-search #12; Groq explanations live** | 🟢 Complete | 2026-06-14 |
 | Phase 8 (A/B) | Champion-Challenger + Online Learning | — | — |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
@@ -955,3 +955,5 @@ h_and_m has no visual index → 503. This is the only feature that needed a runt
 | MMR penalty continuous (not threshold-gated) | Simpler, smoother; `dupe_sim_threshold` reserved for the eval metric so .92 vs .97 don't change rankings. |
 | w_diversity=0.20 | Ablation: 0.15 and 0.25 both held strict; 0.20 is a safe middle giving 43–69% near-twin reduction with zero strict cost. |
 | Disable price-band (w_price_band=0) | Ablation proved it redundant with the price penalty and −1pp strict. Honest negative result; feature kept available, not enabled. |
+| `_item_label()` helper in GroqExplainer | `_build_prompt` used H&M-only field names (`prod_name`, `colour_group_name`, `product_type_name`) via direct dict access. KeyError was silently caught → null on every explain=true call for Indian brands. Fix: schema-agnostic helper tries H&M fields first, falls back to `title`+`category`. |
+| Secret stored with CRLF → three deploys to get Groq live | PowerShell pipe adds `\r\n`; fixed by writing key to temp file via `[System.IO.File]::WriteAllText` (ASCII, no newline) before `--data-file`. Future secret updates must use this pattern. |
