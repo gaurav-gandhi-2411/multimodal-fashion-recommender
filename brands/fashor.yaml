@@ -7,7 +7,7 @@ visual_index_path: indices/fashor/visual.faiss
 pdp_url_template: null
 api_key_env: FASHOR_API_KEY
 llm:
-  provider: template
+  provider: groq
   enabled: true
 transactions_dir: data/fashor/transactions
 rerank:

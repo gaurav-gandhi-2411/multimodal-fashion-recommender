@@ -7,7 +7,7 @@ visual_index_path: indices/powerlook/visual.faiss
 pdp_url_template: null
 api_key_env: POWERLOOK_API_KEY
 llm:
-  provider: template
+  provider: groq
   enabled: true
 transactions_dir: data/powerlook/transactions
 rerank:

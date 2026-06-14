@@ -7,7 +7,7 @@ visual_index_path: indices/snitch/visual.faiss
 pdp_url_template: null
 api_key_env: SNITCH_API_KEY
 llm:
-  provider: template
+  provider: groq
   enabled: true
 rerank:
   enabled: true
