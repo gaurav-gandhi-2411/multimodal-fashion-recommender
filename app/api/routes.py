@@ -214,14 +214,57 @@ async def recommend(
             detail="User has no interaction history; provide item_id for cold-start",
         )
 
-    raw_results = state.retriever.search(query_emb, k=req.k)
+    rerank_cfg = state.config.rerank
+    # Fetch an oversized pool so self-exclusion + optional reranking leave enough results.
+    if rerank_cfg.enabled and req.item_id:
+        pool_k = rerank_cfg.candidate_pool_size
+    else:
+        pool_k = req.k + 1  # +1 absorbs the seed item that gets excluded below
+
+    raw_results = state.retriever.search(query_emb, k=pool_k)
+
+    # Exclude the seed item so it never appears in its own recommendations.
+    if req.item_id:
+        candidates = [(aid, score) for aid, score in raw_results if str(aid) != req.item_id]
+    else:
+        candidates = list(raw_results)
+
+    # Apply the same category/price reranker used by /similar so overshirts, etc.
+    # don't leak through when the query item's category is well-defined.
+    if rerank_cfg.enabled and req.item_id:
+        try:
+            seed_aid_int = int(req.item_id)
+        except ValueError:
+            seed_aid_int = -1
+        query_meta = state.art_map.get(seed_aid_int, {})
+        query_price = float(query_meta.get("price_inr") or 0.0)
+        query_cat = str(query_meta.get("category", ""))
+
+        embeddings: dict | None = None
+        if rerank_cfg.w_diversity > 0.0:
+            embeddings = {}
+            for aid, _ in candidates:
+                try:
+                    row = state.faiss_aid_to_row.get(int(aid))
+                except (TypeError, ValueError):
+                    row = None
+                if row is not None:
+                    embeddings[aid] = state.retriever.index.reconstruct(row)
+
+        candidates = _rerank(
+            candidates, query_price, query_cat, state.art_map, rerank_cfg, req.k,
+            embeddings=embeddings,
+            query_meta=query_meta,
+        )
+    else:
+        candidates = candidates[: req.k]
 
     _cache = get_cache()
     results: list[RecommendedItem] = []
     total_usd = 0.0
     cache_hits = 0
     cache_misses = 0
-    for art_id, score in raw_results:
+    for art_id, score in candidates:
         try:
             aid = int(art_id)
         except (ValueError, TypeError):
@@ -506,6 +549,7 @@ async def visual_search(
     brand: str,
     image: UploadFile = File(...),  # noqa: B008
     k: int = 10,
+    item_id: str | None = None,
     *,
     state: Annotated[BrandState, Depends(require_brand)],
 ) -> VisualSearchResponse:
@@ -515,9 +559,10 @@ async def visual_search(
       CLIP ViT-B/32(image) -> 512-d L2-normalised -> FAISS inner-product search
       against the brand's per-brand visual index (indices/{brand}/visual.faiss).
 
-    No item tower, no SBERT, no rerank: the uploaded image has no metadata
-    (category, price, occasion) so the reranker would silently no-op at best or
-    skew results against an unknown query_cat at worst.
+    Optional ``item_id`` query parameter: when the caller knows which catalogue item
+    the uploaded image belongs to, passing ``item_id`` enables category-coherent
+    reranking (same price/category weights as /similar) so results stay within the
+    right garment type.  Without item_id the raw CLIP scores are returned.
 
     Returns HTTP 503 when the brand has no visual index configured or built yet.
     """
@@ -552,10 +597,40 @@ async def visual_search(
             detail=f"Invalid image: {exc}",
         ) from exc
 
-    raw_results = state.visual_retriever.search(query_emb, k)
+    # Resolve query metadata when item_id is supplied so we can rerank.
+    query_meta: dict = {}
+    query_price: float = 0.0
+    query_cat: str = ""
+    if item_id is not None:
+        try:
+            aid_int = int(item_id)
+        except ValueError:
+            aid_int = -1
+        query_meta = state.art_map.get(aid_int, {})
+        query_price = float(query_meta.get("price_inr") or 0.0)
+        query_cat = str(query_meta.get("category", ""))
+
+    rerank_cfg = state.config.rerank
+    use_rerank = item_id is not None and rerank_cfg.enabled and query_cat
+    pool_k = rerank_cfg.candidate_pool_size if use_rerank else k
+
+    raw_results = state.visual_retriever.search(query_emb, pool_k)
+
+    if use_rerank:
+        # embeddings=None disables MMR diversity (visual FAISS stores 512-d CLIP vectors,
+        # not the 256-d tower vectors the MMR path expects).  Category + price still apply.
+        vis_candidates = [(int(aid) if str(aid).isdigit() else aid, score)
+                          for aid, score in raw_results]
+        vis_candidates = _rerank(
+            vis_candidates, query_price, query_cat, state.art_map, rerank_cfg, k,
+            embeddings=None,
+            query_meta=query_meta,
+        )
+    else:
+        vis_candidates = list(raw_results)[:k]
 
     results: list[RecommendedItem] = []
-    for art_id, score in raw_results:
+    for art_id, score in vis_candidates:
         try:
             aid = int(art_id)
         except (ValueError, TypeError):

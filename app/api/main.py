@@ -21,6 +21,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await asyncio.to_thread(sync_brand_assets)
     registry = load_registry("brands")
     app.state.registry = registry
+
+    # Eager-load CLIP encoder if any brand has a visual index so the first
+    # /visual-search call doesn't pay the 30s model-load penalty.
+    has_visual = any(
+        registry.get(name) is not None and registry.get(name).visual_retriever is not None
+        for name in registry.brand_names()
+    )
+    if has_visual:
+        from app.visual import get_image_encoder
+        await asyncio.to_thread(get_image_encoder)
+
     yield
 
 
