@@ -221,6 +221,177 @@ def test_visual_search_self_retrieval_with_item_id_rerank() -> None:
     )
 
 
+def test_visual_search_pure_image_category_coherence() -> None:
+    """Pure-image path (NO item_id): category inferred from rank-1 match must filter scatter.
+
+    Before the fix: uploading a shirt image without ?item_id returned overshirts and
+    jackets because the reranker only activated when item_id was provided.
+
+    After the fix: the route infers query_cat from the rank-1 FAISS result and applies
+    the same category_affinity + price reranker, so a shirt photo returns shirts.
+    This tests the serve path a real buyer uses — no item_id, just an uploaded image.
+    """
+    pytest.importorskip("open_clip", reason="open_clip required for real CLIP encoding")
+
+    visual_index_dir = REPO_ROOT / "indices" / BRAND / "visual.faiss"
+    if not visual_index_dir.is_dir():
+        pytest.skip(f"Visual index not found: {visual_index_dir}")
+
+    img_path = _image_path_for_article(BRAND, ARTICLE_ID)
+    if img_path is None:
+        pytest.skip(f"No local image for article_id={ARTICLE_ID}")
+
+    img_bytes = img_path.read_bytes()
+
+    from src.retrieval.faiss_index import FaissRetriever
+    visual_retriever = FaissRetriever.load(str(visual_index_dir))
+
+    catalog = pd.read_parquet(REPO_ROOT / "data" / BRAND / "items.parquet")
+    catalog["article_id"] = catalog["article_id"].astype(int)
+    art_map = catalog.set_index("article_id").to_dict("index")
+
+    state = _build_mock_state(art_map, visual_retriever)
+    registry = MagicMock()
+    registry.get.side_effect = lambda b: state if b == BRAND else None
+    registry.brand_names.return_value = [BRAND]
+
+    with patch("app.api.main.load_registry", return_value=registry):
+        from app.api.main import app
+        from fastapi.testclient import TestClient
+
+        with TestClient(app, raise_server_exceptions=True) as client:
+            # NO item_id — pure image upload, the path a real buyer takes
+            resp = client.post(
+                f"/v1/{BRAND}/visual-search",
+                files={"image": (img_path.name, img_bytes, "image/jpeg")},
+                params={"k": TOP_K},
+                headers={"X-Api-Key": "vs-test-key"},
+            )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    item_ids = [r["item_id"] for r in body["results"]]
+
+    # Rank-1 must still be self-retrieval (confirms category inference source is valid)
+    assert item_ids[0] == str(ARTICLE_ID), (
+        f"Rank-1 must be self-retrieved article {ARTICLE_ID}, got {item_ids[0]}"
+    )
+
+    # Category coherence: inferred from rank-1's category ("Shirts")
+    rank1_cat = art_map[ARTICLE_ID].get("category", "")
+    result_cats = [
+        art_map.get(int(iid), {}).get("category", "UNKNOWN")
+        for iid in item_ids
+        if iid.isdigit()
+    ]
+    off_cat = [c for c in result_cats if c != rank1_cat]
+    assert not off_cat, (
+        f"Category scatter in pure-image path (no item_id): expected all '{rank1_cat}', "
+        f"got off-category items: {off_cat}. "
+        f"The reranker must now infer category from rank-1 even without item_id."
+    )
+
+    # Price coherence: no 3.5x outliers vs rank-1 price
+    rank1_price = float(art_map[ARTICLE_ID].get("price_inr") or 0)
+    if rank1_price > 0:
+        for iid in item_ids:
+            if not iid.isdigit():
+                continue
+            item_price = float(art_map.get(int(iid), {}).get("price_inr") or 0)
+            if item_price > 0:
+                ratio = item_price / rank1_price
+                assert ratio <= 3.5, (
+                    f"Price outlier in results: item {iid} costs ₹{item_price:.0f} "
+                    f"vs query ₹{rank1_price:.0f} (ratio={ratio:.1f}x). "
+                    f"Price reranker should suppress this."
+                )
+
+
+def test_visual_search_inferred_category_mocked_fast() -> None:
+    """Mocked: verify the route infers category from rank-1 and filters off-category items.
+
+    FAISS returns: Shirt (rank-1, score=1.0), Overshirt (rank-2, score=0.93),
+    then more Shirts.  With NO item_id, the route must infer 'Shirts' from rank-1
+    and apply the reranker, pushing the Overshirt out of the top-k results.
+    """
+    import io
+    from PIL import Image
+    from app.rerank import RerankConfig
+
+    buf = io.BytesIO()
+    Image.new("RGB", (16, 16), color=(100, 150, 200)).save(buf, format="PNG")
+    buf.seek(0)
+    tiny_png = buf.read()
+
+    SHIRT_A  = ARTICLE_ID       # rank-1: Shirt, ₹1299 — category inference source
+    OVERSHIRT = ARTICLE_ID + 1  # rank-2: Overshirt — should be reranked down
+    SHIRT_B  = ARTICLE_ID + 2   # rank-3: Shirt
+    SHIRT_C  = ARTICLE_ID + 3   # rank-4: Shirt
+
+    art_map = {
+        SHIRT_A:   {"title": "Cotton Check Shirt",       "category": "Shirts",    "price_inr": 1299.0},
+        OVERSHIRT: {"title": "Relaxed Fit Overshirt",    "category": "Overshirt", "price_inr": 1399.0},
+        SHIRT_B:   {"title": "Linen Regular Fit Shirt",  "category": "Shirts",    "price_inr": 1199.0},
+        SHIRT_C:   {"title": "Slim Fit Stretch Shirt",   "category": "Shirts",    "price_inr": 1399.0},
+    }
+
+    fixed_vec = np.zeros(512, dtype=np.float32)
+    fixed_vec[0] = 1.0
+
+    state = MagicMock()
+    state.api_key = "vs-test-key"
+    state.config.brand = BRAND
+    state.art_map = art_map
+    state.visual_retriever = MagicMock()
+    state.visual_retriever.search.return_value = [
+        (SHIRT_A,   1.00),
+        (OVERSHIRT, 0.93),
+        (SHIRT_B,   0.91),
+        (SHIRT_C,   0.89),
+    ]
+    state.config.rerank = RerankConfig(
+        enabled=True,
+        candidate_pool_size=20,
+        w_similarity=0.70,
+        w_price_penalty=0.10,
+        w_category_affinity=0.20,
+        price_norm_inr=500.0,
+        equivalent_group_bonus=0.70,
+        w_diversity=0.0,
+    )
+
+    registry = MagicMock()
+    registry.get.side_effect = lambda b: state if b == BRAND else None
+    registry.brand_names.return_value = [BRAND]
+
+    with (
+        patch("app.api.main.load_registry", return_value=registry),
+        patch("app.visual.encode_query_image", return_value=fixed_vec),
+    ):
+        from app.api.main import app
+        from fastapi.testclient import TestClient
+
+        with TestClient(app, raise_server_exceptions=True) as client:
+            # NO item_id — pure image upload
+            resp = client.post(
+                f"/v1/{BRAND}/visual-search",
+                files={"image": ("test.png", tiny_png, "image/png")},
+                params={"k": 3},
+                headers={"X-Api-Key": "vs-test-key"},
+            )
+
+    assert resp.status_code == 200, resp.text
+    returned_ids = [r["item_id"] for r in resp.json()["results"]]
+
+    assert returned_ids[0] == str(SHIRT_A), (
+        f"Rank-1 must be the shirt that seeded category inference. Got: {returned_ids}"
+    )
+    assert str(OVERSHIRT) not in returned_ids, (
+        f"Overshirt must be reranked out of top-3 after category inference. "
+        f"Got: {returned_ids}. The inferred-category reranker is not filtering it."
+    )
+
+
 def test_visual_search_self_retrieval_mocked_fast() -> None:
     """Fast CI proxy: mocked FAISS always returns the seed item at rank 1.
 

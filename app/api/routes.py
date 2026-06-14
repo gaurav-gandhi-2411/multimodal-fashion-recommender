@@ -597,7 +597,7 @@ async def visual_search(
             detail=f"Invalid image: {exc}",
         ) from exc
 
-    # Resolve query metadata when item_id is supplied so we can rerank.
+    # Resolve query metadata when item_id is supplied.
     query_meta: dict = {}
     query_price: float = 0.0
     query_cat: str = ""
@@ -611,10 +611,28 @@ async def visual_search(
         query_cat = str(query_meta.get("category", ""))
 
     rerank_cfg = state.config.rerank
-    use_rerank = item_id is not None and rerank_cfg.enabled and query_cat
-    pool_k = rerank_cfg.candidate_pool_size if use_rerank else k
+    # Always fetch a full candidate pool when reranking is on — even for pure-image
+    # queries where the category will be inferred after the search.
+    pool_k = rerank_cfg.candidate_pool_size if rerank_cfg.enabled else k
 
     raw_results = state.visual_retriever.search(query_emb, pool_k)
+
+    # Pure-image path (no item_id): infer category + price from the rank-1 CLIP match.
+    # CLIP self-retrieval is reliable (rank-1 score ≈ 1.0 for a catalogue image), so
+    # the top match's category is a trustworthy signal for filtering the rest of the
+    # results.  This lets a buyer upload a shirt photo and get shirts back, not overshirts.
+    if not query_cat and raw_results and rerank_cfg.enabled:
+        top_aid = raw_results[0][0]
+        try:
+            top_aid = int(top_aid)
+        except (ValueError, TypeError):
+            pass
+        top_meta = state.art_map.get(top_aid, {})
+        query_cat = str(top_meta.get("category", ""))
+        query_price = float(top_meta.get("price_inr") or 0.0)
+        query_meta = top_meta
+
+    use_rerank = rerank_cfg.enabled and bool(query_cat)
 
     if use_rerank:
         # embeddings=None disables MMR diversity (visual FAISS stores 512-d CLIP vectors,
