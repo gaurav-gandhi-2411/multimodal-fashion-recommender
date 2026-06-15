@@ -1,426 +1,404 @@
 """
-Streamlit demo: multimodal fashion recommender with LLM-generated explanations.
+app/streamlit_app.py — Fashion Recommender public demo.
 
-Run:  streamlit run app/streamlit_app.py
-Requires Ollama running locally with llama3.1:8b pulled.
+Deployed on Streamlit Community Cloud.
+Inference runs on the Cloud Run API; Streamlit handles display only (no local ML).
+
+Secrets layout (configure in Streamlit Cloud → App Settings → Secrets):
+    [api]
+    base_url = "https://fashion-recommender-staging-657468372797.asia-south1.run.app"
+
+    [keys]
+    snitch   = "<value from Secret Manager: fashion-rec-snitch-key>"
+    fashor   = "<value from Secret Manager: fashion-rec-fashor-key>"
+    powerlook = "<value from Secret Manager: fashion-rec-powerlook-key>"
 """
 from __future__ import annotations
 
 import os
-import sys
-from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
-import torch
-import yaml
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# ── constants ─────────────────────────────────────────────────────────────────
 
-from src.models.two_tower import TwoTowerModel
-from src.reasoning.llm_explainer import OllamaExplainer
-from src.retrieval.faiss_index import FaissRetriever
+_FALLBACK_URL = (
+    "https://fashion-recommender-staging-657468372797.asia-south1.run.app"
+)
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+BRANDS: dict[str, dict] = {
+    "snitch": {
+        "name": "Snitch",
+        "tagline": "Men's street & casual wear",
+        "complete_enabled": True,
+        "complete_note": "",
+    },
+    "fashor": {
+        "name": "Fashor",
+        "tagline": "Women's ethnic fashion",
+        "complete_enabled": False,
+        "complete_note": (
+            "Fashor's catalog is ~90% complete ethnic sets (kurta + palazzo + dupatta "
+            "in a single SKU), so outfit completion doesn't apply — you already have the "
+            "full look."
+        ),
+    },
+    "powerlook": {
+        "name": "Powerlook",
+        "tagline": "Men's smart casuals",
+        "complete_enabled": True,
+        "complete_note": "",
+    },
+}
 
-CONFIG_PATH  = Path(__file__).parent.parent / "config.yaml"
-PROCESSED    = Path("data/processed")
-IMAGES_DIR   = Path("data/h-and-m-personalized-fashion-recommendations/images")
-CKPT_PATH    = Path("checkpoints/best.pt")
-BRANDS_DIR   = Path(__file__).parent.parent / "brands"
-API_BASE_URL = "http://localhost:8000"
-INDIAN_BRANDS = ["snitch", "fashor", "powerlook"]
-
-SEQ_LEN      = 20
-N_DEMO_USERS = 30   # users shown in the sidebar dropdown
-
-
-def _img_path(article_id: int) -> Path:
-    s = str(article_id).zfill(10)
-    return IMAGES_DIR / s[:3] / f"{s}.jpg"
-
-
-# ── Indian brand cached loaders ────────────────────────────────────────────────
-
-@st.cache_data
-def load_brand_config(brand: str) -> dict:
-    """Load YAML config for an Indian brand from brands/<brand>.yaml."""
-    path = BRANDS_DIR / f"{brand}.yaml"
-    with open(path) as f:
-        return yaml.safe_load(f)
+# ── config ────────────────────────────────────────────────────────────────────
 
 
-@st.cache_data
-def load_indian_catalog(brand: str) -> pd.DataFrame:
-    """Load the catalog parquet for an Indian brand, sorted by title."""
-    cfg = load_brand_config(brand)
-    df = pd.read_parquet(cfg["catalog_path"])
-    return df.sort_values("title").reset_index(drop=True)
+def _api_url() -> str:
+    try:
+        return st.secrets["api"]["base_url"]  # type: ignore[attr-defined]
+    except (KeyError, AttributeError):
+        return os.environ.get("API_BASE_URL", _FALLBACK_URL)
 
 
-@st.cache_data
-def load_synthetic_users(brand: str) -> list[str]:
-    """Return sorted list of synthetic user IDs for a brand, or [] if file absent."""
-    path = Path(f"data/{brand}/synthetic_users.csv")
-    if not path.exists():
-        return []
-    df = pd.read_csv(path)
-    return sorted(df["user_id"].unique().tolist())
+def _api_key(brand: str) -> str:
+    try:
+        return st.secrets["keys"][brand]  # type: ignore[attr-defined]
+    except (KeyError, AttributeError):
+        return os.environ.get(f"{brand.upper()}_API_KEY", "demo")
 
 
-# ── cached resources ───────────────────────────────────────────────────────────
-
-@st.cache_resource
-def load_config():
-    with open(CONFIG_PATH) as f:
-        return yaml.safe_load(f)
+# ── data loaders ──────────────────────────────────────────────────────────────
 
 
-@st.cache_resource
-def load_model_and_embeddings():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    ckpt   = torch.load(CKPT_PATH, map_location=device, weights_only=False)
-    model  = TwoTowerModel(ckpt["config"]).to(device)
-    model.load_state_dict(ckpt["model_state_dict"])
-    model.eval()
-
-    img_emb  = np.load(PROCESSED / "item_image_embeddings.npy")
-    txt_emb  = np.load(PROCESSED / "item_text_embeddings.npy")
-    item_ids = np.load(PROCESSED / "item_ids_image.npy", allow_pickle=True)
-    aid_to_row = {int(aid): i for i, aid in enumerate(item_ids)}
-
-    return model, device, img_emb, txt_emb, aid_to_row
+@st.cache_data(show_spinner=False)
+def _load_catalog(brand: str) -> dict[str, dict]:
+    """Load brand catalog from the in-repo CSV (gitignored parquet not needed)."""
+    df = pd.read_csv(f"data/{brand}/catalog.csv", dtype={"product_id": str})
+    df["price_inr"] = pd.to_numeric(df["price_inr"], errors="coerce").fillna(0.0)
+    return df.set_index("product_id").to_dict("index")
 
 
-@st.cache_resource
-def load_faiss():
-    return FaissRetriever.load(str(PROCESSED / "faiss_index_active"))
+def _clean_title(title: str) -> str:
+    """Strip Shopify parenthetical suffix: 'Blue Shirt ( Shirts)' → 'Blue Shirt'."""
+    return title.split(" ( ")[0].strip() if " ( " in title else title
 
 
-@st.cache_resource
-def load_data():
-    articles = pd.read_parquet(PROCESSED / "articles.parquet")
-    articles["article_id"] = articles["article_id"].astype(int)
-    art_map  = articles.set_index("article_id").to_dict("index")
-
-    train_df = pd.read_parquet(PROCESSED / "train.parquet")
-    val_df   = pd.read_parquet(PROCESSED / "val.parquet")
-    test_df  = pd.read_parquet(PROCESSED / "test.parquet")
-    full_hist = pd.concat([train_df, val_df, test_df], ignore_index=True)
-    full_hist["article_id"] = full_hist["article_id"].astype(int)
-    full_hist = full_hist.sort_values("t_dat")
-
-    # pick demo users: test users with >= 10 total interactions
-    test_users = test_df["customer_id"].unique()
-    counts = full_hist[full_hist["customer_id"].isin(test_users)].groupby("customer_id").size()
-    rich   = counts[counts >= 10].index.tolist()
-    rng    = np.random.default_rng(42)
-    demo_users = rng.choice(rich, size=min(N_DEMO_USERS, len(rich)), replace=False).tolist()
-
-    return articles, art_map, full_hist, demo_users
+# ── UI components ─────────────────────────────────────────────────────────────
 
 
-# ── inference ──────────────────────────────────────────────────────────────────
+def _product_card(col: st.delta_generator.DeltaGenerator, item_id: str, catalog: dict, explanation: str = "") -> None:
+    meta = catalog.get(str(item_id), {})
+    title = _clean_title(meta.get("title") or str(item_id))
+    price = float(meta.get("price_inr") or 0)
+    img_url: str = meta.get("image_url") or ""
+    pdp_url: str = meta.get("pdp_url") or ""
+    category: str = meta.get("category") or ""
 
-def get_user_embedding(
-    customer_id: str,
-    history_df: pd.DataFrame,
-    model,
-    device: torch.device,
-    img_emb: np.ndarray,
-    txt_emb: np.ndarray,
-    aid_to_row: dict,
-) -> tuple[np.ndarray, list[int]]:
-    """Return (user_emb (256,), list of article_ids in history order)."""
-    user_txns = history_df[history_df["customer_id"] == customer_id]
-    user_items = user_txns["article_id"].tolist()
-    # keep only items that have embeddings
-    user_items = [aid for aid in user_items if aid in aid_to_row]
-    # take last SEQ_LEN
-    seq_items  = user_items[-SEQ_LEN:]
-    N          = len(seq_items)
-
-    if N == 0:
-        return np.zeros(256, dtype=np.float32), []
-
-    rows = [aid_to_row[aid] for aid in seq_items]
-    img_b = torch.from_numpy(img_emb[rows]).to(device)   # (N, 512)
-    txt_b = torch.from_numpy(txt_emb[rows]).to(device)   # (N, 384)
-
-    # Pad to SEQ_LEN
-    pad = SEQ_LEN - N
-    if pad > 0:
-        img_b = torch.cat([torch.zeros(pad, img_b.shape[1], device=device), img_b], dim=0)
-        txt_b = torch.cat([torch.zeros(pad, txt_b.shape[1], device=device), txt_b], dim=0)
-
-    mask = torch.zeros(SEQ_LEN, dtype=torch.bool, device=device)
-    mask[pad:] = True
-
-    with torch.no_grad():
-        item_embs = model.item_tower(img_b, txt_b)              # (SEQ_LEN, 256)
-        user_emb  = model.user_tower(item_embs.unsqueeze(0), mask.unsqueeze(0))  # (1, 256)
-
-    return user_emb.squeeze(0).cpu().numpy(), seq_items
-
-
-# ── UI ─────────────────────────────────────────────────────────────────────────
-
-def render_item_card(col, article_id: int, art_map: dict, caption_prefix: str = ""):
-    meta = art_map.get(article_id, {})
-    name  = meta.get("prod_name", str(article_id))
-    colour = meta.get("colour_group_name", "")
-    ptype  = meta.get("product_type_name", "")
-    img_p  = _img_path(article_id)
-    with col:
-        if img_p.exists():
-            st.image(str(img_p), width=130)
-        else:
-            st.markdown("*(no image)*")
-        st.caption(f"{caption_prefix}**{name}**\n{colour} {ptype}")
-
-
-def render_indian_item_card(col, item_id: str, art_map: dict, label: str = "") -> None:
-    """Render a single catalog item card for an Indian brand (uses image URLs)."""
-    meta = art_map.get(item_id, {})
-    title    = meta.get("title", item_id)
-    category = meta.get("category", "")
-    price    = meta.get("price_inr", "")
-    img_url  = meta.get("image_url", "")
-    pdp_url  = meta.get("pdp_url", "")
     with col:
         if img_url:
-            st.image(img_url, width=130)
+            st.image(img_url, use_container_width=True)
         else:
-            st.markdown("*(no image)*")
-        price_str = f"₹{price:,.0f}" if price else ""
-        st.caption(f"{label}**{title}**\n{category}  {price_str}")
-        if pdp_url:
-            st.markdown(f"[View on site →]({pdp_url})")
-
-
-def indian_brand_demo(brand: str) -> None:
-    """Full Indian brand UI: 'More Like This' and 'Personalized Recommendations' tabs."""
-    catalog_df = load_indian_catalog(brand)
-    art_map = {str(row.article_id): row._asdict() for row in catalog_df.itertuples()}
-    api_key = os.environ.get(load_brand_config(brand)["api_key_env"], "demo")
-
-    tab_similar, tab_personal = st.tabs(["More Like This", "Personalized Recommendations"])
-
-    # ── Tab 1: More Like This ─────────────────────────────────────────────────
-    with tab_similar:
-        seed_options = {
-            str(row.article_id): f"{row.title} [{row.category}]"
-            for row in catalog_df.itertuples()
-        }
-        item_id = st.selectbox(
-            "Seed item",
-            list(seed_options.keys()),
-            format_func=lambda k: seed_options[k],
-        )
-        k = st.slider("Number of similar items", min_value=3, max_value=10, value=5, key="sim_k")
-
-        if st.button("Find Similar", type="primary"):
-            try:
-                r = requests.get(
-                    f"{API_BASE_URL}/v1/{brand}/item/{item_id}/similar",
-                    params={"k": k},
-                    headers={"X-Api-Key": api_key},
-                    timeout=15,
-                )
-                if r.status_code == 200:
-                    data = r.json()
-                    recs = data.get("recommendations", data.get("items", []))
-                    if recs:
-                        cols = st.columns(min(len(recs), 5))
-                        for col, rec in zip(cols, recs, strict=False):
-                            rid = str(rec.get("item_id", rec.get("article_id", "")))
-                            # Prefer pdp_url from API response; fall back to art_map
-                            if rec.get("pdp_url"):
-                                art_map[rid] = {**art_map.get(rid, {}), "pdp_url": rec["pdp_url"]}
-                            render_indian_item_card(col, rid, art_map)
-                        explanation = data.get("explanation", "")
-                        if explanation:
-                            st.info(explanation)
-                    else:
-                        st.warning("No results returned.")
-                else:
-                    st.error(f"API error {r.status_code}: {r.text}")
-            except requests.exceptions.RequestException as exc:
-                st.error(f"Request failed: {exc}")
-
-        st.caption(
-            "💡 Content-based retrieval transfers to any catalog on day one"
-            " — no interaction data required."
-        )
-
-    # ── Tab 2: Personalized Recommendations ──────────────────────────────────
-    with tab_personal:
-        st.warning(
-            "⚠️ Illustrative only — these recommendations use synthetic demo users,"
-            " not real shoppers. Personalization improves as real traffic accumulates."
-        )
-        synthetic_users = load_synthetic_users(brand)
-        if not synthetic_users:
-            st.info("No synthetic users found for this brand.")
-            return
-
-        user_id = st.selectbox("Synthetic user", synthetic_users)
-        k2 = st.slider(
-            "Number of recommendations", min_value=3, max_value=10, value=5, key="rec_k"
-        )
-
-        if st.button("Get Recommendations", type="primary"):
-            try:
-                r = requests.post(
-                    f"{API_BASE_URL}/v1/{brand}/recommend",
-                    json={"user_id": user_id, "k": k2},
-                    headers={"X-Api-Key": api_key},
-                    timeout=15,
-                )
-                if r.status_code == 200:
-                    data = r.json()
-                    recs = data.get("recommendations", data.get("items", []))
-                    if recs:
-                        cols = st.columns(min(len(recs), 5))
-                        for col, rec in zip(cols, recs, strict=False):
-                            rid = str(rec.get("item_id", rec.get("article_id", "")))
-                            if rec.get("pdp_url"):
-                                art_map[rid] = {**art_map.get(rid, {}), "pdp_url": rec["pdp_url"]}
-                            render_indian_item_card(col, rid, art_map)
-                    else:
-                        st.warning("No results returned.")
-                else:
-                    st.error(f"API error {r.status_code}: {r.text}")
-            except requests.exceptions.RequestException as exc:
-                st.error(f"Request failed: {exc}")
-
-        st.caption(
-            "🔬 Model trained on H&M sequences — user tower does not transfer to fresh catalogs."
-            " Results illustrate API surface only."
-        )
-
-
-def main():
-    st.set_page_config(
-        page_title="Fashion Recommender Demo",
-        page_icon="👗",
-        layout="wide",
-    )
-
-    # ── Brand selector ────────────────────────────────────────────────────────
-    all_brands = {
-        "h_and_m": "H&M",
-        "snitch": "Snitch",
-        "fashor": "Fashor",
-        "powerlook": "Powerlook",
-    }
-    brand_key = st.sidebar.selectbox(
-        "Brand", list(all_brands.keys()), format_func=lambda k: all_brands[k]
-    )
-
-    if brand_key in INDIAN_BRANDS:
-        st.title(f"{all_brands[brand_key]} — Fashion Recommender Demo")
-        indian_brand_demo(brand_key)
-        return
-
-    # ── H&M flow (unchanged) ──────────────────────────────────────────────────
-    st.title("Multimodal Fashion Recommender")
-    st.markdown(
-        "Two-tower retrieval (CLIP + SBERT + Transformer) with LLM-generated explanations."
-    )
-
-    config     = load_config()
-    articles, art_map, full_hist, demo_users = load_data()
-    model, device, img_emb, txt_emb, aid_to_row = load_model_and_embeddings()
-    retriever  = load_faiss()
-    explainer  = OllamaExplainer(config)
-
-    # ── Sidebar ──────────────────────────────────────────────────────────────
-    st.sidebar.header("User selection")
-    user_labels = [f"{uid[:12]}..." for uid in demo_users]
-    choice = st.sidebar.selectbox(
-        "Pick a test-set user", range(len(demo_users)), format_func=lambda i: user_labels[i]
-    )
-    customer_id = demo_users[choice]
-    st.sidebar.caption(f"Full ID: `{customer_id}`")
-
-    top_k   = st.sidebar.slider("Recommendations to show", 3, 10, 5)
-    explain = st.sidebar.checkbox("Generate LLM explanations", value=True)
-    run_btn = st.sidebar.button("Recommend", type="primary")
-
-    # ── Main area ─────────────────────────────────────────────────────────────
-    if not run_btn:
-        st.info("Select a user in the sidebar and click **Recommend**.")
-        return
-
-    # User history
-    user_emb, seq_items = get_user_embedding(
-        customer_id, full_hist, model, device, img_emb, txt_emb, aid_to_row
-    )
-    if len(seq_items) == 0:
-        st.error("This user has no items with embeddings in the catalogue.")
-        return
-
-    history_items = seq_items[-5:]  # show last 5
-    _empty_meta = {"prod_name": "", "colour_group_name": "", "product_type_name": ""}
-    history_meta = [
-        art_map.get(aid, {**_empty_meta, "prod_name": str(aid)}) for aid in history_items
-    ]
-
-    # Retrieve top-K
-    results = retriever.search(user_emb, k=top_k)
-    rec_ids = [int(aid) for aid, _ in results]
-
-    # ── Layout ────────────────────────────────────────────────────────────────
-    left, right = st.columns([1, 2], gap="large")
-
-    with left:
-        st.subheader("Recent browsing history")
-        hist_cols = st.columns(len(history_items))
-        for col, aid in zip(hist_cols, history_items, strict=False):
-            render_item_card(col, aid, art_map)
-
-    with right:
-        st.subheader(f"Top {top_k} recommendations")
-
-        if explain:
-            st.caption("Generating explanations via Ollama llama3.1:8b...")
-            prog = st.progress(0)
-
-        for i, rec_id in enumerate(rec_ids):
-            rec_meta = art_map.get(
-                rec_id, {**_empty_meta, "prod_name": str(rec_id)}
+            st.markdown(
+                "<div style='height:200px;background:#f5f5f5;border-radius:8px;"
+                "display:flex;align-items:center;justify-content:center;"
+                "color:#ccc;font-size:2.5rem'>🖼️</div>",
+                unsafe_allow_html=True,
             )
-            rec_cols = st.columns([1, 4])
+        st.markdown(f"**{title}**")
+        if price:
+            st.markdown(
+                f"<p style='font-size:1.05rem;font-weight:700;margin:2px 0 4px'>₹{price:,.0f}</p>",
+                unsafe_allow_html=True,
+            )
+        if category:
+            st.caption(category)
+        if pdp_url:
+            st.markdown(f"[View on site →]({pdp_url})", unsafe_allow_html=False)
+        if explanation:
+            with st.expander("Why this?"):
+                st.markdown(explanation)
 
-            img_p = _img_path(rec_id)
-            with rec_cols[0]:
-                if img_p.exists():
-                    st.image(str(img_p), width=100)
-                else:
-                    st.markdown("*(no img)*")
 
-            with rec_cols[1]:
-                st.markdown(
-                    f"**{rec_meta.get('prod_name', rec_id)}** — "
-                    f"{rec_meta.get('colour_group_name','')} {rec_meta.get('product_type_name','')}"
+def _results_grid(results: list[dict], catalog: dict, cols: int = 4) -> None:
+    for row_start in range(0, len(results), cols):
+        chunk = results[row_start : row_start + cols]
+        grid = st.columns(cols)
+        for col, rec in zip(grid, chunk):
+            iid = str(rec.get("item_id", ""))
+            if rec.get("pdp_url") and iid in catalog:
+                catalog[iid]["pdp_url"] = rec["pdp_url"]
+            _product_card(col, iid, catalog, explanation=rec.get("explanation") or "")
+
+
+def _item_selectbox(label: str, catalog: dict, key: str) -> str | None:
+    opts = list(catalog.keys())
+    if not opts:
+        st.warning("Catalog is empty.")
+        return None
+    return st.selectbox(
+        label,
+        opts,
+        format_func=lambda k: (
+            f"{_clean_title(catalog[k].get('title') or k)}"
+            f"  ·  ₹{float(catalog[k].get('price_inr') or 0):,.0f}"
+        ),
+        key=key,
+    )
+
+
+def _item_preview(item_id: str, catalog: dict) -> None:
+    """Show a compact 2-column preview of a selected catalog item."""
+    meta = catalog.get(str(item_id), {})
+    c1, c2 = st.columns([1, 3], gap="large")
+    with c1:
+        if meta.get("image_url"):
+            st.image(meta["image_url"], use_container_width=True)
+    with c2:
+        st.markdown(f"### {_clean_title(meta.get('title') or item_id)}")
+        price = float(meta.get("price_inr") or 0)
+        if price:
+            st.markdown(f"**₹{price:,.0f}**")
+        if meta.get("category"):
+            st.caption(meta["category"])
+        if meta.get("pdp_url"):
+            st.markdown(f"[View on site →]({meta['pdp_url']})")
+
+
+# ── tab views ─────────────────────────────────────────────────────────────────
+
+
+def _visual_search(brand: str, catalog: dict) -> None:
+    brand_name = BRANDS[brand]["name"]
+
+    st.markdown("## Upload a photo — find matching styles instantly")
+    st.markdown(
+        "<p style='color:#777;margin-top:-0.8rem;margin-bottom:1.5rem'>"
+        "Works with product photos, outfit shots, or screenshots from any site.</p>",
+        unsafe_allow_html=True,
+    )
+
+    uploaded = st.file_uploader(
+        "Drop an image here or click to browse",
+        type=["jpg", "jpeg", "png", "webp"],
+        key=f"vs_upload_{brand}",
+    )
+
+    if uploaded is None:
+        return
+
+    k = st.select_slider(
+        "Results to show",
+        options=[4, 8, 12],
+        value=8,
+        key=f"vs_k_{brand}",
+    )
+
+    col_photo, col_results = st.columns([1, 3], gap="large")
+
+    with col_photo:
+        st.markdown("**Your photo**")
+        st.image(uploaded, use_container_width=True)
+
+    with col_results:
+        with st.spinner(f"Searching {brand_name} catalog…"):
+            try:
+                resp = requests.post(
+                    f"{_api_url()}/v1/{brand}/visual-search",
+                    files={
+                        "image": (
+                            uploaded.name,
+                            uploaded.getvalue(),
+                            uploaded.type or "image/jpeg",
+                        )
+                    },
+                    params={"k": k},
+                    headers={"X-Api-Key": _api_key(brand)},
+                    timeout=30,
                 )
-                if explain:
-                    try:
-                        explanation = explainer.explain(history_meta, rec_meta)
-                        st.info(explanation)
-                    except Exception as e:
-                        st.warning(f"LLM unavailable: {e}")
-                    prog.progress((i + 1) / top_k)
+            except requests.exceptions.RequestException as exc:
+                st.error(f"Cannot reach API — is the Cloud Run service running? ({exc})")
+                return
 
-            st.divider()
+        if resp.status_code == 200:
+            data = resp.json()
+            results: list[dict] = data.get("results", [])
+            latency: float = data.get("latency_ms", 0.0)
+            if results:
+                st.markdown(f"**{len(results)} matches** · {latency:.0f} ms")
+                _results_grid(results, catalog, cols=4)
+            else:
+                st.info("No matches found — try a clearer product photo with a plain background.")
+        elif resp.status_code == 503:
+            st.warning(f"Visual search is not configured for {brand_name}.")
+        else:
+            st.error(f"API error {resp.status_code}: {resp.text[:300]}")
+
+
+def _more_like_this(brand: str, catalog: dict) -> None:
+    item_id = _item_selectbox("Choose an item from the catalog", catalog, key=f"sim_sel_{brand}")
+    if item_id is None:
+        return
+
+    _item_preview(item_id, catalog)
+    st.markdown(" ")
+
+    k = st.slider("Results", 4, 12, 8, key=f"sim_k_{brand}")
+    if st.button("Find Similar", type="primary", key=f"sim_btn_{brand}"):
+        with st.spinner("Finding similar items…"):
+            try:
+                resp = requests.get(
+                    f"{_api_url()}/v1/{brand}/item/{item_id}/similar",
+                    params={"k": k},
+                    headers={"X-Api-Key": _api_key(brand)},
+                    timeout=20,
+                )
+            except requests.exceptions.RequestException as exc:
+                st.error(f"Cannot reach API: {exc}")
+                return
+
+        if resp.status_code == 200:
+            results = resp.json().get("results", [])
+            if results:
+                st.markdown(f"**{len(results)} similar items**")
+                _results_grid(results, catalog)
+            else:
+                st.info("No similar items found for this product.")
+        else:
+            st.error(f"API error {resp.status_code}: {resp.text[:300]}")
+
+
+def _complete_the_look(brand: str, catalog: dict) -> None:
+    cfg = BRANDS[brand]
+    if not cfg["complete_enabled"]:
+        st.info(cfg["complete_note"])
+        return
+
+    item_id = _item_selectbox("Choose a seed item", catalog, key=f"cpl_sel_{brand}")
+    if item_id is None:
+        return
+
+    _item_preview(item_id, catalog)
+    st.caption("Best results with tops (shirts, t-shirts). The model suggests coordinated bottoms and layers.")
+    st.markdown(" ")
+
+    if st.button("Complete the Look", type="primary", key=f"cpl_btn_{brand}"):
+        with st.spinner("Building outfit…"):
+            try:
+                resp = requests.get(
+                    f"{_api_url()}/v1/{brand}/item/{item_id}/complete",
+                    params={"k": 6},
+                    headers={"X-Api-Key": _api_key(brand)},
+                    timeout=20,
+                )
+            except requests.exceptions.RequestException as exc:
+                st.error(f"Cannot reach API: {exc}")
+                return
+
+        if resp.status_code == 200:
+            results = resp.json().get("results", [])
+            if results:
+                st.markdown(f"**{len(results)} pieces to complete the look**")
+                _results_grid(results, catalog)
+            else:
+                st.info(
+                    "No complementary items found — try a top (shirt or t-shirt) as the seed item."
+                )
+        else:
+            st.error(f"API error {resp.status_code}: {resp.text[:300]}")
+
+
+# ── page shell ────────────────────────────────────────────────────────────────
+
+
+def main() -> None:
+    st.set_page_config(
+        page_title="Fashion Recommender",
+        page_icon="🧥",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
 
     st.markdown(
-        "---\n"
-        "Built with CLIP + SBERT + Llama 3.1 via Ollama · "
-        "[GitHub](https://github.com/gaurav-gandhi-2411/multimodal-fashion-recommender)"
+        """
+        <style>
+        /* Clean white canvas */
+        .stApp { background-color: #ffffff; }
+
+        /* Dark sidebar */
+        [data-testid="stSidebar"] { background-color: #111111; }
+        [data-testid="stSidebar"] * { color: #f0f0f0 !important; }
+
+        /* Primary buttons — dark pill */
+        .stButton > button[kind="primary"] {
+            background-color: #111111;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            padding: 0.55rem 2.5rem;
+            font-size: 0.95rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        .stButton > button[kind="primary"]:hover { background-color: #333333; }
+
+        /* Reduce top padding */
+        .block-container { padding-top: 2rem !important; }
+
+        /* Product card spacing */
+        [data-testid="column"] { padding: 0 0.4rem; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ── Sidebar ───────────────────────────────────────────────────────────────
+    with st.sidebar:
+        st.markdown("## 🧥 Fashion Rec")
+        st.markdown("*Multimodal retrieval demo*")
+        st.markdown("---")
+        brand = st.radio(
+            "Brand",
+            list(BRANDS.keys()),
+            format_func=lambda k: BRANDS[k]["name"],
+            label_visibility="collapsed",
+        )
+        st.markdown("---")
+        st.markdown(f"**{BRANDS[brand]['name']}**")
+        st.caption(BRANDS[brand]["tagline"])
+        st.markdown(" ")
+        st.caption("Powered by CLIP · FAISS · Groq · FastAPI · Cloud Run")
+
+    # ── Brand header ──────────────────────────────────────────────────────────
+    catalog = _load_catalog(brand)
+    st.markdown(f"# {BRANDS[brand]['name']}")
+    st.caption(f"{len(catalog):,} products · {BRANDS[brand]['tagline']}")
+    st.markdown("---")
+
+    # ── Tabs: Visual Search first ─────────────────────────────────────────────
+    tab_vs, tab_sim, tab_cpl = st.tabs(
+        ["📷  Visual Search", "🔍  More Like This", "✨  Complete the Look"]
+    )
+
+    with tab_vs:
+        _visual_search(brand, catalog)
+
+    with tab_sim:
+        _more_like_this(brand, catalog)
+
+    with tab_cpl:
+        _complete_the_look(brand, catalog)
+
+    # ── Footer ────────────────────────────────────────────────────────────────
+    st.markdown(
+        "<hr style='margin-top:4rem'>"
+        "<p style='text-align:center;color:#bbb;font-size:0.8em'>"
+        "Built by Gaurav Gandhi · "
+        "<a href='https://github.com/gaurav-gandhi-2411/multimodal-fashion-recommender'"
+        " style='color:#bbb'>GitHub</a>"
+        "</p>",
+        unsafe_allow_html=True,
     )
 
 
