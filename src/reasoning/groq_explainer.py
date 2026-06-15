@@ -144,10 +144,15 @@ class GroqExplainer:
         history_str = "\n".join(
             f"- {self._item_label(h)}" for h in user_history[-5:]
         )
+        rec_label = self._item_label(rec_item)
+        # Extract the raw product name so we can lock the model to it.
+        rec_name = rec_item.get("prod_name") or rec_item.get("title") or "this item"
         return (
             "You are a concise fashion assistant. A user recently browsed these items:\n\n"
             f"{history_str}\n\n"
-            f"We are recommending: {self._item_label(rec_item)}\n\n"
+            f"We are recommending: {rec_label}\n\n"
+            f'RULE: You MUST refer to the recommended product by its exact name "{rec_name}". '
+            "Do NOT paraphrase, rename, or invent a different product name.\n\n"
             "In ONE sentence (max 25 words), explain why this recommendation fits the user's style. "  # noqa: E501
             "Be specific about patterns (e.g., colour, product category, style). "
             "Do not use bullet points. Do not start with 'This' or 'The'."

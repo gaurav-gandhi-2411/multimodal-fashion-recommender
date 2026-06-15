@@ -22,14 +22,15 @@ ENV PYTHONUNBUFFERED=1
 
 # Application source (no ML pipeline scripts, no notebooks)
 COPY src/ src/
-COPY app/__init__.py app/
-COPY app/api/ app/api/
-COPY app/brands/ app/brands/
+COPY app/ app/
 COPY brands/ brands/
 COPY config.yaml .
 
 # Non-root user (UID 1001 avoids collision with common host UIDs)
-RUN adduser --disabled-password --no-create-home --uid 1001 appuser
+# Pre-create writable dirs and give appuser ownership so GCS sync can write at runtime.
+RUN adduser --disabled-password --no-create-home --uid 1001 appuser \
+    && mkdir -p data indices checkpoints \
+    && chown -R appuser:appuser /app
 USER appuser
 
 # Data artifacts (checkpoints/, data/processed/) must be mounted at runtime:

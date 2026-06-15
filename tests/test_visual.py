@@ -11,12 +11,17 @@ Phase-7 pure-CLIP guardrails:
 from __future__ import annotations
 
 import io
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from app.rerank import RerankConfig  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -59,6 +64,9 @@ def _make_state(known_ids: list[int], *, has_visual_retriever: bool = True) -> M
     state.api_key = "vs-test-key"
     state.config.brand = "testbrand"
     state.art_map = art_map
+    # Disable reranking so these route-plumbing tests are not affected by
+    # the inferred-category path added in the pure-image visual-search fix.
+    state.config.rerank = RerankConfig(enabled=False)
 
     if has_visual_retriever:
         state.visual_retriever = MagicMock()
