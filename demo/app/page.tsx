@@ -10,6 +10,33 @@ import { Spinner } from "@/components/Spinner";
 
 const BRANDS: Brand[] = ["snitch", "fashor", "powerlook"];
 
+// Extract average color from an image as a 6-digit hex string.
+// Uses a 16×16 canvas sample — fast and native, no server round-trip needed.
+function extractDominantColor(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 16;
+    canvas.height = 16;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { resolve(""); return; }
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, 16, 16);
+      const { data } = ctx.getImageData(0, 0, 16, 16);
+      let r = 0, g = 0, b = 0;
+      const n = 256; // 16×16
+      for (let i = 0; i < data.length; i += 4) { r += data[i]; g += data[i + 1]; b += data[i + 2]; }
+      const hex = [r, g, b]
+        .map((c) => Math.round(c / n).toString(16).padStart(2, "0"))
+        .join("");
+      URL.revokeObjectURL(img.src);
+      resolve(hex);
+    };
+    img.onerror = () => { URL.revokeObjectURL(img.src); resolve(""); };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 export default function HomePage() {
   const [brand, setBrand] = useState<Brand>("snitch");
   const [preview, setPreview] = useState<string | null>(null);
@@ -30,11 +57,13 @@ export default function HomePage() {
       setResults([]);
       setSelectedItem(null);
 
+      const colorHex = await extractDominantColor(file);
       const form = new FormData();
       form.append("image", file);
 
       try {
-        const res = await fetch(`/api/visual-search?brand=${activeBrand}&k=9`, {
+        const colorParam = colorHex ? `&color=${colorHex}` : "";
+        const res = await fetch(`/api/visual-search?brand=${activeBrand}&k=9${colorParam}`, {
           method: "POST",
           body: form,
         });
