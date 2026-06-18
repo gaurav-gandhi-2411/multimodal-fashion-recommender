@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**.fashor.com" },
       { protocol: "https", hostname: "powerlook.in" },
       { protocol: "https", hostname: "snitch.co.in" },
+      { protocol: "https", hostname: "snitch.com" },
+      { protocol: "https", hostname: "www.snitch.com" },
       { protocol: "https", hostname: "**.cloudfront.net" },
       { protocol: "https", hostname: "images.unsplash.com" },
     ],
