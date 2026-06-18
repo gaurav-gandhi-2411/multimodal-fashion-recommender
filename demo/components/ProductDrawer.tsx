@@ -15,6 +15,7 @@ interface ProductDrawerProps {
 export function ProductDrawer({ item, brand, onClose }: ProductDrawerProps) {
   const [similarItems, setSimilarItems] = useState<EnrichedItem[]>([]);
   const [outfitItems, setOutfitItems] = useState<EnrichedItem[]>([]);
+  const [outfitEnabled, setOutfitEnabled] = useState(true);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -30,6 +31,7 @@ export function ProductDrawer({ item, brand, onClose }: ProductDrawerProps) {
     ])
       .then(([sim, outfit]) => {
         setSimilarItems(sim.results ?? []);
+        setOutfitEnabled(outfit.enabled ?? true);
         setOutfitItems(outfit.enabled ? (outfit.results ?? []) : []);
       })
       .finally(() => setLoading(false));
@@ -101,20 +103,26 @@ export function ProductDrawer({ item, brand, onClose }: ProductDrawerProps) {
                 )}
               </section>
 
-              {/* Outfit completion */}
-              {outfitItems.length > 0 && (
-                <section>
-                  <h3 className="text-sm font-semibold text-zinc-900 mb-3 flex items-center gap-2">
-                    <span className="w-1.5 h-4 bg-rose-500 rounded-full inline-block" />
-                    Complete the Outfit
-                  </h3>
+              {/* Outfit completion — always shown so demo shows the feature exists */}
+              <section>
+                <h3 className="text-sm font-semibold text-zinc-900 mb-3 flex items-center gap-2">
+                  <span className="w-1.5 h-4 bg-rose-500 rounded-full inline-block" />
+                  Complete the Outfit
+                </h3>
+                {!outfitEnabled ? (
+                  <p className="text-xs text-zinc-400">
+                    Outfit completion is configured per brand — enabled for menswear (Snitch, Powerlook).
+                  </p>
+                ) : outfitItems.length === 0 ? (
+                  <p className="text-xs text-zinc-400">No complementary pieces found for this item.</p>
+                ) : (
                   <div className="grid grid-cols-2 gap-3">
                     {outfitItems.map((o) => (
                       <ProductCard key={o.item_id} item={o} size="sm" />
                     ))}
                   </div>
-                </section>
-              )}
+                )}
+              </section>
             </>
           )}
         </div>
