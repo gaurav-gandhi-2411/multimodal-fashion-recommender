@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from app.color import ColorIndex, load_color_index
 from app.complete import CompleteConfig
 from app.rerank import RerankConfig
 from src.models.two_tower import TwoTowerModel
@@ -57,6 +58,13 @@ class BrandConfig(BaseModel):
     # Optional per-brand CLIP-512 visual index (IndexFlatIP over 512-d L2-norm vectors).
     # When set, the visual-search route uses this index instead of the fused-tower index.
     visual_index_path: str | None = None
+    # Path to the per-brand color index JSON file (item_id -> {h, s, v}).
+    # When set, /visual-search accepts a ?color=<hex> param for color-aware reranking.
+    color_index_path: str | None = None
+    # Minimum raw CLIP score for /visual-search results. When the top candidate
+    # scores below this threshold the endpoint returns results=[] with
+    # match_quality="insufficient" instead of spurious matches.
+    visual_search_min_score: float | None = None
     llm: LLMBrandConfig = Field(default_factory=LLMBrandConfig)
     rerank: RerankConfig = Field(default_factory=RerankConfig)
     complete: CompleteConfig = Field(default_factory=CompleteConfig)
@@ -81,6 +89,8 @@ class BrandState:
     # Per-brand CLIP-512 visual index (IndexFlatIP, 512-d L2-normalised).
     # None when config.visual_index_path is unset or the directory does not exist yet.
     visual_retriever: FaissRetriever | None = field(default=None)
+    # Per-brand HSV color index loaded from color_index_path. Empty dict when unconfigured.
+    color_index: ColorIndex = field(default_factory=dict)
 
 
 class BrandRegistry:
@@ -162,6 +172,14 @@ def _load_brand(yaml_path: Path) -> BrandState:
                 config.brand,
             )
 
+    color_index: ColorIndex = {}
+    if config.color_index_path:
+        color_index = load_color_index(config.color_index_path)
+        import logging as _logging
+        _logging.getLogger(__name__).info(
+            "color_index_loaded", brand=config.brand, n_items=len(color_index)
+        )
+
     return BrandState(
         config=config,
         catalog=catalog,
@@ -175,6 +193,7 @@ def _load_brand(yaml_path: Path) -> BrandState:
         item_embeddings=item_embeddings,
         faiss_row_to_aid=faiss_row_to_aid,
         visual_retriever=visual_retriever,
+        color_index=color_index,
     )
 
 

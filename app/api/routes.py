@@ -37,6 +37,7 @@ from app.api.schemas import (
 )
 from app.brands.registry import BrandState
 from app.cache import ExplanationCache, get_cache
+from app.color import color_rerank, hex_to_hsv
 from app.complete import build_slot_index, complete_the_look
 from app.pricing import (
     GROQ_EST_INPUT_TOKENS,
@@ -573,6 +574,7 @@ async def visual_search(
     image: UploadFile = File(...),  # noqa: B008
     k: int = Query(default=10, ge=1, le=100),
     item_id: str | None = None,
+    color: str | None = None,
     *,
     state: Annotated[BrandState, Depends(require_brand)],
 ) -> VisualSearchResponse:
@@ -652,6 +654,33 @@ async def visual_search(
             detail="Retrieval index temporarily unavailable",
         ) from exc
 
+    # C3: minimum-score threshold — return "insufficient" when top CLIP score is below
+    # the per-brand floor. Protects against non-fashion images (cats, screenshots, etc.)
+    # that CLIP encodes into the fashion embedding space with low but non-zero similarity.
+    min_score_cfg = state.config.visual_search_min_score
+    if (
+        min_score_cfg is not None
+        and raw_results
+        and raw_results[0][1] < min_score_cfg
+    ):
+        latency_ms = (time.perf_counter() - t0) * 1000
+        log.info(
+            "visual_search_insufficient_match",
+            filename=image.filename,
+            top_score=round(raw_results[0][1], 4),
+            min_score=min_score_cfg,
+            latency_ms=round(latency_ms, 2),
+        )
+        REQUEST_COUNT.labels(brand=brand, endpoint="visual_search", status="200").inc()
+        REQUEST_LATENCY.labels(brand=brand, endpoint="visual_search").observe(latency_ms / 1000)
+        return VisualSearchResponse(
+            request_id=request_id,
+            brand=brand,
+            results=[],
+            latency_ms=round(latency_ms, 2),
+            match_quality="insufficient",
+        )
+
     # Pure-image path (no item_id): infer category + price from the rank-1 CLIP match.
     # CLIP self-retrieval is reliable (rank-1 score ≈ 1.0 for a catalogue image), so
     # the top match's category is a trustworthy signal for filtering the rest of the
@@ -682,6 +711,12 @@ async def visual_search(
     else:
         vis_candidates = list(raw_results)[:k]
 
+    # C1: Color-aware rerank — blend CLIP scores with perceptual HSV color similarity.
+    # Only active when: (a) client sent ?color=<hex>, (b) brand has a color index loaded.
+    query_hsv = hex_to_hsv(color) if color else None
+    if query_hsv is not None and state.color_index:
+        vis_candidates = color_rerank(vis_candidates, state.color_index, query_hsv)
+
     results: list[RecommendedItem] = []
     for art_id, score in vis_candidates:
         try:
@@ -710,6 +745,7 @@ async def visual_search(
         brand=brand,
         results=results,
         latency_ms=round(latency_ms, 2),
+        match_quality="ok",
     )
 
 
