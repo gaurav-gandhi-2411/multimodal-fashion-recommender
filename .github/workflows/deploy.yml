@@ -87,6 +87,7 @@ jobs:
         run: |
           docker build \
             -f infra/Dockerfile.cpu \
+            --build-arg GIT_SHA=${{ github.sha }} \
             -t $IMAGE:${{ github.sha }} \
             -t $IMAGE:latest \
             .
