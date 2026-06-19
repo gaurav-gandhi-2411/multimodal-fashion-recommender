@@ -1,0 +1,1553 @@
+{
+  "generated_at": "2026-06-19T05:54:28.577821+00:00",
+  "api_url": "https://fashion-recommender-staging-rm7rz66wza-el.a.run.app",
+  "integrity": {
+    "user_split": "test",
+    "history_split": "train",
+    "recs_source": "live_api"
+  },
+  "segments": [
+    {
+      "id": 0,
+      "label": "Dress",
+      "top_types": [
+        "Dress",
+        "Trousers",
+        "Vest top"
+      ]
+    },
+    {
+      "id": 1,
+      "label": "T-shirt",
+      "top_types": [
+        "T-shirt",
+        "Trousers",
+        "Dress"
+      ]
+    },
+    {
+      "id": 2,
+      "label": "Dress",
+      "top_types": [
+        "Dress",
+        "Trousers",
+        "Blouse"
+      ]
+    },
+    {
+      "id": 3,
+      "label": "Shorts",
+      "top_types": [
+        "Shorts",
+        "Dress",
+        "Trousers"
+      ]
+    },
+    {
+      "id": 4,
+      "label": "Bikini top",
+      "top_types": [
+        "Bikini top",
+        "Swimwear bottom",
+        "Dress"
+      ]
+    },
+    {
+      "id": 5,
+      "label": "Trousers",
+      "top_types": [
+        "Trousers",
+        "Dress",
+        "T-shirt"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "user_id": "f874a19b8d3417b8a7eeffa3cecd595a5f6383e0876da285390dd9c2727e905d",
+      "display_id": "User 01",
+      "segment_id": 0,
+      "segment_label": "Dress",
+      "segment_top_types": [
+        "Dress",
+        "Trousers",
+        "Vest top"
+      ],
+      "user_top_types": [
+        "Swimwear bottom",
+        "Blouse",
+        "Dress"
+      ],
+      "train_purchase_count": 91,
+      "test_purchase_count": 1,
+      "history_sample": [
+        {
+          "article_id": "599580072",
+          "prod_name": "Timeless Midrise Brief",
+          "product_type_name": "Swimwear bottom",
+          "colour_group_name": "Black"
+        },
+        {
+          "article_id": "599580072",
+          "prod_name": "Timeless Midrise Brief",
+          "product_type_name": "Swimwear bottom",
+          "colour_group_name": "Black"
+        },
+        {
+          "article_id": "855816001",
+          "prod_name": "Gwen F&F Pufflseave",
+          "product_type_name": "Dress",
+          "colour_group_name": "Black"
+        },
+        {
+          "article_id": "811333001",
+          "prod_name": "Bahama dress",
+          "product_type_name": "Dress",
+          "colour_group_name": "Light Yellow"
+        }
+      ],
+      "recs": [
+        {
+          "article_id": "599580072",
+          "score": 0.685,
+          "prod_name": "Timeless Midrise Brief",
+          "product_type_name": "Swimwear bottom",
+          "product_group_name": "Swimwear",
+          "colour_group_name": "Black",
+          "department_name": "Swimwear"
+        },
+        {
+          "article_id": "776237031",
+          "score": 0.646,
+          "prod_name": "Shake it in Balconette",
+          "product_type_name": "Bikini top",
+          "product_group_name": "Swimwear",
+          "colour_group_name": "Black",
+          "department_name": "Swimwear"
+        },
+        {
+          "article_id": "700079003",
+          "score": 0.5629,
+          "prod_name": "Orvar strap top",
+          "product_type_name": "Vest top",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "White",
+          "department_name": "Blouse"
+        },
+        {
+          "article_id": "758170001",
+          "score": 0.5415,
+          "prod_name": "Orsino top",
+          "product_type_name": "Vest top",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Light Blue",
+          "department_name": "Projects Woven Tops"
+        },
+        {
+          "article_id": "749699026",
+          "score": 0.5329,
+          "prod_name": "Chestnut strap top",
+          "product_type_name": "Vest top",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Black",
+          "department_name": "Jersey"
+        },
+        {
+          "article_id": "768879001",
+          "score": 0.529,
+          "prod_name": "Shake it in twist brief",
+          "product_type_name": "Swimwear bottom",
+          "product_group_name": "Swimwear",
+          "colour_group_name": "Off White",
+          "department_name": "Swimwear"
+        },
+        {
+          "article_id": "747192002",
+          "score": 0.5271,
+          "prod_name": "Ivy jumpsuit w",
+          "product_type_name": "Jumpsuit/Playsuit",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Black",
+          "department_name": "Dresses"
+        },
+        {
+          "article_id": "610842005",
+          "score": 0.5265,
+          "prod_name": "Shake it in Tie Brief",
+          "product_type_name": "Swimwear bottom",
+          "product_group_name": "Swimwear",
+          "colour_group_name": "Black",
+          "department_name": "Swimwear"
+        }
+      ],
+      "request_id": "1a2df0e6-fbdf-4183-88ad-01d1ceecff13"
+    },
+    {
+      "user_id": "67931690bdf18d2e328854ae772cd5ce2505fdc11164693998b13e706db0bb56",
+      "display_id": "User 02",
+      "segment_id": 0,
+      "segment_label": "Dress",
+      "segment_top_types": [
+        "Dress",
+        "Trousers",
+        "Vest top"
+      ],
+      "user_top_types": [
+        "Trousers",
+        "Dress",
+        "T-shirt"
+      ],
+      "train_purchase_count": 83,
+      "test_purchase_count": 1,
+      "history_sample": [
+        {
+          "article_id": "811291008",
+          "prod_name": "Rania tee dress",
+          "product_type_name": "Dress",
+          "colour_group_name": "Black"
+        },
+        {
+          "article_id": "594987024",
+          "prod_name": "Fiona Bikini (Clover) 4pk",
+          "product_type_name": "Underwear bottom",
+          "colour_group_name": "Pink"
+        },
+        {
+          "article_id": "788216003",
+          "prod_name": "Paige top",
+          "product_type_name": "Vest top",
+          "colour_group_name": "Other Blue"
+        },
+        {
+          "article_id": "811291008",
+          "prod_name": "Rania tee dress",
+          "product_type_name": "Dress",
+          "colour_group_name": "Black"
+        }
+      ],
+      "recs": [
+        {
+          "article_id": "811291008",
+          "score": 0.4234,
+          "prod_name": "Rania tee dress",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Black",
+          "department_name": "Tops Fancy Jersey"
+        },
+        {
+          "article_id": "875892006",
+          "score": 0.3813,
+          "prod_name": "Naomi trs",
+          "product_type_name": "Trousers",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Black",
+          "department_name": "Kids Girl Jersey Fancy"
+        },
+        {
+          "article_id": "713782002",
+          "score": 0.373,
+          "prod_name": "Lisa Bodycon dress",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Red",
+          "department_name": "Basic 1"
+        },
+        {
+          "article_id": "613170012",
+          "score": 0.355,
+          "prod_name": "World cup",
+          "product_type_name": "T-shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "White",
+          "department_name": "Baby Boy Jersey Fancy"
+        },
+        {
+          "article_id": "796913002",
+          "score": 0.3536,
+          "prod_name": "Tuti Body neon",
+          "product_type_name": "Top",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Other Yellow",
+          "department_name": "Jersey"
+        },
+        {
+          "article_id": "825720005",
+          "score": 0.3515,
+          "prod_name": "Fidde tee",
+          "product_type_name": "T-shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Pink",
+          "department_name": "Basic 1"
+        },
+        {
+          "article_id": "805032001",
+          "score": 0.3438,
+          "prod_name": "Ivy tank tube speed",
+          "product_type_name": "Vest top",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Other Yellow",
+          "department_name": "Tops Fancy Jersey"
+        },
+        {
+          "article_id": "769088004",
+          "score": 0.3399,
+          "prod_name": "RAFA s/s tee",
+          "product_type_name": "T-shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Light Grey",
+          "department_name": "Young Boy Jersey Fancy"
+        }
+      ],
+      "request_id": "6e814adc-40d1-40d3-80b6-10b19a020553"
+    },
+    {
+      "user_id": "9478a9e051336b0373b07172ef96ed923cb50e0d54a7e3998250c9f5ccad2382",
+      "display_id": "User 03",
+      "segment_id": 1,
+      "segment_label": "T-shirt",
+      "segment_top_types": [
+        "T-shirt",
+        "Trousers",
+        "Dress"
+      ],
+      "user_top_types": [
+        "T-shirt",
+        "Sweater",
+        "Trousers"
+      ],
+      "train_purchase_count": 74,
+      "test_purchase_count": 9,
+      "history_sample": [
+        {
+          "article_id": "685816037",
+          "prod_name": "RONNY R-NECK",
+          "product_type_name": "T-shirt",
+          "colour_group_name": "Dark Blue"
+        },
+        {
+          "article_id": "685816037",
+          "prod_name": "RONNY R-NECK",
+          "product_type_name": "T-shirt",
+          "colour_group_name": "Dark Blue"
+        },
+        {
+          "article_id": "685816023",
+          "prod_name": "RONNY REG RN T-SHIRT",
+          "product_type_name": "T-shirt",
+          "colour_group_name": "Dark Grey"
+        },
+        {
+          "article_id": "685816002",
+          "prod_name": "RONNY REG RN T-SHIRT",
+          "product_type_name": "T-shirt",
+          "colour_group_name": "Black"
+        }
+      ],
+      "recs": [
+        {
+          "article_id": "685816002",
+          "score": 0.45,
+          "prod_name": "RONNY REG RN T-SHIRT",
+          "product_type_name": "T-shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Black",
+          "department_name": "Light Basic Jersey"
+        },
+        {
+          "article_id": "685816023",
+          "score": 0.4424,
+          "prod_name": "RONNY REG RN T-SHIRT",
+          "product_type_name": "T-shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Dark Grey",
+          "department_name": "Light Basic Jersey"
+        },
+        {
+          "article_id": "685816037",
+          "score": 0.4113,
+          "prod_name": "RONNY R-NECK",
+          "product_type_name": "T-shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Dark Blue",
+          "department_name": "Light Basic Jersey"
+        },
+        {
+          "article_id": "755786001",
+          "score": 0.3956,
+          "prod_name": "SAGE ss henley",
+          "product_type_name": "T-shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Dark Blue",
+          "department_name": "Knitwear"
+        },
+        {
+          "article_id": "763706002",
+          "score": 0.3858,
+          "prod_name": "DENIM Jayden western",
+          "product_type_name": "Shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Black",
+          "department_name": "Shirt"
+        },
+        {
+          "article_id": "685816011",
+          "score": 0.3777,
+          "prod_name": "RONNY R-NECK",
+          "product_type_name": "T-shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Beige",
+          "department_name": "Light Basic Jersey"
+        },
+        {
+          "article_id": "685816017",
+          "score": 0.3776,
+          "prod_name": "RONNY R-NECK",
+          "product_type_name": "T-shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Dark Red",
+          "department_name": "Light Basic Jersey"
+        },
+        {
+          "article_id": "685816048",
+          "score": 0.3708,
+          "prod_name": "RONNY REG RN T-SHIRT",
+          "product_type_name": "T-shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Greenish Khaki",
+          "department_name": "Light Basic Jersey"
+        }
+      ],
+      "request_id": "f0ba2356-c788-4068-b879-0b8f01a22d49"
+    },
+    {
+      "user_id": "e0c18188150a1b6cf8b54f407c50a63989d7183d3c2ef8cc86acd4ddde5b06bd",
+      "display_id": "User 04",
+      "segment_id": 1,
+      "segment_label": "T-shirt",
+      "segment_top_types": [
+        "T-shirt",
+        "Trousers",
+        "Dress"
+      ],
+      "user_top_types": [
+        "Dress",
+        "T-shirt",
+        "Jacket"
+      ],
+      "train_purchase_count": 44,
+      "test_purchase_count": 25,
+      "history_sample": [
+        {
+          "article_id": "851703003",
+          "prod_name": "Ibiza cross",
+          "product_type_name": "Bag",
+          "colour_group_name": "Pink"
+        },
+        {
+          "article_id": "879545002",
+          "prod_name": "Tessa square sunglasses",
+          "product_type_name": "Sunglasses",
+          "colour_group_name": "White"
+        },
+        {
+          "article_id": "860322002",
+          "prod_name": "Coin tee",
+          "product_type_name": "T-shirt",
+          "colour_group_name": "Other Green"
+        },
+        {
+          "article_id": "852541004",
+          "prod_name": "Chrissy baguette bag",
+          "product_type_name": "Bag",
+          "colour_group_name": "Pink"
+        }
+      ],
+      "recs": [
+        {
+          "article_id": "780031001",
+          "score": 0.5125,
+          "prod_name": "PS FI LEATHER LEGGINGS",
+          "product_type_name": "Leggings/Tights",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Black",
+          "department_name": "Woven Premium"
+        },
+        {
+          "article_id": "715610005",
+          "score": 0.4947,
+          "prod_name": "Pat ss bd light solid",
+          "product_type_name": "Shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Light Pink",
+          "department_name": "Shirt"
+        },
+        {
+          "article_id": "831193001",
+          "score": 0.494,
+          "prod_name": "Santana cargo new PID",
+          "product_type_name": "Trousers",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Black",
+          "department_name": "Trouser"
+        },
+        {
+          "article_id": "791499007",
+          "score": 0.4851,
+          "prod_name": "BEN FANCY polo TP",
+          "product_type_name": "Polo shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Light Green",
+          "department_name": "Kids Boy Jersey Fancy"
+        },
+        {
+          "article_id": "875914001",
+          "score": 0.4808,
+          "prod_name": "Puffa Sandal",
+          "product_type_name": "Flip flop",
+          "product_group_name": "Shoes",
+          "colour_group_name": "Black",
+          "department_name": "Flats"
+        },
+        {
+          "article_id": "761595001",
+          "score": 0.4783,
+          "prod_name": "Brian cargo trousers",
+          "product_type_name": "Trousers",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Black",
+          "department_name": "Young Boy Trouser"
+        },
+        {
+          "article_id": "637411014",
+          "score": 0.4761,
+          "prod_name": "Martin Regular Mandarin",
+          "product_type_name": "Shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "White",
+          "department_name": "Shirt"
+        },
+        {
+          "article_id": "827267009",
+          "score": 0.4697,
+          "prod_name": "Pat ss bd light solid",
+          "product_type_name": "Shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Light Turquoise",
+          "department_name": "Shirt"
+        }
+      ],
+      "request_id": "818112c1-98c4-4970-b9a9-8852789985cf"
+    },
+    {
+      "user_id": "a65f77281a528bf5c1e9f270141d601d116e1df33bf9df512f495ee06647a9cc",
+      "display_id": "User 05",
+      "segment_id": 2,
+      "segment_label": "Dress",
+      "segment_top_types": [
+        "Dress",
+        "Trousers",
+        "Blouse"
+      ],
+      "user_top_types": [
+        "Dress",
+        "Trousers",
+        "Swimwear bottom"
+      ],
+      "train_purchase_count": 73,
+      "test_purchase_count": 21,
+      "history_sample": [
+        {
+          "article_id": "759156003",
+          "prod_name": "Brent ballerina",
+          "product_type_name": "Ballerinas",
+          "colour_group_name": "Black"
+        },
+        {
+          "article_id": "859077005",
+          "prod_name": "Nora dress(1)",
+          "product_type_name": "Dress",
+          "colour_group_name": "Black"
+        },
+        {
+          "article_id": "881608001",
+          "prod_name": "Taylor midi dress",
+          "product_type_name": "Dress",
+          "colour_group_name": "Off White"
+        },
+        {
+          "article_id": "879016001",
+          "prod_name": "Bilbao Straw Hat",
+          "product_type_name": "Hat/brim",
+          "colour_group_name": "Light Beige"
+        }
+      ],
+      "recs": [
+        {
+          "article_id": "773776001",
+          "score": 0.6074,
+          "prod_name": "Premium VERA blouse dress",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "White",
+          "department_name": "Woven Premium"
+        },
+        {
+          "article_id": "906293001",
+          "score": 0.5643,
+          "prod_name": "MEL DRESS.",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Beige",
+          "department_name": "Jersey"
+        },
+        {
+          "article_id": "915467002",
+          "score": 0.5424,
+          "prod_name": "Martini dress",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Light Beige",
+          "department_name": "Blouse & Dress"
+        },
+        {
+          "article_id": "689134001",
+          "score": 0.5364,
+          "prod_name": "ivanka",
+          "product_type_name": "Ballerinas",
+          "product_group_name": "Shoes",
+          "colour_group_name": "Black",
+          "department_name": "Flats"
+        },
+        {
+          "article_id": "915292002",
+          "score": 0.5354,
+          "prod_name": "Lana seamless cropped ls",
+          "product_type_name": "Top",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Light Beige",
+          "department_name": "Ladies Sport Bras"
+        },
+        {
+          "article_id": "774543015",
+          "score": 0.5308,
+          "prod_name": "PQ BLAKE SILK MIX TEE",
+          "product_type_name": "Sweater",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Light Beige",
+          "department_name": "Jersey/Knitwear Premium"
+        },
+        {
+          "article_id": "858161001",
+          "score": 0.5277,
+          "prod_name": "SHELL DRESS",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Light Beige",
+          "department_name": "Jersey"
+        },
+        {
+          "article_id": "857171002",
+          "score": 0.526,
+          "prod_name": "Zilva mule",
+          "product_type_name": "Wedge",
+          "product_group_name": "Shoes",
+          "colour_group_name": "Dark Beige",
+          "department_name": "Heels"
+        }
+      ],
+      "request_id": "0702de54-af55-481e-8175-656119324935"
+    },
+    {
+      "user_id": "3fa87180d89ed5ee6147559c4336c9efbad5325811007221ba3ad770049d2e46",
+      "display_id": "User 06",
+      "segment_id": 2,
+      "segment_label": "Dress",
+      "segment_top_types": [
+        "Dress",
+        "Trousers",
+        "Blouse"
+      ],
+      "user_top_types": [
+        "Dress",
+        "Trousers",
+        "Skirt"
+      ],
+      "train_purchase_count": 69,
+      "test_purchase_count": 2,
+      "history_sample": [
+        {
+          "article_id": "598755011",
+          "prod_name": "Taz Tee",
+          "product_type_name": "T-shirt",
+          "colour_group_name": "Grey"
+        },
+        {
+          "article_id": "839869003",
+          "prod_name": "LOGG Bali embr dress",
+          "product_type_name": "Dress",
+          "colour_group_name": "Yellow"
+        },
+        {
+          "article_id": "860489002",
+          "prod_name": "NEW Jill",
+          "product_type_name": "Dress",
+          "colour_group_name": "Black"
+        },
+        {
+          "article_id": "883021003",
+          "prod_name": "Valentina skirt",
+          "product_type_name": "Skirt",
+          "colour_group_name": "Orange"
+        }
+      ],
+      "recs": [
+        {
+          "article_id": "883021001",
+          "score": 0.5658,
+          "prod_name": "Valentina skirt",
+          "product_type_name": "Skirt",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Other Yellow",
+          "department_name": "Blouse & Dress"
+        },
+        {
+          "article_id": "883021003",
+          "score": 0.5547,
+          "prod_name": "Valentina skirt",
+          "product_type_name": "Skirt",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Orange",
+          "department_name": "Blouse & Dress"
+        },
+        {
+          "article_id": "715610005",
+          "score": 0.545,
+          "prod_name": "Pat ss bd light solid",
+          "product_type_name": "Shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Light Pink",
+          "department_name": "Shirt"
+        },
+        {
+          "article_id": "861620001",
+          "score": 0.5414,
+          "prod_name": "Courtney",
+          "product_type_name": "Skirt",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Light Pink",
+          "department_name": "Skirt"
+        },
+        {
+          "article_id": "885442001",
+          "score": 0.5302,
+          "prod_name": "Peggy playsuit",
+          "product_type_name": "Jumpsuit/Playsuit",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Pink",
+          "department_name": "Blouse & Dress"
+        },
+        {
+          "article_id": "886270006",
+          "score": 0.5224,
+          "prod_name": "Balloon Pleat fit",
+          "product_type_name": "Trousers",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Blue",
+          "department_name": "EQ Ladies Denim"
+        },
+        {
+          "article_id": "718076030",
+          "score": 0.5145,
+          "prod_name": "TP NEO price tee SB",
+          "product_type_name": "T-shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Green",
+          "department_name": "Kids Boy Jersey Basic"
+        },
+        {
+          "article_id": "721486001",
+          "score": 0.5081,
+          "prod_name": "Skirt and Wing",
+          "product_type_name": "Other accessories",
+          "product_group_name": "Accessories",
+          "colour_group_name": "Other Pink",
+          "department_name": "Kids Dress-up/Football"
+        }
+      ],
+      "request_id": "898f7537-c386-4cd4-845d-1631be075c03"
+    },
+    {
+      "user_id": "391e2476aef5d23902bd30d9e650f0b9aedec241140deca0e2a236501ac11eba",
+      "display_id": "User 07",
+      "segment_id": 3,
+      "segment_label": "Shorts",
+      "segment_top_types": [
+        "Shorts",
+        "Dress",
+        "Trousers"
+      ],
+      "user_top_types": [
+        "Shorts",
+        "Sweater",
+        "Leggings/Tights"
+      ],
+      "train_purchase_count": 57,
+      "test_purchase_count": 2,
+      "history_sample": [
+        {
+          "article_id": "872618002",
+          "prod_name": "Britney rib 2p shorts (J)",
+          "product_type_name": "Pyjama bottom",
+          "colour_group_name": "Beige"
+        },
+        {
+          "article_id": "872618002",
+          "prod_name": "Britney rib 2p shorts (J)",
+          "product_type_name": "Pyjama bottom",
+          "colour_group_name": "Beige"
+        },
+        {
+          "article_id": "872865001",
+          "prod_name": "H-string mini elastic",
+          "product_type_name": "Hair string",
+          "colour_group_name": "Light Yellow"
+        },
+        {
+          "article_id": "823070005",
+          "prod_name": "PIA 2-PACK",
+          "product_type_name": "T-shirt",
+          "colour_group_name": "Light Pink"
+        }
+      ],
+      "recs": [
+        {
+          "article_id": "872618002",
+          "score": 0.4761,
+          "prod_name": "Britney rib 2p shorts (J)",
+          "product_type_name": "Pyjama bottom",
+          "product_group_name": "Nightwear",
+          "colour_group_name": "Beige",
+          "department_name": "Nightwear"
+        },
+        {
+          "article_id": "868311001",
+          "score": 0.4201,
+          "prod_name": "Uma  scooped Seamless  top 2pk",
+          "product_type_name": "Bra",
+          "product_group_name": "Underwear",
+          "colour_group_name": "Light Orange",
+          "department_name": "Casual Lingerie"
+        },
+        {
+          "article_id": "487800051",
+          "score": 0.4183,
+          "prod_name": "BRAX shorts",
+          "product_type_name": "Shorts",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Dark Grey",
+          "department_name": "Young Girl Jersey Basic"
+        },
+        {
+          "article_id": "740922009",
+          "score": 0.4158,
+          "prod_name": "Veronica seamless bra",
+          "product_type_name": "Top",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Light Pink",
+          "department_name": "Ladies Sport Bras"
+        },
+        {
+          "article_id": "852746005",
+          "score": 0.4147,
+          "prod_name": "Kate HW shorts",
+          "product_type_name": "Shorts",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Beige",
+          "department_name": "Basic 1"
+        },
+        {
+          "article_id": "869331006",
+          "score": 0.4119,
+          "prod_name": "Trailmix seamless bralette (C)",
+          "product_type_name": "Bra",
+          "product_group_name": "Underwear",
+          "colour_group_name": "Black",
+          "department_name": "Ladies Sport Bras"
+        },
+        {
+          "article_id": "825771005",
+          "score": 0.4111,
+          "prod_name": "Samantha padded soft bralette",
+          "product_type_name": "Bra",
+          "product_group_name": "Underwear",
+          "colour_group_name": "Light Orange",
+          "department_name": "Clean Lingerie"
+        },
+        {
+          "article_id": "879248008",
+          "score": 0.4082,
+          "prod_name": "Glamping",
+          "product_type_name": "Shorts",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Off White",
+          "department_name": "Jersey Basic"
+        }
+      ],
+      "request_id": "3e070359-aada-45f9-bde8-353cb68f84de"
+    },
+    {
+      "user_id": "9284adebad08ef23751c13dc146f084b22ee325d8ab4b1040fd647a9cfb37524",
+      "display_id": "User 08",
+      "segment_id": 3,
+      "segment_label": "Shorts",
+      "segment_top_types": [
+        "Shorts",
+        "Dress",
+        "Trousers"
+      ],
+      "user_top_types": [
+        "Shorts",
+        "Swimwear bottom",
+        "Dress"
+      ],
+      "train_purchase_count": 52,
+      "test_purchase_count": 7,
+      "history_sample": [
+        {
+          "article_id": "849440003",
+          "prod_name": "First Night Playsuit",
+          "product_type_name": "Shorts",
+          "colour_group_name": "Off White"
+        },
+        {
+          "article_id": "849440003",
+          "prod_name": "First Night Playsuit",
+          "product_type_name": "Shorts",
+          "colour_group_name": "Off White"
+        },
+        {
+          "article_id": "849440003",
+          "prod_name": "First Night Playsuit",
+          "product_type_name": "Shorts",
+          "colour_group_name": "Off White"
+        },
+        {
+          "article_id": "831273003",
+          "prod_name": "Valance Jumsuit",
+          "product_type_name": "Jumpsuit/Playsuit",
+          "colour_group_name": "Light Blue"
+        }
+      ],
+      "recs": [
+        {
+          "article_id": "831273003",
+          "score": 0.5659,
+          "prod_name": "Valance Jumsuit",
+          "product_type_name": "Jumpsuit/Playsuit",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Light Blue",
+          "department_name": "Dresses"
+        },
+        {
+          "article_id": "865172003",
+          "score": 0.564,
+          "prod_name": "Lexus lace dress",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Light Purple",
+          "department_name": "Jersey"
+        },
+        {
+          "article_id": "849440003",
+          "score": 0.5605,
+          "prod_name": "First Night Playsuit",
+          "product_type_name": "Shorts",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Off White",
+          "department_name": "Jersey fancy"
+        },
+        {
+          "article_id": "742084001",
+          "score": 0.5468,
+          "prod_name": "Acerola jumpsuit",
+          "product_type_name": "Jumpsuit/Playsuit",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "White",
+          "department_name": "Dresses"
+        },
+        {
+          "article_id": "491692002",
+          "score": 0.5459,
+          "prod_name": "Astrid playsuit",
+          "product_type_name": "Trousers",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Light Orange",
+          "department_name": "Trouser"
+        },
+        {
+          "article_id": "671636001",
+          "score": 0.5279,
+          "prod_name": "Float playsuit",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Light Blue",
+          "department_name": "Blouse & Dress"
+        },
+        {
+          "article_id": "883176002",
+          "score": 0.5171,
+          "prod_name": "Venus Playsuit",
+          "product_type_name": "Jumpsuit/Playsuit",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Black",
+          "department_name": "Jersey"
+        },
+        {
+          "article_id": "856270003",
+          "score": 0.5149,
+          "prod_name": "Bounce seamless Cropped LS",
+          "product_type_name": "Top",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Black",
+          "department_name": "Ladies Sport Bras"
+        }
+      ],
+      "request_id": "ef1d5106-eadc-4e2c-afc4-e639cab1e54a"
+    },
+    {
+      "user_id": "6881f635c5be0550646522a81a07d942ee71fcf603397d7908b76b1df2298745",
+      "display_id": "User 09",
+      "segment_id": 4,
+      "segment_label": "Bikini top",
+      "segment_top_types": [
+        "Bikini top",
+        "Swimwear bottom",
+        "Dress"
+      ],
+      "user_top_types": [
+        "Dress",
+        "Swimwear bottom",
+        "Bikini top"
+      ],
+      "train_purchase_count": 51,
+      "test_purchase_count": 3,
+      "history_sample": [
+        {
+          "article_id": "873092003",
+          "prod_name": "Steph conscious",
+          "product_type_name": "Blouse",
+          "colour_group_name": "Pink"
+        },
+        {
+          "article_id": "873092003",
+          "prod_name": "Steph conscious",
+          "product_type_name": "Blouse",
+          "colour_group_name": "Pink"
+        },
+        {
+          "article_id": "685604075",
+          "prod_name": "TOM FANCY",
+          "product_type_name": "Swimwear bottom",
+          "colour_group_name": "Light Blue"
+        },
+        {
+          "article_id": "685604075",
+          "prod_name": "TOM FANCY",
+          "product_type_name": "Swimwear bottom",
+          "colour_group_name": "Light Blue"
+        }
+      ],
+      "recs": [
+        {
+          "article_id": "883021001",
+          "score": 0.5533,
+          "prod_name": "Valentina skirt",
+          "product_type_name": "Skirt",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Other Yellow",
+          "department_name": "Blouse & Dress"
+        },
+        {
+          "article_id": "885442001",
+          "score": 0.5226,
+          "prod_name": "Peggy playsuit",
+          "product_type_name": "Jumpsuit/Playsuit",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Pink",
+          "department_name": "Blouse & Dress"
+        },
+        {
+          "article_id": "860585007",
+          "score": 0.4815,
+          "prod_name": "PANSY DRESS",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Light Pink",
+          "department_name": "Dresses"
+        },
+        {
+          "article_id": "708609001",
+          "score": 0.4798,
+          "prod_name": "MALOU shorts",
+          "product_type_name": "Shorts",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Light Blue",
+          "department_name": "Baby Girl Woven"
+        },
+        {
+          "article_id": "891632001",
+          "score": 0.4775,
+          "prod_name": "Rosalia top",
+          "product_type_name": "Vest top",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Light Pink",
+          "department_name": "Blouse & Dress"
+        },
+        {
+          "article_id": "883021003",
+          "score": 0.4762,
+          "prod_name": "Valentina skirt",
+          "product_type_name": "Skirt",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Orange",
+          "department_name": "Blouse & Dress"
+        },
+        {
+          "article_id": "803135001",
+          "score": 0.4735,
+          "prod_name": "HALO Nasa Costume",
+          "product_type_name": "Jumpsuit/Playsuit",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "White",
+          "department_name": "Projects"
+        },
+        {
+          "article_id": "908380001",
+          "score": 0.4709,
+          "prod_name": "Brad tulle top",
+          "product_type_name": "Top",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Light Yellow",
+          "department_name": "Jersey"
+        }
+      ],
+      "request_id": "b4f69e29-3ee5-41f5-80cd-d4d07eca5fd2"
+    },
+    {
+      "user_id": "a3ab708684132c6bbd3dad7aa41f9b9c7d1c95d7d5cb1a3a052905191e858566",
+      "display_id": "User 10",
+      "segment_id": 4,
+      "segment_label": "Bikini top",
+      "segment_top_types": [
+        "Bikini top",
+        "Swimwear bottom",
+        "Dress"
+      ],
+      "user_top_types": [
+        "Dress",
+        "Skirt",
+        "Bikini top"
+      ],
+      "train_purchase_count": 46,
+      "test_purchase_count": 31,
+      "history_sample": [
+        {
+          "article_id": "868762002",
+          "prod_name": "Cilantro Dress_",
+          "product_type_name": "Dress",
+          "colour_group_name": "Red"
+        },
+        {
+          "article_id": "764280006",
+          "prod_name": "Judy lace top",
+          "product_type_name": "Top",
+          "colour_group_name": "Pink"
+        },
+        {
+          "article_id": "853839001",
+          "prod_name": "Marc dress",
+          "product_type_name": "Dress",
+          "colour_group_name": "Green"
+        },
+        {
+          "article_id": "853839001",
+          "prod_name": "Marc dress",
+          "product_type_name": "Dress",
+          "colour_group_name": "Green"
+        }
+      ],
+      "recs": [
+        {
+          "article_id": "720654001",
+          "score": 0.4109,
+          "prod_name": "Filippa dress",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Light Turquoise",
+          "department_name": "Dress"
+        },
+        {
+          "article_id": "737098003",
+          "score": 0.4005,
+          "prod_name": "Fiore dress",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Dark Blue",
+          "department_name": "Woven Tops"
+        },
+        {
+          "article_id": "881608001",
+          "score": 0.4001,
+          "prod_name": "Taylor midi dress",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Off White",
+          "department_name": "Dresses"
+        },
+        {
+          "article_id": "885824004",
+          "score": 0.395,
+          "prod_name": "Simon skirt",
+          "product_type_name": "Skirt",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Beige",
+          "department_name": "Trousers & Skirt"
+        },
+        {
+          "article_id": "872233001",
+          "score": 0.393,
+          "prod_name": "Nova Dress",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Turquoise",
+          "department_name": "Dress"
+        },
+        {
+          "article_id": "839402001",
+          "score": 0.3915,
+          "prod_name": "Provance dress",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Dark Blue",
+          "department_name": "Jersey"
+        },
+        {
+          "article_id": "720651001",
+          "score": 0.3897,
+          "prod_name": "Lily Dress",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Light Beige",
+          "department_name": "Dress"
+        },
+        {
+          "article_id": "888026002",
+          "score": 0.388,
+          "prod_name": "Argentina dress",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Pink",
+          "department_name": "Jersey"
+        }
+      ],
+      "request_id": "6a1b37c4-c14d-4937-8a94-aab352908d6a"
+    },
+    {
+      "user_id": "e2731ecc3fb093e25d17348a02a34124c05cd960e9ebd34ea4571970c4e626bd",
+      "display_id": "User 11",
+      "segment_id": 5,
+      "segment_label": "Trousers",
+      "segment_top_types": [
+        "Trousers",
+        "Dress",
+        "T-shirt"
+      ],
+      "user_top_types": [
+        "Trousers",
+        "Blouse",
+        "Top"
+      ],
+      "train_purchase_count": 54,
+      "test_purchase_count": 8,
+      "history_sample": [
+        {
+          "article_id": "871527002",
+          "prod_name": "Ada",
+          "product_type_name": "Blouse",
+          "colour_group_name": "White"
+        },
+        {
+          "article_id": "871527002",
+          "prod_name": "Ada",
+          "product_type_name": "Blouse",
+          "colour_group_name": "White"
+        },
+        {
+          "article_id": "888229005",
+          "prod_name": "Madeleine HW Woven Pull-On TRS",
+          "product_type_name": "Trousers",
+          "colour_group_name": "Black"
+        },
+        {
+          "article_id": "917843001",
+          "prod_name": "Linnea V-neck long sleeve",
+          "product_type_name": "Top",
+          "colour_group_name": "Black"
+        }
+      ],
+      "recs": [
+        {
+          "article_id": "881396001",
+          "score": 0.6239,
+          "prod_name": "Ada CN",
+          "product_type_name": "Blouse",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Black",
+          "department_name": "Blouse"
+        },
+        {
+          "article_id": "871527002",
+          "score": 0.617,
+          "prod_name": "Ada",
+          "product_type_name": "Blouse",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "White",
+          "department_name": "Blouse"
+        },
+        {
+          "article_id": "736090001",
+          "score": 0.5529,
+          "prod_name": "Patti HW wide cropped",
+          "product_type_name": "Trousers",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Black",
+          "department_name": "Trouser"
+        },
+        {
+          "article_id": "642437008",
+          "score": 0.532,
+          "prod_name": "Fancy Pants (1)",
+          "product_type_name": "Trousers",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Black",
+          "department_name": "Trousers DS"
+        },
+        {
+          "article_id": "888229005",
+          "score": 0.5259,
+          "prod_name": "Madeleine HW Woven Pull-On TRS",
+          "product_type_name": "Trousers",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Black",
+          "department_name": "Trousers"
+        },
+        {
+          "article_id": "885543003",
+          "score": 0.5225,
+          "prod_name": "CHUTNEY SHIRT",
+          "product_type_name": "Shirt",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Black",
+          "department_name": "Tops Woven"
+        },
+        {
+          "article_id": "898918002",
+          "score": 0.5206,
+          "prod_name": "Shanghai CN",
+          "product_type_name": "Top",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Black",
+          "department_name": "Jersey Basic"
+        },
+        {
+          "article_id": "717066005",
+          "score": 0.5192,
+          "prod_name": "Fia longsleeve",
+          "product_type_name": "Top",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Black",
+          "department_name": "Jersey Basic"
+        }
+      ],
+      "request_id": "b1007cd5-0edf-4d4c-9bec-e47b4aa33344"
+    },
+    {
+      "user_id": "a92ece2845dcfa9b7c1becb44182d30546740139444f1535fa84732e0fb491c1",
+      "display_id": "User 12",
+      "segment_id": 5,
+      "segment_label": "Trousers",
+      "segment_top_types": [
+        "Trousers",
+        "Dress",
+        "T-shirt"
+      ],
+      "user_top_types": [
+        "Trousers",
+        "Dress",
+        "Shirt"
+      ],
+      "train_purchase_count": 48,
+      "test_purchase_count": 1,
+      "history_sample": [
+        {
+          "article_id": "859424003",
+          "prod_name": "Sandra Dress",
+          "product_type_name": "Dress",
+          "colour_group_name": "Black"
+        },
+        {
+          "article_id": "892849002",
+          "prod_name": "Billie dress(1)",
+          "product_type_name": "Dress",
+          "colour_group_name": "Dark Blue"
+        },
+        {
+          "article_id": "760084006",
+          "prod_name": "Victorville HW Pull-on TRS",
+          "product_type_name": "Trousers",
+          "colour_group_name": "Dark Beige"
+        },
+        {
+          "article_id": "859136002",
+          "prod_name": "Manchester dress",
+          "product_type_name": "Dress",
+          "colour_group_name": "Black"
+        }
+      ],
+      "recs": [
+        {
+          "article_id": "887770005",
+          "score": 0.5506,
+          "prod_name": "Orvar strap top",
+          "product_type_name": "Vest top",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Greenish Khaki",
+          "department_name": "Blouse"
+        },
+        {
+          "article_id": "894901003",
+          "score": 0.5234,
+          "prod_name": "Dress Safari",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Black",
+          "department_name": "Denim Other Garments"
+        },
+        {
+          "article_id": "869663001",
+          "score": 0.5123,
+          "prod_name": "Toronto tencel tunic",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Dark Blue",
+          "department_name": "Dress"
+        },
+        {
+          "article_id": "652184001",
+          "score": 0.5114,
+          "prod_name": "Stud tank",
+          "product_type_name": "Vest top",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Black",
+          "department_name": "Jersey Fancy DS"
+        },
+        {
+          "article_id": "850241006",
+          "score": 0.5053,
+          "prod_name": "Griezman",
+          "product_type_name": "Blouse",
+          "product_group_name": "Garment Upper body",
+          "colour_group_name": "Light Beige",
+          "department_name": "Blouse"
+        },
+        {
+          "article_id": "868879003",
+          "score": 0.4956,
+          "prod_name": "Krabi RTW dress",
+          "product_type_name": "Dress",
+          "product_group_name": "Garment Full body",
+          "colour_group_name": "Dark Blue",
+          "department_name": "Dress"
+        },
+        {
+          "article_id": "872261002",
+          "score": 0.4916,
+          "prod_name": "Skinny HW Cropped",
+          "product_type_name": "Trousers",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Light Blue",
+          "department_name": "Denim Trousers"
+        },
+        {
+          "article_id": "760336002",
+          "score": 0.4895,
+          "prod_name": "London trs",
+          "product_type_name": "Trousers",
+          "product_group_name": "Garment Lower body",
+          "colour_group_name": "Dark Grey",
+          "department_name": "Kids Boy Trouser"
+        }
+      ],
+      "request_id": "b53c98ae-5968-4d3b-9a48-c2c736db6dc1"
+    }
+  ],
+  "trending": [
+    {
+      "article_id": "741356002",
+      "prod_name": "Pamela Shorts HW",
+      "product_type_name": "Shorts",
+      "colour_group_name": "Blue",
+      "department_name": "Shorts"
+    },
+    {
+      "article_id": "841383003",
+      "prod_name": "Vanessa 2-pack",
+      "product_type_name": "Vest top",
+      "colour_group_name": "White",
+      "department_name": "Jersey Basic"
+    },
+    {
+      "article_id": "824337001",
+      "prod_name": "Perrie Slim HW Denim Shorts",
+      "product_type_name": "Shorts",
+      "colour_group_name": "Blue",
+      "department_name": "Shorts"
+    },
+    {
+      "article_id": "590928001",
+      "prod_name": "New Girl Push Top",
+      "product_type_name": "Bikini top",
+      "colour_group_name": "Black",
+      "department_name": "Swimwear"
+    },
+    {
+      "article_id": "684209027",
+      "prod_name": "Simple as That Triangle Top",
+      "product_type_name": "Bikini top",
+      "colour_group_name": "Red",
+      "department_name": "Swimwear"
+    },
+    {
+      "article_id": "464297007",
+      "prod_name": "Greta Thong Mynta Low 3p",
+      "product_type_name": "Underwear bottom",
+      "colour_group_name": "Black",
+      "department_name": "Casual Lingerie"
+    },
+    {
+      "article_id": "684209013",
+      "prod_name": "Simple as That Triangle Top",
+      "product_type_name": "Bikini top",
+      "colour_group_name": "Dark Green",
+      "department_name": "Swimwear"
+    },
+    {
+      "article_id": "685816002",
+      "prod_name": "RONNY REG RN T-SHIRT",
+      "product_type_name": "T-shirt",
+      "colour_group_name": "Black",
+      "department_name": "Light Basic Jersey"
+    }
+  ]
+}

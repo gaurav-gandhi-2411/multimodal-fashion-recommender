@@ -1,16 +1,17 @@
 # ── Stage 1: deps ────────────────────────────────────────────────────────────
-# Do NOT copy uv.lock — re-resolve on Linux so the pytorch-cpu index entry
-# in pyproject.toml is used (CPU-only torch). PyPI's linux torch wheel pulls
-# nvidia-* CUDA packages as hard deps; the explicit pytorch-cpu index avoids them.
+# uv.lock contains platform-specific entries: linux gets torchvision==0.27.0+cpu
+# from the pytorch-cpu index (no CUDA bloat), win32 gets the CUDA build.
+# Using --frozen pins to the lock-file resolution; --extra ml adds open-clip-torch
+# and the rest of the visual-search stack.
 FROM python:3.11-slim AS deps
 WORKDIR /app
 
 RUN pip install --no-cache-dir uv
 
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 # Install base deps + the [ml] extra so open-clip-torch, sentence-transformers,
 # and transformers are available for the /visual-search endpoint.
-RUN uv sync --no-dev --no-install-project --extra ml
+RUN uv sync --frozen --no-dev --no-install-project --extra ml
 
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM python:3.11-slim AS runtime
