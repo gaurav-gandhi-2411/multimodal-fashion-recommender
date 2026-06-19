@@ -172,10 +172,10 @@ export default function HomePage() {
                       e.stopPropagation();
                       fileInputRef.current?.click();
                     }}
-                    className="absolute -top-2 -right-2 w-6 h-6 bg-zinc-900 text-white rounded-full text-xs flex items-center justify-center hover:bg-zinc-700 transition-colors shadow"
+                    className="absolute -top-2 -right-2 h-6 bg-zinc-900 text-white rounded-full text-[10px] font-semibold flex items-center gap-1 px-2 hover:bg-zinc-700 transition-colors shadow"
                     title="Change image"
                   >
-                    ↺
+                    ↺<span className="hidden sm:inline">Change</span>
                   </button>
                 </div>
 
@@ -225,6 +225,28 @@ export default function HomePage() {
           />
         </div>
 
+        {/* Skeleton while searching */}
+        {searching && preview && (
+          <section>
+            <div className="flex items-center gap-3 mb-4 h-5">
+              <div className="h-3 bg-zinc-200 rounded-full w-40 animate-pulse" />
+              <div className="h-3 bg-zinc-200 rounded-full w-16 animate-pulse" />
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {[...Array(9)].map((_, i) => (
+                <div key={i} className="rounded-xl bg-white border border-zinc-100 overflow-hidden">
+                  <div className="h-64 bg-zinc-100 animate-pulse" />
+                  <div className="p-3 space-y-2">
+                    <div className="h-2.5 bg-zinc-100 rounded-full w-3/4 animate-pulse" />
+                    <div className="h-2.5 bg-zinc-100 rounded-full w-1/4 animate-pulse" />
+                    <div className="h-8 bg-zinc-100 rounded-lg w-full animate-pulse mt-1" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Results grid */}
         {results.length > 0 && !searching && (
           <section>
@@ -247,6 +269,14 @@ export default function HomePage() {
               ))}
             </div>
           </section>
+        )}
+
+        {/* Zero-results state */}
+        {!searching && preview && results.length === 0 && !error && (
+          <div className="mt-4 py-12 text-center text-zinc-400">
+            <p className="text-sm font-medium">No matches found</p>
+            <p className="text-xs mt-1">Try a clearer fashion photo or one with better lighting.</p>
+          </div>
         )}
 
         {/* Empty state before upload */}
