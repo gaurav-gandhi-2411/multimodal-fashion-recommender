@@ -116,6 +116,13 @@ jobs:
             --allow-unauthenticated \
             --project "${{ secrets.GCS_PROJECT }}"
 
+      - name: Route 100% traffic to new revision
+        run: |
+          gcloud run services update-traffic fashion-recommender-staging \
+            --to-latest \
+            --region "${{ vars.GCP_REGION }}" \
+            --project "${{ secrets.GCS_PROJECT }}"
+
       - name: Show Cloud Run URL
         run: |
           gcloud run services describe fashion-recommender-staging \
