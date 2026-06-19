@@ -61,6 +61,14 @@ class VisualSearchResponse(BaseModel):
     brand: str
     results: list[RecommendedItem]
     latency_ms: float
+    # Score-gap signal: top-1 CLIP score minus min(top-k CLIP scores).
+    # Higher = the top result stands clearly apart from the rest (higher confidence).
+    # Lower = top-k scores are tightly clustered (CLIP uncertain about query).
+    # Typical range for catalogue images: 0.03–0.12.
+    # Typical range for non-fashion queries (cats, noise): 0.003–0.02.
+    # Callers may use this to show a "low confidence" UI warning; the API always
+    # returns results because CLIP always finds the nearest fashion item.
+    match_confidence: float = 0.0
 
 
 class HealthBrand(BaseModel):
