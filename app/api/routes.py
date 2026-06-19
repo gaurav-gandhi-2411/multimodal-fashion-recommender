@@ -654,33 +654,6 @@ async def visual_search(
             detail="Retrieval index temporarily unavailable",
         ) from exc
 
-    # C3: minimum-score threshold — return "insufficient" when top CLIP score is below
-    # the per-brand floor. Protects against non-fashion images (cats, screenshots, etc.)
-    # that CLIP encodes into the fashion embedding space with low but non-zero similarity.
-    min_score_cfg = state.config.visual_search_min_score
-    if (
-        min_score_cfg is not None
-        and raw_results
-        and raw_results[0][1] < min_score_cfg
-    ):
-        latency_ms = (time.perf_counter() - t0) * 1000
-        log.info(
-            "visual_search_insufficient_match",
-            filename=image.filename,
-            top_score=round(raw_results[0][1], 4),
-            min_score=min_score_cfg,
-            latency_ms=round(latency_ms, 2),
-        )
-        REQUEST_COUNT.labels(brand=brand, endpoint="visual_search", status="200").inc()
-        REQUEST_LATENCY.labels(brand=brand, endpoint="visual_search").observe(latency_ms / 1000)
-        return VisualSearchResponse(
-            request_id=request_id,
-            brand=brand,
-            results=[],
-            latency_ms=round(latency_ms, 2),
-            match_quality="insufficient",
-        )
-
     # Pure-image path (no item_id): infer category + price from the rank-1 CLIP match.
     # CLIP self-retrieval is reliable (rank-1 score ≈ 1.0 for a catalogue image), so
     # the top match's category is a trustworthy signal for filtering the rest of the
@@ -745,7 +718,6 @@ async def visual_search(
         brand=brand,
         results=results,
         latency_ms=round(latency_ms, 2),
-        match_quality="ok",
     )
 
 

@@ -61,10 +61,6 @@ class BrandConfig(BaseModel):
     # Path to the per-brand color index JSON file (item_id -> {h, s, v}).
     # When set, /visual-search accepts a ?color=<hex> param for color-aware reranking.
     color_index_path: str | None = None
-    # Minimum raw CLIP score for /visual-search results. When the top candidate
-    # scores below this threshold the endpoint returns results=[] with
-    # match_quality="insufficient" instead of spurious matches.
-    visual_search_min_score: float | None = None
     llm: LLMBrandConfig = Field(default_factory=LLMBrandConfig)
     rerank: RerankConfig = Field(default_factory=RerankConfig)
     complete: CompleteConfig = Field(default_factory=CompleteConfig)

@@ -79,8 +79,6 @@ def _build_mock_state(art_map: dict, visual_retriever) -> MagicMock:
     state.art_map = art_map
     state.visual_retriever = visual_retriever
     state.config.rerank = RerankConfig(enabled=True, candidate_pool_size=50)
-    # C3: no min-score check in self-retrieval tests (catalogue images score near 1.0).
-    state.config.visual_search_min_score = None
     # C1: empty color index so color_rerank is a no-op in these tests.
     state.color_index = {}
     return state
@@ -363,8 +361,6 @@ def test_visual_search_inferred_category_mocked_fast() -> None:
         equivalent_group_bonus=0.70,
         w_diversity=0.0,
     )
-    # C3: no min-score check fires in this mocked test.
-    state.config.visual_search_min_score = None
     # C1: empty color index so color_rerank is a no-op here.
     state.color_index = {}
 
@@ -441,8 +437,6 @@ def test_visual_search_self_retrieval_mocked_fast() -> None:
         (aid, 1.0 - 0.01 * i) for i, aid in enumerate(article_ids)
     ]
     state.config.rerank = RerankConfig(enabled=False)
-    # C3: no min-score check fires in this mocked test.
-    state.config.visual_search_min_score = None
     # C1: empty color index so color_rerank is a no-op here.
     state.color_index = {}
 

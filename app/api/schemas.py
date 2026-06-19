@@ -61,7 +61,6 @@ class VisualSearchResponse(BaseModel):
     brand: str
     results: list[RecommendedItem]
     latency_ms: float
-    match_quality: str = "ok"  # "ok" | "insufficient" — "insufficient" means score below brand threshold
 
 
 class HealthBrand(BaseModel):

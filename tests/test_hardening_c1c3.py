@@ -1,10 +1,7 @@
-"""tests/test_hardening_c1c3.py -- Serve-path HTTP tests for C1 + C3 hardening.
+"""tests/test_hardening_c1c3.py -- Serve-path HTTP tests for C1 hardening.
 
 C1: Color-aware ranking is now in the BACKEND — /visual-search accepts ?color=<hex>
     and applies color_rerank() server-side. Results are sorted by blended score.
-
-C3: /visual-search returns match_quality="insufficient" when top CLIP score is below
-    the per-brand visual_search_min_score threshold (set in brand YAML).
 """
 
 from __future__ import annotations
@@ -96,13 +93,10 @@ class TestColorSimilarity:
 def _make_color_state(
     known_ids: list[int],
     color_index: ColorIndex,
-    *,
-    min_score: float | None = None,
 ) -> MagicMock:
     state = MagicMock()
     state.api_key = "c1c3-test-key"
     state.config.brand = "colorbrand"
-    state.config.visual_search_min_score = min_score
     state.art_map = {
         aid: {"title": f"Item {aid}", "category": "Shirts", "price_inr": 999.0}
         for aid in known_ids
@@ -149,7 +143,6 @@ def test_visual_search_color_param_accepted_and_changes_order() -> None:
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["match_quality"] == "ok"
     result_ids = [r["item_id"] for r in body["results"]]
     # Red item (id=1) should still be first (it was also first in CLIP) or
     # at minimum, blue item should not outrank red after color blend.
@@ -158,8 +151,8 @@ def test_visual_search_color_param_accepted_and_changes_order() -> None:
     assert result_ids[0] == "1", f"Red item should rank first with red query; got {result_ids}"
 
 
-def test_visual_search_no_color_param_returns_ok_quality() -> None:
-    """When no ?color param is passed, match_quality is 'ok' and results are unmodified."""
+def test_visual_search_no_color_param_returns_unmodified_order() -> None:
+    """When no ?color param is passed, results are returned without color reranking."""
     state = _make_color_state([1, 2, 3], color_index={})
     registry = _make_registry(state)
 
@@ -176,7 +169,7 @@ def test_visual_search_no_color_param_returns_ok_quality() -> None:
             )
 
     assert resp.status_code == 200
-    assert resp.json()["match_quality"] == "ok"
+    assert len(resp.json()["results"]) == 3
 
 
 def test_visual_search_invalid_color_param_ignored() -> None:
@@ -197,80 +190,4 @@ def test_visual_search_invalid_color_param_ignored() -> None:
             )
 
     assert resp.status_code == 200
-    assert resp.json()["match_quality"] == "ok"
-
-
-# ---------------------------------------------------------------------------
-# C3 serve-path tests: min_score threshold
-# ---------------------------------------------------------------------------
-
-def test_visual_search_low_score_returns_insufficient() -> None:
-    """When top CLIP score is below visual_search_min_score, return match_quality='insufficient'."""
-    state = _make_color_state([1, 2], color_index={}, min_score=0.80)
-    # Override retriever to return low scores (simulating OOD image)
-    state.visual_retriever.search.return_value = [(1, 0.45), (2, 0.40)]
-    registry = _make_registry(state)
-
-    with (
-        patch("app.api.main.load_registry", return_value=registry),
-        patch("app.visual.encode_query_image", return_value=_vec()),
-    ):
-        from app.api.main import app
-        with TestClient(app, raise_server_exceptions=True) as client:
-            resp = client.post(
-                f"/v1/{state.config.brand}/visual-search?k=2",
-                files={"image": ("t.png", _tiny_png(), "image/png")},
-                headers={"X-Api-Key": "c1c3-test-key"},
-            )
-
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["match_quality"] == "insufficient"
-    assert body["results"] == []
-
-
-def test_visual_search_high_score_returns_ok() -> None:
-    """When top score meets threshold, match_quality='ok' and results are returned."""
-    state = _make_color_state([1, 2], color_index={}, min_score=0.40)
-    # Scores above threshold
-    state.visual_retriever.search.return_value = [(1, 0.90), (2, 0.85)]
-    registry = _make_registry(state)
-
-    with (
-        patch("app.api.main.load_registry", return_value=registry),
-        patch("app.visual.encode_query_image", return_value=_vec()),
-    ):
-        from app.api.main import app
-        with TestClient(app, raise_server_exceptions=True) as client:
-            resp = client.post(
-                f"/v1/{state.config.brand}/visual-search?k=2",
-                files={"image": ("t.png", _tiny_png(), "image/png")},
-                headers={"X-Api-Key": "c1c3-test-key"},
-            )
-
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["match_quality"] == "ok"
-    assert len(body["results"]) == 2
-
-
-def test_visual_search_no_min_score_config_always_returns_ok() -> None:
-    """When visual_search_min_score is None (not configured), always return ok."""
-    state = _make_color_state([1], color_index={}, min_score=None)
-    state.visual_retriever.search.return_value = [(1, 0.10)]  # very low score
-    registry = _make_registry(state)
-
-    with (
-        patch("app.api.main.load_registry", return_value=registry),
-        patch("app.visual.encode_query_image", return_value=_vec()),
-    ):
-        from app.api.main import app
-        with TestClient(app, raise_server_exceptions=True) as client:
-            resp = client.post(
-                f"/v1/{state.config.brand}/visual-search?k=1",
-                files={"image": ("t.png", _tiny_png(), "image/png")},
-                headers={"X-Api-Key": "c1c3-test-key"},
-            )
-
-    assert resp.status_code == 200
-    assert resp.json()["match_quality"] == "ok"
+    assert len(resp.json()["results"]) == 1
