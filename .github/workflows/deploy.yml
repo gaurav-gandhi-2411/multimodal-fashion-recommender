@@ -86,8 +86,8 @@ jobs:
       - name: Build CPU-only image
         run: |
           docker build \
+            --no-cache \
             -f infra/Dockerfile.cpu \
-            --build-arg GIT_SHA=${{ github.sha }} \
             -t $IMAGE:${{ github.sha }} \
             -t $IMAGE:latest \
             .

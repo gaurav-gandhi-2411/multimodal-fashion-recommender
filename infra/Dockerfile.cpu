@@ -31,11 +31,6 @@ ENV PORT=8000
 ENV HF_HOME=/app/.cache/hf
 ENV TORCH_HOME=/app/.cache/torch
 
-# ARG bust: forces Docker to rebuild source layers whenever the git SHA changes,
-# preventing stale runner-side layer cache from serving old app/ content.
-ARG GIT_SHA=unknown
-RUN echo "git-sha: ${GIT_SHA}" > /dev/null
-
 COPY src/ src/
 COPY app/ app/
 COPY brands/ brands/
