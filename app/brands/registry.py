@@ -46,6 +46,10 @@ class BrandConfig(BaseModel):
     catalog_path: str
     index_path: str
     transactions_dir: str | None = None
+    # Which split parquets to concat into user_history. Defaults to all three so
+    # existing brands are unaffected. Set to ["train"] for eval-integrity: keeps the
+    # model's training signal separate from the held-out val/test splits.
+    transaction_splits: list[str] = ["train", "val", "test"]
     checkpoint_path: str = "checkpoints/best.pt"
     api_key_env: str
     embeddings_path: str | None = None
@@ -114,7 +118,7 @@ def _load_brand(yaml_path: Path) -> BrandState:
         td = Path(config.transactions_dir)
         splits = [
             pd.read_parquet(td / f"{split}.parquet")
-            for split in ("train", "val", "test")
+            for split in config.transaction_splits
         ]
         history = pd.concat(splits, ignore_index=True)
         history["article_id"] = history["article_id"].astype(int)
