@@ -71,4 +71,3 @@ class HealthBrand(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
-    brands: list[HealthBrand]
