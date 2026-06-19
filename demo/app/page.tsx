@@ -21,8 +21,10 @@ export default function HomePage() {
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Brand is passed explicitly so there's no stale-closure risk when the brand tab
+  // changes before the previous useCallback re-memoises.
   const runSearch = useCallback(
-    async (file: File) => {
+    async (file: File, activeBrand: Brand) => {
       setSearching(true);
       setError(null);
       setResults([]);
@@ -32,7 +34,7 @@ export default function HomePage() {
       form.append("image", file);
 
       try {
-        const res = await fetch(`/api/visual-search?brand=${brand}&k=9`, {
+        const res = await fetch(`/api/visual-search?brand=${activeBrand}&k=9`, {
           method: "POST",
           body: form,
         });
@@ -45,41 +47,40 @@ export default function HomePage() {
         setSearching(false);
       }
     },
-    [brand]
+    [] // no brand dep — activeBrand is passed as an argument
   );
 
   const handleFile = useCallback(
-    (file: File) => {
+    (file: File, activeBrand: Brand) => {
       if (!file.type.startsWith("image/")) return;
       setUploadedFile(file);
       const reader = new FileReader();
       reader.onload = (e) => setPreview(e.target?.result as string);
       reader.readAsDataURL(file);
-      runSearch(file);
+      runSearch(file, activeBrand);
     },
     [runSearch]
   );
 
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleFile(file);
+    if (file) handleFile(file, brand);
   };
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+    if (file) handleFile(file, brand);
   };
 
   const onBrandChange = (b: Brand) => {
     setBrand(b);
-    // Re-run search if we already have an image
-    if (uploadedFile) {
-      setBrand(b);
-      setTimeout(() => runSearch(uploadedFile), 0);
-    }
     setSelectedItem(null);
+    // Pass b directly — no setTimeout, no stale closure over the old brand value.
+    if (uploadedFile) {
+      runSearch(uploadedFile, b);
+    }
   };
 
   const brandMeta = BRAND_META[brand];
