@@ -12,7 +12,7 @@ interface HMItem {
   product_type_name: string;
   product_group_name?: string;
   colour_group_name: string;
-  department_name: string;
+  department_name?: string;
   score?: number;
 }
 
@@ -164,7 +164,7 @@ function UserCard({ user, isSelected, onClick }: { user: DemoUser; isSelected: b
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Phase2Page() {
-  const { users, segments, trending } = phase2Data as {
+  const { users, segments, trending } = phase2Data as unknown as {
     users: DemoUser[];
     segments: Segment[];
     trending: HMItem[];
