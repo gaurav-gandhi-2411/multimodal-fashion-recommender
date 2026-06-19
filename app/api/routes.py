@@ -9,11 +9,12 @@ from typing import Annotated
 import numpy as np
 import structlog
 import torch
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.api.auth import require_brand
+from app.api.rate_limit import limiter
 from app.api.metrics import (
     EXPLANATION_CACHE_HITS,
     EXPLANATION_CACHE_MISSES,
@@ -26,7 +27,6 @@ from app.api.metrics import (
 )
 from app.api.schemas import (
     CompleteResponse,
-    HealthBrand,
     HealthResponse,
     OutfitItem,
     RecommendedItem,
@@ -47,6 +47,7 @@ from app.pricing import (
 from app.rerank import rerank as _rerank
 
 _SEQ_LEN = 20
+_MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -171,9 +172,11 @@ def _maybe_explain(
 
 
 @router.post("/v1/{brand}/recommend", response_model=RecommendResponse)
+@limiter.limit("60/minute")
 async def recommend(
     brand: str,
     req: RecommendRequest,
+    request: Request,
     state: Annotated[BrandState, Depends(require_brand)],
 ) -> RecommendResponse:
     """Return top-k personalised recommendations for a user or seed item."""
@@ -221,7 +224,14 @@ async def recommend(
     else:
         pool_k = req.k + 1  # +1 absorbs the seed item that gets excluded below
 
-    raw_results = state.retriever.search(query_emb, k=pool_k)
+    try:
+        raw_results = state.retriever.search(query_emb, k=pool_k)
+    except Exception as exc:
+        log.error("faiss_search_failed", endpoint="recommend", exc=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Retrieval index temporarily unavailable",
+        ) from exc
 
     # Exclude the seed item so it never appears in its own recommendations.
     if req.item_id:
@@ -315,10 +325,12 @@ async def recommend(
 
 
 @router.get("/v1/{brand}/item/{item_id}/similar", response_model=SimilarResponse)
+@limiter.limit("60/minute")
 async def similar(
     brand: str,
     item_id: str,
-    k: int = 10,
+    request: Request,
+    k: int = Query(default=10, ge=1, le=100),
     *,
     state: Annotated[BrandState, Depends(require_brand)],
 ) -> SimilarResponse:
@@ -336,7 +348,14 @@ async def similar(
 
     rerank_cfg = state.config.rerank
     pool_k = rerank_cfg.candidate_pool_size if rerank_cfg.enabled else k + 1
-    raw_results = state.retriever.search(query_emb, k=pool_k)
+    try:
+        raw_results = state.retriever.search(query_emb, k=pool_k)
+    except Exception as exc:
+        log.error("faiss_search_failed", endpoint="similar", exc=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Retrieval index temporarily unavailable",
+        ) from exc
 
     candidates = [(aid, score) for aid, score in raw_results if str(aid) != item_id]
 
@@ -394,9 +413,11 @@ async def similar(
 
 
 @router.get("/v1/{brand}/item/{item_id}/complete", response_model=CompleteResponse)
+@limiter.limit("60/minute")
 async def complete(
     brand: str,
     item_id: str,
+    request: Request,
     *,
     state: Annotated[BrandState, Depends(require_brand)],
 ) -> CompleteResponse:
@@ -545,10 +566,12 @@ async def complete(
 
 
 @router.post("/v1/{brand}/visual-search", response_model=VisualSearchResponse)
+@limiter.limit("60/minute")
 async def visual_search(
     brand: str,
+    request: Request,
     image: UploadFile = File(...),  # noqa: B008
-    k: int = 10,
+    k: int = Query(default=10, ge=1, le=100),
     item_id: str | None = None,
     *,
     state: Annotated[BrandState, Depends(require_brand)],
@@ -586,6 +609,11 @@ async def visual_search(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Uploaded file is empty",
         )
+    if len(raw_bytes) > _MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Image too large ({len(raw_bytes) // (1024 * 1024)} MB); limit is 10 MB",
+        )
 
     from app.visual import encode_query_image
 
@@ -615,7 +643,14 @@ async def visual_search(
     # queries where the category will be inferred after the search.
     pool_k = rerank_cfg.candidate_pool_size if rerank_cfg.enabled else k
 
-    raw_results = state.visual_retriever.search(query_emb, pool_k)
+    try:
+        raw_results = state.visual_retriever.search(query_emb, pool_k)
+    except Exception as exc:
+        log.error("faiss_search_failed", endpoint="visual_search", exc=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Retrieval index temporarily unavailable",
+        ) from exc
 
     # Pure-image path (no item_id): infer category + price from the rank-1 CLIP match.
     # CLIP self-retrieval is reliable (rank-1 score ≈ 1.0 for a catalogue image), so
@@ -679,17 +714,6 @@ async def visual_search(
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health(request: Request) -> HealthResponse:
-    """Liveness check; lists all loaded brands and their catalogue sizes."""
-    registry = request.app.state.registry
-    brands = [
-        HealthBrand(
-            brand=state.config.brand,
-            display_name=state.config.display_name,
-            item_count=state.retriever.index.ntotal,
-        )
-        for name in registry.brand_names()
-        for state in [registry.get(name)]
-        if state is not None
-    ]
-    return HealthResponse(status="ok", brands=brands)
+async def health() -> HealthResponse:
+    """Liveness check."""
+    return HealthResponse(status="ok")

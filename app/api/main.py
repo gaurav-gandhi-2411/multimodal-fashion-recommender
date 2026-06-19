@@ -7,8 +7,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from prometheus_client import make_asgi_app
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.api.logging_config import configure_logging
+from app.api.rate_limit import limiter
 from app.api.routes import router
 from app.brands.registry import load_registry
 from app.storage import sync_brand_assets
@@ -41,6 +45,10 @@ app = FastAPI(
     description="Multi-tenant fashion recommendation API (two-tower retrieval + LLM explanations)",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)

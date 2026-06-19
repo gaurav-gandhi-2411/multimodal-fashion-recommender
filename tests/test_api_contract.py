@@ -102,8 +102,4 @@ def test_health_returns_ok(api_client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
-    assert len(data["brands"]) >= 1
-    brand = data["brands"][0]
-    assert "brand" in brand
-    assert "display_name" in brand
-    assert "item_count" in brand
+    assert "brands" not in data  # brand inventory stripped from unauthenticated health

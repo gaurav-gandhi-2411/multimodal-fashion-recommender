@@ -14,6 +14,7 @@ dependencies = [
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "prometheus-client>=0.21",
+    "slowapi>=0.1.9",
     "structlog>=24.4",
     # Inference (torch + FAISS only — no CLIP/SBERT at API runtime)
     "torch>=2.4.0",
