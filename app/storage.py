@@ -78,7 +78,7 @@ def _collect_brand_paths(brands_dir: str) -> list[str]:
             paths.append(f"{vbase}/article_ids.pkl")
         if cfg.transactions_dir:
             tbase = cfg.transactions_dir.rstrip("/")
-            for split in ("train", "val", "test"):
+            for split in cfg.transaction_splits:
                 paths.append(f"{tbase}/{split}.parquet")
     return paths
 

@@ -1,15 +1,19 @@
 brand: h_and_m
 display_name: "H&M"
-catalog_path: data/processed/articles.parquet
-# Directory containing faiss.index + article_ids.pkl (built by 03_build_index.py)
-index_path: data/processed/faiss_index_active
-# Concatenated train/val/test parquets for user history lookup
-transactions_dir: data/processed
-# Full TwoTowerModel checkpoint (UserTower needed for user embeddings)
+catalog_path: data/h_and_m/items.parquet
+index_path: indices/h_and_m/active
+transactions_dir: data/h_and_m/transactions
+# Train-only history: model was validated on held-out val/test.
+# Loading only train keeps the 3.06x lift number defensible.
+transaction_splits: ["train"]
 checkpoint_path: checkpoints/best.pt
-# API key is read from this env var at startup — value never stored in this file
-api_key_env: HM_API_KEY
+api_key_env: H_AND_M_API_KEY
+pdp_url_template: null
+visual_index_path: null
 llm:
-  provider: groq          # groq | ollama | template
-  model: llama-3.1-8b-instant
-  enabled: true
+  provider: template
+  enabled: false
+rerank:
+  enabled: false
+complete:
+  enabled: false
