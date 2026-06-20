@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import sys
 import time
 import uuid
@@ -139,15 +140,16 @@ def _maybe_explain(
             from src.reasoning.groq_explainer import GroqExplainer
 
             t_llm = time.perf_counter()
-            explanation = GroqExplainer().explain(user_hist_meta, rec_meta)
+            explainer = GroqExplainer()
+            explanation = explainer.explain(user_hist_meta, rec_meta)
             llm_duration = time.perf_counter() - t_llm
-            usd = groq_call_cost_usd()
+            in_toks  = explainer.last_input_tokens  or GROQ_EST_INPUT_TOKENS
+            out_toks = explainer.last_output_tokens or GROQ_EST_OUTPUT_TOKENS
+            usd = groq_call_cost_usd(in_toks, out_toks)
             LLM_CALLS.labels(brand=brand, provider=provider, status="success").inc()
             LLM_COST_USD.labels(brand=brand, provider=provider).inc(usd)
             LLM_CALL_DURATION.labels(brand=brand, provider=provider).observe(llm_duration)
-            LLM_TOKENS_TOTAL.labels(brand=brand, provider=provider).inc(
-                GROQ_EST_INPUT_TOKENS + GROQ_EST_OUTPUT_TOKENS
-            )
+            LLM_TOKENS_TOTAL.labels(brand=brand, provider=provider).inc(in_toks + out_toks)
             cache.set(cache_key, explanation or _EMPTY_EXPLANATION_SENTINEL)
             return explanation, usd, False
 
@@ -286,7 +288,8 @@ async def recommend(
         if req.explain:
             user_hist_ids = [str(m["article_id"]) for m in user_hist_meta if "article_id" in m]
             cache_key = _cache.make_key(brand, user_hist_ids, str(art_id), cold_start)
-            explanation, cost, was_cached = _maybe_explain(
+            explanation, cost, was_cached = await asyncio.to_thread(
+                _maybe_explain,
                 user_hist_meta, meta, brand, state,
                 cache=_cache, cache_key=cache_key,
             )
