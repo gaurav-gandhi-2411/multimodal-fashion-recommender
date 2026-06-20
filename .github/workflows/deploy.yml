@@ -83,6 +83,13 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ vars.GAR_HOSTNAME }} --quiet
 
+      # NOTE: Brand asset files (data/{brand}/colors.json, visual FAISS indices,
+      # catalog parquets) must be present in GCS_BUCKET_NAME before a deploy that
+      # adds a new brand or new asset type can succeed. The startup sync
+      # (app/storage.py) downloads these at container startup and 404s are fatal.
+      # To upload new assets: gcloud storage cp data/<brand>/<file> gs://<bucket>/data/<brand>/<file>
+      # The GCP_SERVICE_ACCOUNT has storage.objectViewer only (read-only at runtime);
+      # manual uploads use the deployer's own credentials (owner).
       - name: Build CPU-only image
         run: |
           docker build \

@@ -1,11 +1,15 @@
-"""app/visual.py -- Lazy encoder singleton and query-image encoding for /visual-search.
+"""app/visual.py -- Lazy encoder singleton and query encoding for visual + style search.
 
 CLIP (image) is the only encoder used here.  SBERT and the brand ItemTower are NOT
 used in the visual-search path.  Raw CLIP-512 image embeddings are L2-normalised and
 searched directly against a per-brand visual FAISS index (indices/{brand}/visual.faiss).
 
-Query encoding path (pure CLIP-512):
-  uploaded image bytes -> PIL RGB -> CLIP ViT-B/32 -> 512-d -> L2-normalize
+Query encoding paths (pure CLIP-512):
+  Image: uploaded bytes -> PIL RGB -> CLIP ViT-B/32 -> 512-d -> L2-normalize
+  Text:  natural-language string -> CLIP tokenizer -> CLIP text tower -> 512-d -> L2-normalize
+
+Both produce vectors in the same CLIP joint embedding space, so text queries can be
+searched against the same visual FAISS index without retraining.
 """
 
 from __future__ import annotations
@@ -20,8 +24,10 @@ import yaml
 if TYPE_CHECKING:
     from src.encoders.image_encoder import ImageEncoder
 
-# Module-level singleton cache; populated on first /visual-search call.
+# Module-level singleton cache; populated on first /visual-search or /style-search call.
 _image_encoder: ImageEncoder | None = None
+# CLIP text tokenizer; lazily initialised alongside the image encoder.
+_clip_tokenizer = None
 
 
 def _load_config() -> dict:
@@ -86,6 +92,42 @@ def encode_query_image(image_bytes: bytes) -> np.ndarray:
     query: np.ndarray = img_emb_t.cpu().float().numpy()[0]  # (512,)
 
     # Explicit L2-normalise -- defensive guard for FAISS IndexFlatIP correctness.
+    norm = np.linalg.norm(query)
+    if norm > 0:
+        query = query / norm
+
+    return query.astype(np.float32)
+
+
+def encode_query_text(text: str) -> np.ndarray:
+    """Encode a natural-language style query using the CLIP text tower.
+
+    Produces a 512-d L2-normalised vector in the same embedding space as
+    ``encode_query_image``, so text queries can be searched directly against
+    the per-brand visual FAISS index (IndexFlatIP, 512-d).
+
+    CLIP's text encoder has a 77-token limit; longer inputs are silently
+    truncated by open_clip's tokenizer (same behaviour as the upstream model).
+
+    Returns a (512,) float32 numpy array.
+    """
+    import open_clip
+    import torch
+
+    global _clip_tokenizer  # noqa: PLW0603
+
+    enc = get_image_encoder()  # reuse the already-loaded CLIP singleton
+
+    if _clip_tokenizer is None:
+        _clip_tokenizer = open_clip.get_tokenizer("ViT-B-32")
+
+    tokens = _clip_tokenizer([text]).to(enc.device)
+    with torch.no_grad():
+        text_emb = enc.model.encode_text(tokens)
+        text_emb = text_emb / text_emb.norm(dim=-1, keepdim=True)
+
+    query: np.ndarray = text_emb.cpu().float().numpy()[0]  # (512,)
+
     norm = np.linalg.norm(query)
     if norm > 0:
         query = query / norm

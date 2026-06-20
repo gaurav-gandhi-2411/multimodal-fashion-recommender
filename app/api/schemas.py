@@ -77,6 +77,18 @@ class VisualSearchResponse(BaseModel):
     match_confidence: float = 0.0
 
 
+class StyleSearchResponse(BaseModel):
+    request_id: str
+    brand: str
+    query: str
+    results: list[RecommendedItem]
+    latency_ms: float
+    # Same score-gap signal as VisualSearchResponse.
+    # LOW confidence (<0.03) on a text query means no catalog item strongly
+    # aligns with the described style — useful "catalog gap" signal for buyers.
+    match_confidence: float = 0.0
+
+
 class HealthBrand(BaseModel):
     brand: str
     display_name: str
