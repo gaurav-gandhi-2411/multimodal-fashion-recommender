@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Upload, Camera, Zap, Star, Layers } from "lucide-react";
+import { Upload, Camera, Zap, Star, Layers, Search } from "lucide-react";
 import type { Brand, EnrichedItem } from "@/lib/types";
 import { BRAND_META } from "@/lib/types";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductDrawer } from "@/components/ProductDrawer";
 import { Spinner } from "@/components/Spinner";
+
+type SearchMode = "image" | "text";
 
 const BRANDS: Brand[] = ["snitch", "fashor", "powerlook"];
 
@@ -39,8 +41,17 @@ function extractDominantColor(file: File): Promise<string> {
 
 export default function HomePage() {
   const [brand, setBrand] = useState<Brand>("snitch");
+  const [searchMode, setSearchMode] = useState<SearchMode>("image");
+
+  // Image search state
   const [preview, setPreview] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+
+  // Text search state
+  const [textQuery, setTextQuery] = useState("");
+  const [matchConfidence, setMatchConfidence] = useState<number | null>(null);
+
+  // Shared result state
   const [results, setResults] = useState<EnrichedItem[]>([]);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,12 +61,13 @@ export default function HomePage() {
 
   // Brand is passed explicitly so there's no stale-closure risk when the brand tab
   // changes before the previous useCallback re-memoises.
-  const runSearch = useCallback(
+  const runImageSearch = useCallback(
     async (file: File, activeBrand: Brand) => {
       setSearching(true);
       setError(null);
       setResults([]);
       setSelectedItem(null);
+      setMatchConfidence(null);
 
       const colorHex = await extractDominantColor(file);
       const form = new FormData();
@@ -76,7 +88,34 @@ export default function HomePage() {
         setSearching(false);
       }
     },
-    [] // no brand dep — activeBrand is passed as an argument
+    []
+  );
+
+  const runTextSearch = useCallback(
+    async (query: string, activeBrand: Brand) => {
+      if (!query.trim()) return;
+      setSearching(true);
+      setError(null);
+      setResults([]);
+      setSelectedItem(null);
+      setMatchConfidence(null);
+
+      try {
+        const res = await fetch(
+          `/api/style-search?brand=${activeBrand}&k=9&text=${encodeURIComponent(query)}`,
+          { method: "POST" }
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Search failed");
+        setResults(data.results ?? []);
+        setMatchConfidence(data.match_confidence ?? null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+      } finally {
+        setSearching(false);
+      }
+    },
+    []
   );
 
   const handleFile = useCallback(
@@ -86,9 +125,9 @@ export default function HomePage() {
       const reader = new FileReader();
       reader.onload = (e) => setPreview(e.target?.result as string);
       reader.readAsDataURL(file);
-      runSearch(file, activeBrand);
+      runImageSearch(file, activeBrand);
     },
-    [runSearch]
+    [runImageSearch]
   );
 
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -106,10 +145,19 @@ export default function HomePage() {
   const onBrandChange = (b: Brand) => {
     setBrand(b);
     setSelectedItem(null);
-    // Pass b directly — no setTimeout, no stale closure over the old brand value.
-    if (uploadedFile) {
-      runSearch(uploadedFile, b);
+    if (searchMode === "image" && uploadedFile) {
+      runImageSearch(uploadedFile, b);
+    } else if (searchMode === "text" && textQuery.trim()) {
+      runTextSearch(textQuery, b);
     }
+  };
+
+  const onModeChange = (mode: SearchMode) => {
+    setSearchMode(mode);
+    setResults([]);
+    setError(null);
+    setMatchConfidence(null);
+    setSelectedItem(null);
   };
 
   const brandMeta = BRAND_META[brand];
@@ -155,7 +203,7 @@ export default function HomePage() {
                 Find Your Style
               </h1>
               <p className="text-sm text-zinc-500 mt-1">
-                {brandMeta.tagline} · Upload any fashion photo to find similar styles
+                {brandMeta.tagline} · Search by photo or describe what you&apos;re looking for
               </p>
             </div>
             <div className="flex gap-4 text-xs text-zinc-400 hidden md:flex">
@@ -171,91 +219,155 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Upload area */}
-          <div
-            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={onDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`relative rounded-2xl border-2 border-dashed transition-all duration-200 cursor-pointer overflow-hidden ${
-              dragging
-                ? "border-zinc-900 bg-zinc-100"
-                : preview
-                ? "border-transparent"
-                : "border-zinc-300 hover:border-zinc-400 bg-white"
-            }`}
-            style={{ minHeight: preview ? undefined : "200px" }}
-          >
-            {preview ? (
-              <div className="flex items-start gap-6 p-4">
-                {/* Uploaded image */}
-                <div className="flex-shrink-0 relative">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={preview}
-                    alt="Uploaded"
-                    className="w-32 h-40 object-cover rounded-xl border border-zinc-200 shadow-sm"
-                  />
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      fileInputRef.current?.click();
-                    }}
-                    className="absolute -top-2 -right-2 h-6 bg-zinc-900 text-white rounded-full text-[10px] font-semibold flex items-center gap-1 px-2 hover:bg-zinc-700 transition-colors shadow"
-                    title="Change image"
-                  >
-                    ↺<span className="hidden sm:inline">Change</span>
-                  </button>
-                </div>
-
-                {/* Status */}
-                <div className="flex-1 flex flex-col justify-center py-4">
-                  {searching ? (
-                    <div className="flex items-center gap-3 text-zinc-600">
-                      <Spinner size={20} />
-                      <span className="text-sm font-medium">
-                        Searching {brandMeta.label} catalog…
-                      </span>
-                    </div>
-                  ) : results.length > 0 ? (
-                    <div>
-                      <p className="font-semibold text-zinc-900">
-                        {results.length} matches found
-                      </p>
-                      <p className="text-sm text-zinc-500 mt-1">
-                        Sorted by visual similarity · Click any item to see similar styles and outfit ideas
-                      </p>
-                    </div>
-                  ) : error ? (
-                    <p className="text-sm text-red-600">{error}</p>
-                  ) : null}
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-zinc-100 flex items-center justify-center">
-                  <Upload className="text-zinc-500" size={24} />
-                </div>
-                <div>
-                  <p className="font-semibold text-zinc-700">Drop a photo here</p>
-                  <p className="text-sm text-zinc-400 mt-1">
-                    Or click to browse · JPG, PNG, WEBP
-                  </p>
-                </div>
-              </div>
-            )}
+          {/* Search mode toggle */}
+          <div className="flex gap-1 bg-zinc-100 rounded-xl p-1 w-fit mb-4">
+            <button
+              onClick={() => onModeChange("image")}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+                searchMode === "image"
+                  ? "bg-white text-zinc-900 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-800"
+              }`}
+            >
+              <Camera size={14} /> Image Search
+            </button>
+            <button
+              onClick={() => onModeChange("text")}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+                searchMode === "text"
+                  ? "bg-white text-zinc-900 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-800"
+              }`}
+            >
+              <Search size={14} /> Style Search
+            </button>
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={onInputChange}
-          />
+
+          {searchMode === "text" ? (
+            /* Text-search box */
+            <div className="bg-white rounded-2xl border border-zinc-200 p-5">
+              <form
+                onSubmit={(e) => { e.preventDefault(); runTextSearch(textQuery, brand); }}
+                className="flex gap-3"
+              >
+                <input
+                  type="text"
+                  value={textQuery}
+                  onChange={(e) => setTextQuery(e.target.value)}
+                  placeholder="e.g. white oversized linen shirt, floral print kurta…"
+                  className="flex-1 rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
+                />
+                <button
+                  type="submit"
+                  disabled={!textQuery.trim() || searching}
+                  className="px-5 py-3 bg-zinc-900 text-white text-sm font-medium rounded-xl hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                >
+                  {searching ? <Spinner size={16} /> : <Search size={16} />}
+                  Search
+                </button>
+              </form>
+
+              {/* Status / confidence indicator */}
+              <div className="mt-3 min-h-5">
+                {searching ? (
+                  <p className="text-xs text-zinc-400">Searching {brandMeta.label} catalog…</p>
+                ) : matchConfidence !== null && results.length > 0 ? (
+                  <p className={`text-xs font-medium ${matchConfidence >= 0.04 ? "text-emerald-600" : "text-amber-500"}`}>
+                    {matchConfidence >= 0.04
+                      ? `Strong catalog match (confidence ${matchConfidence.toFixed(3)})`
+                      : `Low catalog match (confidence ${matchConfidence.toFixed(3)}) — catalog may lack this style`}
+                  </p>
+                ) : error ? (
+                  <p className="text-xs text-red-500">{error}</p>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            /* Image upload area */
+            <>
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={onDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`relative rounded-2xl border-2 border-dashed transition-all duration-200 cursor-pointer overflow-hidden ${
+                  dragging
+                    ? "border-zinc-900 bg-zinc-100"
+                    : preview
+                    ? "border-transparent"
+                    : "border-zinc-300 hover:border-zinc-400 bg-white"
+                }`}
+                style={{ minHeight: preview ? undefined : "200px" }}
+              >
+                {preview ? (
+                  <div className="flex items-start gap-6 p-4">
+                    <div className="flex-shrink-0 relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={preview}
+                        alt="Uploaded"
+                        className="w-32 h-40 object-cover rounded-xl border border-zinc-200 shadow-sm"
+                      />
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          fileInputRef.current?.click();
+                        }}
+                        className="absolute -top-2 -right-2 h-6 bg-zinc-900 text-white rounded-full text-[10px] font-semibold flex items-center gap-1 px-2 hover:bg-zinc-700 transition-colors shadow"
+                        title="Change image"
+                      >
+                        ↺<span className="hidden sm:inline">Change</span>
+                      </button>
+                    </div>
+                    <div className="flex-1 flex flex-col justify-center py-4">
+                      {searching ? (
+                        <div className="flex items-center gap-3 text-zinc-600">
+                          <Spinner size={20} />
+                          <span className="text-sm font-medium">
+                            Searching {brandMeta.label} catalog…
+                          </span>
+                        </div>
+                      ) : results.length > 0 ? (
+                        <div>
+                          <p className="font-semibold text-zinc-900">
+                            {results.length} matches found
+                          </p>
+                          <p className="text-sm text-zinc-500 mt-1">
+                            Sorted by visual similarity · Click any item to see similar styles and outfit ideas
+                          </p>
+                        </div>
+                      ) : error ? (
+                        <p className="text-sm text-red-600">{error}</p>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
+                    <div className="w-14 h-14 rounded-2xl bg-zinc-100 flex items-center justify-center">
+                      <Upload className="text-zinc-500" size={24} />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-zinc-700">Drop a photo here</p>
+                      <p className="text-sm text-zinc-400 mt-1">
+                        Or click to browse · JPG, PNG, WEBP
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={onInputChange}
+              />
+            </>
+          )}
         </div>
 
         {/* Skeleton while searching */}
-        {searching && preview && (
+        {searching && (searchMode === "text" || preview) && (
           <section>
             <div className="flex items-center gap-3 mb-4 h-5">
               <div className="h-3 bg-zinc-200 rounded-full w-40 animate-pulse" />
@@ -281,7 +393,7 @@ export default function HomePage() {
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-zinc-900 text-sm">
-                Visual Search Results
+                {searchMode === "text" ? "Style Search Results" : "Visual Search Results"}
                 <span className="ml-2 text-zinc-400 font-normal">{brandMeta.label}</span>
               </h2>
               <p className="text-xs text-zinc-400">
@@ -301,15 +413,21 @@ export default function HomePage() {
         )}
 
         {/* Zero-results state */}
-        {!searching && preview && results.length === 0 && !error && (
-          <div className="mt-4 py-12 text-center text-zinc-400">
-            <p className="text-sm font-medium">No matches found</p>
-            <p className="text-xs mt-1">Try a clearer fashion photo or one with better lighting.</p>
-          </div>
+        {!searching && (searchMode === "text" || preview) && results.length === 0 && !error && (
+          searchMode === "text" && !textQuery.trim() ? null : (
+            <div className="mt-4 py-12 text-center text-zinc-400">
+              <p className="text-sm font-medium">No matches found</p>
+              <p className="text-xs mt-1">
+                {searchMode === "text"
+                  ? "Try rephrasing your query or check if this brand carries this style."
+                  : "Try a clearer fashion photo or one with better lighting."}
+              </p>
+            </div>
+          )
         )}
 
-        {/* Empty state before upload */}
-        {!preview && !searching && (
+        {/* Empty state before search */}
+        {!preview && !searching && searchMode === "image" && (
           <div className="mt-4 grid grid-cols-3 gap-4 opacity-60 pointer-events-none select-none">
             {[...Array(6)].map((_, i) => (
               <div
@@ -331,6 +449,7 @@ export default function HomePage() {
         <div className="mt-16 flex flex-wrap gap-3 justify-center">
           {[
             { icon: "🔍", label: "CLIP ViT-B/32 Visual Search" },
+            { icon: "💬", label: "Natural-Language Style Search" },
             { icon: "✨", label: "MMR Diversity Reranking" },
             { icon: "👔", label: "Outfit Slot Completion" },
             { icon: "⚡", label: "Groq LLM Explanations" },
