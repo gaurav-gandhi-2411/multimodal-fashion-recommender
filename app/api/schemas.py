@@ -61,13 +61,19 @@ class VisualSearchResponse(BaseModel):
     brand: str
     results: list[RecommendedItem]
     latency_ms: float
-    # Score-gap signal: top-1 CLIP score minus min(top-k CLIP scores).
-    # Higher = the top result stands clearly apart from the rest (higher confidence).
-    # Lower = top-k scores are tightly clustered (CLIP uncertain about query).
-    # Typical range for catalogue images: 0.03–0.12.
-    # Typical range for non-fashion queries (cats, noise): 0.003–0.02.
-    # Callers may use this to show a "low confidence" UI warning; the API always
-    # returns results because CLIP always finds the nearest fashion item.
+    # Score-gap: top-1 CLIP cosine score minus min(top-k scores), k=query k.
+    # Measures whether CLIP found a *dominant* catalog match for the uploaded image.
+    # HIGH (>0.05): top result clearly separates from the rest — catalog item present.
+    # LOW (<0.03): scores tightly clustered — no dominant match (any image type).
+    #
+    # Calibrated on Snitch index (1,778 items):
+    #   Catalog self-matches:          0.070 – 0.090
+    #   Non-fashion images (noise):    0.014 – 0.030
+    #   Out-of-catalog fashion:        0.021 – 0.022  <- same as non-fashion
+    #
+    # The signal does NOT distinguish "fashion vs. non-fashion": a shirt from a
+    # different brand scores as low as random noise because no catalog item
+    # dominates the top-k pool. The API always returns results regardless.
     match_confidence: float = 0.0
 
 
