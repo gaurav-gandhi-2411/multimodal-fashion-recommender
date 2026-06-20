@@ -684,6 +684,20 @@ async def visual_search(
     else:
         vis_candidates = list(raw_results)[:k]
 
+    # Compute match_confidence: gap between the top-1 CLIP score and the minimum of
+    # the top-k scores. A large gap means the top result stands clearly apart;
+    # a near-zero gap means the top-k scores are tightly clustered.
+    # Use raw_results (pre-rerank) so confidence reflects CLIP's embedding distance,
+    # not post-hoc rerank scores which are not directly comparable.
+    # CLIP always returns the nearest fashion item — this is a signal for callers to
+    # optionally show a "low confidence" UI indicator; the API never withholds results.
+    if raw_results:
+        top_score = float(raw_results[0][1])
+        pool_scores = [float(s) for _, s in raw_results[:k]]
+        match_confidence = round(top_score - min(pool_scores), 4) if len(pool_scores) > 1 else 0.0
+    else:
+        match_confidence = 0.0
+
     # C1: Color-aware rerank — blend CLIP scores with perceptual HSV color similarity.
     # Only active when: (a) client sent ?color=<hex>, (b) brand has a color index loaded.
     query_hsv = hex_to_hsv(color) if color else None
@@ -707,6 +721,7 @@ async def visual_search(
         "visual_search",
         filename=image.filename,
         n_results=len(results),
+        match_confidence=match_confidence,
         latency_ms=round(latency_ms, 2),
         usd_cost=0,
     )
@@ -718,6 +733,7 @@ async def visual_search(
         brand=brand,
         results=results,
         latency_ms=round(latency_ms, 2),
+        match_confidence=match_confidence,
     )
 
 
