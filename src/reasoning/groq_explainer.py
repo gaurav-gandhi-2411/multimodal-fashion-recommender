@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import sys
 import time
@@ -13,21 +15,41 @@ class GroqExplainer:
     are exhausted (or any non-retryable error occurs), a template-based
     explanation derived from the user's history is returned instead, so the UI
     never surfaces raw HTTP errors to the demo audience.
+
+    Wall-clock budget is capped at TOTAL_BUDGET_SECONDS (3 s) so a slow or
+    rate-limited Groq response never blocks the FastAPI event loop for long.
+    The caller is responsible for running this in a thread (asyncio.to_thread)
+    since requests.post is blocking.
     """
 
     API_URL = "https://api.groq.com/openai/v1/chat/completions"
     MODEL   = "llama-3.1-8b-instant"
-    RETRY_BACKOFF_SECONDS = (2, 5, 10)
+
+    # One retry with 1 s backoff; total budget is capped by TOTAL_BUDGET_SECONDS.
+    RETRY_BACKOFF_SECONDS = (1,)
+
+    # Hard wall-clock cap for the entire explain() call including retries + sleeps.
+    TOTAL_BUDGET_SECONDS: float = 3.0
 
     def __init__(self, config=None):
-        self.api_key     = os.environ.get("GROQ_API_KEY", "")
-        self.temperature = (config or {}).get("llm", {}).get("temperature", 0.3)
-        self.max_tokens  = (config or {}).get("llm", {}).get("max_tokens", 80)
+        self.api_key           = os.environ.get("GROQ_API_KEY", "")
+        self.temperature       = (config or {}).get("llm", {}).get("temperature", 0.3)
+        self.max_tokens        = (config or {}).get("llm", {}).get("max_tokens", 80)
+        # Per-call HTTP timeout, updated in explain() based on remaining budget.
+        self._timeout: float   = self.TOTAL_BUDGET_SECONDS
+        # Real token counts from the last successful API call; 0 when fallback used.
+        self.last_input_tokens: int  = 0
+        self.last_output_tokens: int = 0
 
     def explain(self, user_history: list[dict], recommended_item: dict) -> str:
         prompt = self._build_prompt(user_history, recommended_item)
+        deadline = time.perf_counter() + self.TOTAL_BUDGET_SECONDS
 
         for attempt in range(len(self.RETRY_BACKOFF_SECONDS) + 1):
+            remaining = deadline - time.perf_counter()
+            if remaining <= 0.1:  # leave 100 ms margin for overhead
+                break
+            self._timeout = min(remaining, self.TOTAL_BUDGET_SECONDS)
             try:
                 return self._call_api(prompt)
             except requests.HTTPError as e:
@@ -41,6 +63,14 @@ class GroqExplainer:
                     break
                 if attempt < len(self.RETRY_BACKOFF_SECONDS):
                     wait = self.RETRY_BACKOFF_SECONDS[attempt]
+                    if time.perf_counter() + wait >= deadline:
+                        print(
+                            f"[GroqExplainer] rate limited (attempt {attempt + 1}); "
+                            f"budget exhausted, using fallback",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                        break
                     print(
                         f"[GroqExplainer] rate limited (attempt {attempt + 1}); "
                         f"retrying in {wait}s",
@@ -79,10 +109,14 @@ class GroqExplainer:
                 "temperature": self.temperature,
                 "max_tokens": self.max_tokens,
             },
-            timeout=30,
+            timeout=self._timeout,
         )
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
+        data = resp.json()
+        usage = data.get("usage", {})
+        self.last_input_tokens  = usage.get("prompt_tokens", 0)
+        self.last_output_tokens = usage.get("completion_tokens", 0)
+        return data["choices"][0]["message"]["content"].strip()
 
     @staticmethod
     def _item_label(item: dict) -> str:
