@@ -9,6 +9,7 @@ from typing import Annotated
 
 import numpy as np
 import structlog
+import structlog.contextvars
 import torch
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 
@@ -186,6 +187,7 @@ async def recommend(
     """Return top-k personalised recommendations for a user or seed item."""
     t0 = time.perf_counter()
     request_id = str(uuid.uuid4())
+    structlog.contextvars.bind_contextvars(request_id=request_id, brand=brand)
     log = logger.bind(request_id=request_id, brand=brand)
 
     query_emb: np.ndarray | None = None
@@ -336,12 +338,15 @@ async def similar(
     item_id: str,
     request: Request,
     k: int = Query(default=10, ge=1, le=100),
+    top_k: int | None = Query(default=None, ge=1, le=100),
     *,
     state: Annotated[BrandState, Depends(require_brand)],
 ) -> SimilarResponse:
     """Return the k most visually/semantically similar items to a given catalogue item."""
+    k_eff = top_k if top_k is not None else k
     t0 = time.perf_counter()
     request_id = str(uuid.uuid4())
+    structlog.contextvars.bind_contextvars(request_id=request_id, brand=brand)
     log = logger.bind(request_id=request_id, brand=brand)
 
     query_emb = _get_item_embedding(item_id, state)
@@ -352,7 +357,7 @@ async def similar(
         )
 
     rerank_cfg = state.config.rerank
-    pool_k = rerank_cfg.candidate_pool_size if rerank_cfg.enabled else k + 1
+    pool_k = rerank_cfg.candidate_pool_size if rerank_cfg.enabled else k_eff + 1
     try:
         raw_results = state.retriever.search(query_emb, k=pool_k)
     except Exception as exc:
@@ -387,12 +392,12 @@ async def similar(
                     embeddings[aid] = state.retriever.index.reconstruct(row)
 
         candidates = _rerank(
-            candidates, query_price, query_cat, state.art_map, rerank_cfg, k,
+            candidates, query_price, query_cat, state.art_map, rerank_cfg, k_eff,
             embeddings=embeddings,
             query_meta=query_meta,
         )
     else:
-        candidates = candidates[:k]
+        candidates = candidates[:k_eff]
 
     results = [RecommendedItem(item_id=str(aid), score=score) for aid, score in candidates]
 
@@ -437,6 +442,7 @@ async def complete(
     """
     t0 = time.perf_counter()
     request_id = str(uuid.uuid4())
+    structlog.contextvars.bind_contextvars(request_id=request_id, brand=brand)
     log = logger.bind(request_id=request_id, brand=brand)
 
     query_emb = _get_item_embedding(item_id, state)
@@ -597,6 +603,7 @@ async def visual_search(
     """
     t0 = time.perf_counter()
     request_id = str(uuid.uuid4())
+    structlog.contextvars.bind_contextvars(request_id=request_id, brand=brand)
     log = logger.bind(request_id=request_id, brand=brand)
 
     if state.visual_retriever is None:
@@ -770,6 +777,7 @@ async def style_search(
     """
     t0 = time.perf_counter()
     request_id = str(uuid.uuid4())
+    structlog.contextvars.bind_contextvars(request_id=request_id, brand=brand)
     log = logger.bind(request_id=request_id, brand=brand)
 
     if state.visual_retriever is None:
