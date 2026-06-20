@@ -33,6 +33,7 @@ from app.api.schemas import (
     RecommendRequest,
     RecommendResponse,
     SimilarResponse,
+    StyleSearchResponse,
     VisualSearchResponse,
 )
 from app.brands.registry import BrandState
@@ -731,6 +732,135 @@ async def visual_search(
     return VisualSearchResponse(
         request_id=request_id,
         brand=brand,
+        results=results,
+        latency_ms=round(latency_ms, 2),
+        match_confidence=match_confidence,
+    )
+
+
+@router.post("/v1/{brand}/style-search", response_model=StyleSearchResponse)
+@limiter.limit("60/minute")
+async def style_search(
+    brand: str,
+    request: Request,
+    text: str = Query(..., min_length=1, max_length=500),  # noqa: B008
+    k: int = Query(default=10, ge=1, le=100),
+    color: str | None = None,
+    *,
+    state: Annotated[BrandState, Depends(require_brand)],
+) -> StyleSearchResponse:
+    """Return top-k catalogue items most visually similar to a natural-language style query.
+
+    Encoding path (CLIP text tower):
+      text query -> CLIP ViT-B/32 text encoder -> 512-d L2-normalised
+      -> FAISS inner-product search against the brand's visual index.
+
+    CLIP's joint image-text embedding space means text queries are directly
+    comparable to the image embeddings in the visual FAISS index — no
+    retraining required.
+
+    match_confidence carries the same semantics as /visual-search: a low gap
+    means no catalog item strongly aligns with the described style, which is
+    a useful "catalog gap" signal for buyers and merchandisers.
+
+    Returns HTTP 503 when the brand has no visual index configured.
+    """
+    t0 = time.perf_counter()
+    request_id = str(uuid.uuid4())
+    log = logger.bind(request_id=request_id, brand=brand)
+
+    if state.visual_retriever is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                f"Style search not configured for brand '{brand}'. "
+                "Run scripts/build_visual_index.py and set visual_index_path in the brand YAML."
+            ),
+        )
+
+    from app.visual import encode_query_text
+
+    query_emb = encode_query_text(text)
+
+    rerank_cfg = state.config.rerank
+    pool_k = rerank_cfg.candidate_pool_size if rerank_cfg.enabled else k
+
+    try:
+        raw_results = state.visual_retriever.search(query_emb, pool_k)
+    except Exception as exc:
+        log.error("faiss_search_failed", endpoint="style_search", exc=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Retrieval index temporarily unavailable",
+        ) from exc
+
+    # Infer category from rank-1 CLIP text match when reranking is enabled.
+    query_cat: str = ""
+    query_price: float = 0.0
+    query_meta: dict = {}
+    if raw_results and rerank_cfg.enabled:
+        top_aid = raw_results[0][0]
+        try:
+            top_aid = int(top_aid)
+        except (ValueError, TypeError):
+            pass
+        top_meta = state.art_map.get(top_aid, {})
+        query_cat = str(top_meta.get("category", ""))
+        query_price = float(top_meta.get("price_inr") or 0.0)
+        query_meta = top_meta
+
+    use_rerank = rerank_cfg.enabled and bool(query_cat)
+
+    if use_rerank:
+        vis_candidates = [(int(aid) if str(aid).isdigit() else aid, score)
+                          for aid, score in raw_results]
+        vis_candidates = _rerank(
+            vis_candidates, query_price, query_cat, state.art_map, rerank_cfg, k,
+            embeddings=None,
+            query_meta=query_meta,
+        )
+    else:
+        vis_candidates = list(raw_results[:k])
+
+    # C3: score-gap confidence — same formula as /visual-search.
+    if raw_results:
+        top_score = float(raw_results[0][1])
+        pool_scores = [float(s) for _, s in raw_results[:k]]
+        match_confidence = round(top_score - min(pool_scores), 4) if len(pool_scores) > 1 else 0.0
+    else:
+        match_confidence = 0.0
+
+    # C1: color-aware rerank (optional ?color=<hex> param).
+    query_hsv = hex_to_hsv(color) if color else None
+    if query_hsv is not None and state.color_index:
+        vis_candidates = color_rerank(vis_candidates, state.color_index, query_hsv)
+
+    results: list[RecommendedItem] = []
+    for art_id, score in vis_candidates:
+        try:
+            aid = int(art_id)
+        except (ValueError, TypeError):
+            aid = art_id  # type: ignore[assignment]
+        meta = state.art_map.get(aid, {})
+        pdp_url: str | None = meta.get("pdp_url") or None
+        results.append(RecommendedItem(item_id=str(art_id), score=score, pdp_url=pdp_url))
+
+    latency_ms = (time.perf_counter() - t0) * 1000
+    log.info(
+        "style_search",
+        query=text[:80],
+        n_results=len(results),
+        match_confidence=match_confidence,
+        latency_ms=round(latency_ms, 2),
+        usd_cost=0,
+    )
+    REQUEST_COUNT.labels(brand=brand, endpoint="style_search", status="200").inc()
+    REQUEST_LATENCY.labels(brand=brand, endpoint="style_search").observe(latency_ms / 1000)
+
+    return StyleSearchResponse(
+        request_id=request_id,
+        brand=brand,
+        query=text,
         results=results,
         latency_ms=round(latency_ms, 2),
         match_confidence=match_confidence,
