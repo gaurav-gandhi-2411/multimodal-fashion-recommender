@@ -79,6 +79,8 @@ def _build_mock_state(art_map: dict, visual_retriever) -> MagicMock:
     state.art_map = art_map
     state.visual_retriever = visual_retriever
     state.config.rerank = RerankConfig(enabled=True, candidate_pool_size=50)
+    # C1: empty color index so color_rerank is a no-op in these tests.
+    state.color_index = {}
     return state
 
 
@@ -359,6 +361,8 @@ def test_visual_search_inferred_category_mocked_fast() -> None:
         equivalent_group_bonus=0.70,
         w_diversity=0.0,
     )
+    # C1: empty color index so color_rerank is a no-op here.
+    state.color_index = {}
 
     registry = MagicMock()
     registry.get.side_effect = lambda b: state if b == BRAND else None
@@ -433,6 +437,8 @@ def test_visual_search_self_retrieval_mocked_fast() -> None:
         (aid, 1.0 - 0.01 * i) for i, aid in enumerate(article_ids)
     ]
     state.config.rerank = RerankConfig(enabled=False)
+    # C1: empty color index so color_rerank is a no-op here.
+    state.color_index = {}
 
     registry = MagicMock()
     registry.get.side_effect = lambda b: state if b == BRAND else None

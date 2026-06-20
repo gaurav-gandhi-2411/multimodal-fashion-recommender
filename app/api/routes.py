@@ -37,6 +37,7 @@ from app.api.schemas import (
 )
 from app.brands.registry import BrandState
 from app.cache import ExplanationCache, get_cache
+from app.color import color_rerank, hex_to_hsv
 from app.complete import build_slot_index, complete_the_look
 from app.pricing import (
     GROQ_EST_INPUT_TOKENS,
@@ -573,6 +574,7 @@ async def visual_search(
     image: UploadFile = File(...),  # noqa: B008
     k: int = Query(default=10, ge=1, le=100),
     item_id: str | None = None,
+    color: str | None = None,
     *,
     state: Annotated[BrandState, Depends(require_brand)],
 ) -> VisualSearchResponse:
@@ -681,6 +683,12 @@ async def visual_search(
         )
     else:
         vis_candidates = list(raw_results)[:k]
+
+    # C1: Color-aware rerank — blend CLIP scores with perceptual HSV color similarity.
+    # Only active when: (a) client sent ?color=<hex>, (b) brand has a color index loaded.
+    query_hsv = hex_to_hsv(color) if color else None
+    if query_hsv is not None and state.color_index:
+        vis_candidates = color_rerank(vis_candidates, state.color_index, query_hsv)
 
     results: list[RecommendedItem] = []
     for art_id, score in vis_candidates:

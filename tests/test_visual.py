@@ -67,6 +67,8 @@ def _make_state(known_ids: list[int], *, has_visual_retriever: bool = True) -> M
     # Disable reranking so these route-plumbing tests are not affected by
     # the inferred-category path added in the pure-image visual-search fix.
     state.config.rerank = RerankConfig(enabled=False)
+    # C1: empty color index so color_rerank is a no-op in these plumbing tests.
+    state.color_index = {}
 
     if has_visual_retriever:
         state.visual_retriever = MagicMock()

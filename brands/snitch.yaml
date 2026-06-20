@@ -4,6 +4,7 @@ catalog_path: data/snitch/items.parquet
 index_path: indices/snitch/active.faiss
 embeddings_path: indices/snitch/item_emb.npy
 visual_index_path: indices/snitch/visual.faiss
+color_index_path: data/snitch/colors.json
 pdp_url_template: null
 api_key_env: SNITCH_API_KEY
 llm:
