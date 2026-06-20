@@ -6,12 +6,13 @@ Answers the question a buyer's data scientist always asks first:
   "Can I reproduce your recall numbers by calling your API?"
 
 Compares two code paths side-by-side for the same item set:
-  --local      direct FAISS index search (no HTTP) — the training-time path
-  --http-mode  calls the live API endpoints       — the production serve path
+  --local      FAISS(candidate_pool_size) + C3 reranker — mirrors the API serve path
+  --http-mode  calls the live API endpoints              — the production serve path
 
-If local ≈ http the numbers in the README are reproducible via the API.
-Any gap indicates that the serve path diverges from what was measured offline
-(reranking, rate-limiting, indexing difference, etc.).
+Both paths now run the same FAISS + reranker pipeline, so a near-zero gap
+confirms the API faithfully reproduces the offline numbers.  Any residual gap
+indicates a true divergence (index mismatch, encoder difference, etc.) rather
+than an apples-to-oranges pipeline difference.
 
 Modes
 -----
@@ -78,27 +79,56 @@ def run_local_style(
     retriever,
     k: int,
     eval_rows: list,  # pre-sampled rows to evaluate
+    art_map: dict,    # article_id (int) → metadata dict (same structure as API's state.art_map)
+    rerank_cfg,       # RerankConfig — loaded from brand YAML
 ) -> dict:
+    """Mirror the API serve path: FAISS(pool_k) → rank-1 category inference → _rerank() → top-k."""
+    from app.rerank import rerank as _rerank
     from app.visual import encode_query_text, get_image_encoder
     from tqdm import tqdm
 
     get_image_encoder()
 
     aid_to_cat = {int(r.article_id): str(getattr(r, "category", "") or "") for r in catalog.itertuples()}
-    rows = eval_rows
+
+    pool_k = rerank_cfg.candidate_pool_size if rerank_cfg.enabled else k
 
     hits = 0
     total = 0
-    for row in tqdm(rows, desc="local style", leave=False):
+    for row in tqdm(rows := eval_rows, desc="local style", leave=False):
         title = str(getattr(row, "title", "") or "")
         if not title.strip():
             continue
         query_cat = str(getattr(row, "category", "") or "")
         emb = encode_query_text(title)
-        results_raw = retriever.search(emb, k)
+        raw_results = retriever.search(emb, pool_k)
+
+        # Mirror API: infer query category from rank-1 FAISS hit (not from query item metadata)
+        query_price: float = 0.0
+        inferred_cat: str = ""
+        query_meta: dict = {}
+        if raw_results and rerank_cfg.enabled:
+            top_aid = raw_results[0][0]
+            try:
+                top_aid = int(top_aid)
+            except (ValueError, TypeError):
+                pass
+            top_meta = art_map.get(top_aid, {})
+            inferred_cat = str(top_meta.get("category", ""))
+            query_price = float(top_meta.get("price_inr") or 0.0)
+            query_meta = top_meta
+
+        use_rerank = rerank_cfg.enabled and bool(inferred_cat)
+        if use_rerank:
+            candidates = [(int(aid) if str(aid).isdigit() else aid, score) for aid, score in raw_results]
+            final_results = _rerank(candidates, query_price, inferred_cat, art_map, rerank_cfg, k,
+                                    embeddings=None, query_meta=query_meta)
+        else:
+            final_results = list(raw_results[:k])
+
         retrieved = [
             {"item_id": str(aid), "category": aid_to_cat.get(int(aid), "")}
-            for aid, _ in results_raw
+            for aid, _ in final_results
         ]
         if category_recall_at_k(retrieved, query_cat, k):
             hits += 1
@@ -373,9 +403,20 @@ def main() -> None:
     print(f"Sample: {len(eval_rows)} items (seed=42)")
     print()
 
+    # Build art_map (matches API's state.art_map structure) and load rerank config
+    from app.brands.registry import BrandConfig
+    import yaml as _yaml
+    brand_yaml_path = Path(f"brands/{args.brand}.yaml")
+    with brand_yaml_path.open() as _fh:
+        brand_cfg = BrandConfig.model_validate(_yaml.safe_load(_fh))
+    rerank_cfg = brand_cfg.rerank
+    art_map: dict = catalog_indexed.set_index("article_id").to_dict("index")
+
     if run_local:
+        pool_k = rerank_cfg.candidate_pool_size if rerank_cfg.enabled else args.k
+        print(f"Local:  FAISS(pool_k={pool_k}) → _rerank → top-{args.k}  (mirrors API serve path)")
         if args.mode == "style":
-            local_result = run_local_style(catalog_indexed, visual_retriever, args.k, eval_rows)
+            local_result = run_local_style(catalog_indexed, visual_retriever, args.k, eval_rows, art_map, rerank_cfg)
         else:
             local_result = run_local_visual(catalog_indexed, visual_retriever, args.k, eval_rows, image_cache_dir)
 
@@ -398,7 +439,8 @@ def main() -> None:
 
     if local_result:
         r = local_result
-        print(f"  Local  (direct FAISS):  {r['recall']:.4f}  ({r['hits']}/{r['total']})")
+        pool_k = rerank_cfg.candidate_pool_size if rerank_cfg.enabled else args.k
+        print(f"  Local  (FAISS-{pool_k} + reranker): {r['recall']:.4f}  ({r['hits']}/{r['total']})")
 
     if http_result:
         r = http_result
