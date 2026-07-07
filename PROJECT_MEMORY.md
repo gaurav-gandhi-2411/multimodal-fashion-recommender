@@ -293,6 +293,39 @@ torchvision = [{ index = "pytorch-cu128", marker = "sys_platform == 'win32'" }]
 
 ---
 
+## Deploy Verification Standard (binding — read before any serving-path dependency change)
+
+**"Local pass ≠ container pass."** This repo's Docker build resolves dependencies from
+`uv.lock`, which is not guaranteed to match whatever ambient environment (conda `base`, an
+agent's working env, etc.) was used to run tests locally. `pyproject.toml` version constraints
+are often floors only (`>=X`), so `uv.lock` can silently drift to a newer major version than
+whatever was actually exercised in local testing — and that drift is invisible until the Docker
+build resolves it fresh at deploy time.
+
+**This has caused a real production incident.** The FashionCLIP migration (Phase 9, 2026-07-07)
+passed every local test — pytest, ruff, manual smoke tests — against `transformers==4.57.6` (the
+ambient conda env), while `uv.lock` had independently resolved `transformers==5.10.2` for the
+Docker build. `transformers` 5.x changed `CLIPModel.get_image_features()`'s return type. The
+first deploy 500'd on every `/visual-search` call; traffic was rolled back within minutes. Full
+incident detail in Phase 9 below.
+
+**Standing rule, effective immediately: any change that adds, upgrades, or newly exercises a
+dependency on the serving path must be verified INSIDE THE ACTUAL BUILT `infra/Dockerfile.cpu`
+IMAGE before deploying** — not just against the ambient local environment, and not just against
+`uv sync --frozen` in isolation (that closes the version-skew gap but not OS/container-specific
+behavior). Minimum bar:
+1. `docker build -f infra/Dockerfile.cpu -t fashion-rec:test .`
+2. Run the container with brand data bind-mounted (or GCS-synced), confirm clean startup
+3. Hit the affected endpoint(s) over real HTTP inside that container and confirm correct behavior
+4. Only then push/deploy
+
+Local `pytest` + ambient-env manual testing remains necessary (fast iteration) but is NOT
+sufficient sign-off for a serving-path dependency change. This applies to: new PyPI packages,
+version bumps on existing packages already imported at serving time, new model weights loaded at
+runtime, or any change to `infra/Dockerfile.cpu` itself.
+
+---
+
 ## What's Done
 
 | Component | Status | Evidence |
@@ -1064,9 +1097,9 @@ Decision made: migrate `/visual-search` and `/style-search` from open_clip CLIP 
   open_clip CLIP ViT-B/32 encoder.
 - **Two-tower personalization model confirmed untouched** by this migration — re-verified via
   grep (no imports of `app/visual.py` or `FashionCLIPEncoder` in `app/api/routes.py`,
-  `app/ingestion/pipeline.py`, or `scripts/01_build_embeddings.py`) and diff (`item_emb.npy`,
-  `active.faiss`, and the two-tower model weights are byte-identical pre/post migration). No
-  two-tower retrain triggered by this change, consistent with the Phase 9 scope note above.
+  `app/ingestion/pipeline.py`, or `scripts/01_build_embeddings.py`). No two-tower retrain
+  triggered by this change, consistent with the Phase 9 scope note above. **Locked with a
+  live diff before merge — see "Two-tower byte-identical proof" below.**
 - **RSS delta measured for the serving container**: loading `FashionCLIPEncoder` alongside the
   existing two-tower model adds **589.8 MB** resident memory — 15% of the 4Gi Cloud Run ceiling.
   Comfortable headroom; not a reason to defer.
@@ -1130,10 +1163,62 @@ snitch, n=40, seed=42 — identical methodology to the existing 67.5% baseline i
 was depressed by the rerank's "infer category from rank-1 hit" step cascading a wrong category
 guess into the reranked result when rank-1 itself was miscategorized (a raw-CLIP retrieval
 failure mode). FashionCLIP's better rank-1 accuracy fixes the cascade, not just the top-5 set.
-Note: 92.5% happens to numerically match the old *raw-FAISS-without-rerank* number documented in
-[[project_known_minor_issues]] as an "eval flaw" — that is coincidence, not the same measurement
-resurfacing; this number is the full serve path (FAISS-100 + reranker, local/HTTP gap confirmed
-0%), the old 92.5% was raw FAISS only. **Use 92.5% for style-search pitch material going
-forward; 67.5% is now superseded.**
+
+**⚠ Disambiguation — two different 92.5% numbers exist in this project's history, do not
+conflate them:**
+- **OLD 92.5%** (CLIP era, ~pre-2026-06-20): raw FAISS top-5, **no reranker**, measured
+  offline. This number was an **eval flaw** — it never reflected what the live API returns,
+  because the live `/style-search` route always applies the reranker. It was explicitly
+  rejected as a pitch number for exactly this reason (see [[project_known_minor_issues]]).
+- **NEW 92.5%** (FashionCLIP era, measured 2026-07-07): the **full serve path**
+  (`scripts/eval_serve_path.py`: FAISS-100 → infer category from rank-1 → reranker → top-5),
+  measured **both locally and over live HTTP against the deployed revision
+  `fashion-recommender-staging-00040-sw8`**, with a confirmed **0% gap** between the two. This
+  is the number a buyer's data scientist would reproduce by calling the live API directly —
+  that reproducibility over HTTP against a real, currently-running revision is exactly what
+  makes it defensible, unlike the old number.
+
+**Use 92.5% (the new, serve-path, HTTP-verified number) for style-search pitch material going
+forward. The old 92.5% and the superseded 67.5% are both retired — never cite either.**
+
+### Two-tower byte-identical proof (locked before merge, 2026-07-07)
+
+Requested pre-merge gate: prove `/recommend`, `/similar`, `/complete` are unaffected — not
+just "should be unaffected by design," an actual diff or eval.
+
+**1. Structural proof — full branch diff vs `main`:**
+```
+PROJECT_MEMORY.md, app/visual.py, brands/*.yaml, infra/Dockerfile.cpu, pyproject.toml,
+scripts/build_visual_index_fashionclip.py, scripts/eval_serve_path.py,
+scripts/eval_visual_search_ab.py, src/encoders/fashion_clip_encoder.py, tests/test_eval_visual_search_ab.py,
+tests/test_visual.py, tests/test_visual_search_fashionclip_serve_path.py,
+tests/test_visual_search_self_retrieval.py, uv.lock
+```
+16 files touched across all 3 commits, **zero of them** are `app/api/routes.py`,
+`app/brands/registry.py`, `app/rerank.py`, `app/complete.py`, or anything under `src/models/` —
+the entire two-tower serving path. This isn't "we didn't mean to touch it," it's "the diff
+proves we didn't."
+
+**2. Runtime proof — live HTTP diff, pre-migration vs post-migration revision, same service:**
+Tagged the pre-migration revision (`fashion-recommender-staging-00038-qf6`) with
+`gcloud run services update-traffic --set-tags` — this creates a stable direct URL
+(`https://premigration---...run.app`) **without shifting any live traffic** (tag traffic stays
+at 0%, `00040-sw8` keeps 100%). Called `/similar`, `/recommend`, `/complete` with identical
+inputs against both the tagged old revision and the live new revision, one brand/item per
+snitch/fashor/powerlook:
+
+| Brand | Endpoint | Result |
+|---|---|---|
+| snitch (item 2) | `/similar`, `/recommend`, `/complete` | byte-identical item_ids + full-precision scores |
+| fashor (item 5) | `/similar`, `/recommend`, `/complete` | byte-identical (both `/complete` responses correctly empty — disabled by design) |
+| powerlook (item 10) | `/similar`, `/recommend`, `/complete` | byte-identical item_ids + full-precision scores |
+
+9/9 comparisons matched exactly (e.g. snitch `/similar` score `0.854292631149292` to the full
+float64 repr, identical on both revisions). Tag removed after the check (`--remove-tags`) —
+traffic config is back to clean 100%-to-latest, no residual state left behind.
+
+**Verdict: /recommend, /similar, /complete are provably byte-identical pre/post migration** —
+by structural diff (the code that produces them was never touched) and by runtime diff (the
+outputs they produce weren't either). Safe to merge on this point.
 
 | Secret stored with CRLF → three deploys to get Groq live | PowerShell pipe adds `\r\n`; fixed by writing key to temp file via `[System.IO.File]::WriteAllText` (ASCII, no newline) before `--data-file`. Future secret updates must use this pattern. |
