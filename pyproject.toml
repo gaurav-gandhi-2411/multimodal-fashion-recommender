@@ -31,7 +31,7 @@ dependencies = [
 [project.optional-dependencies]
 ml = [
     "torchvision>=0.19.0",
-    "transformers>=4.44.0",
+    "transformers>=4.44.0,<5.0.0",
     "sentence-transformers>=3.0.0",
     "open-clip-torch>=2.24.0",
     "scikit-learn>=1.4.0",
