@@ -82,6 +82,7 @@ export default function HomePage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Search failed");
         setResults(data.results ?? []);
+        setMatchConfidence(data.match_confidence ?? null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong");
       } finally {
@@ -203,7 +204,7 @@ export default function HomePage() {
                 Find Your Style
               </h1>
               <p className="text-sm text-zinc-500 mt-1">
-                {brandMeta.tagline} · Search by photo or describe what you&apos;re looking for
+                Search by photo or describe what you&apos;re looking for
               </p>
             </div>
             <div className="flex gap-4 text-xs text-zinc-400 hidden md:flex">
@@ -217,6 +218,13 @@ export default function HomePage() {
                 <Layers size={13} /> Outfit Builder
               </span>
             </div>
+          </div>
+
+          {/* Catalog scope — always visible so a shopper doesn't upload e.g. a men's tee
+              to a women's-only catalog expecting menswear back. */}
+          <div className="flex items-center gap-1.5 mb-4 px-3 py-1.5 bg-zinc-100 rounded-lg w-fit text-xs text-zinc-600">
+            <span className="font-semibold text-zinc-800">{brandMeta.label} carries:</span>
+            {brandMeta.tagline}
           </div>
 
           {/* Search mode toggle */}
@@ -335,6 +343,13 @@ export default function HomePage() {
                           <p className="text-sm text-zinc-500 mt-1">
                             Sorted by visual similarity · Click any item to see similar styles and outfit ideas
                           </p>
+                          {matchConfidence !== null && (
+                            <p className={`text-xs font-medium mt-2 ${matchConfidence >= 0.04 ? "text-emerald-600" : "text-amber-500"}`}>
+                              {matchConfidence >= 0.04
+                                ? `Strong catalog match (confidence ${matchConfidence.toFixed(3)})`
+                                : `Low catalog match (confidence ${matchConfidence.toFixed(3)}) — ${brandMeta.label} catalog may lack this style`}
+                            </p>
+                          )}
                         </div>
                       ) : error ? (
                         <p className="text-sm text-red-600">{error}</p>

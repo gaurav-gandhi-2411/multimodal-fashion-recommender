@@ -59,6 +59,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   return NextResponse.json({
     results: enriched,
     request_id: data.request_id,
-    match_quality: data.match_quality ?? "ok",
+    match_confidence: data.match_confidence ?? 0,
   });
 }
