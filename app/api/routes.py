@@ -302,8 +302,9 @@ async def recommend(
             elif was_cached is False:
                 cache_misses += 1
                 EXPLANATION_CACHE_MISSES.labels(brand=brand).inc()
+        pdp_url: str | None = meta.get("pdp_url") or None
         results.append(
-            RecommendedItem(item_id=str(art_id), score=score, explanation=explanation)
+            RecommendedItem(item_id=str(art_id), score=score, explanation=explanation, pdp_url=pdp_url)
         )
 
     latency_ms = (time.perf_counter() - t0) * 1000
@@ -399,7 +400,15 @@ async def similar(
     else:
         candidates = candidates[:k_eff]
 
-    results = [RecommendedItem(item_id=str(aid), score=score) for aid, score in candidates]
+    results = []
+    for aid, score in candidates:
+        try:
+            aid_int = int(aid)
+        except (ValueError, TypeError):
+            aid_int = aid  # type: ignore[assignment]
+        meta = state.art_map.get(aid_int, {})
+        pdp_url: str | None = meta.get("pdp_url") or None
+        results.append(RecommendedItem(item_id=str(aid), score=score, pdp_url=pdp_url))
 
     latency_ms = (time.perf_counter() - t0) * 1000
     log.info(
