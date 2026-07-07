@@ -12,6 +12,23 @@ type SearchMode = "image" | "text";
 
 const BRANDS: Brand[] = ["snitch", "fashor", "powerlook"];
 
+// IMAGE search only — match_confidence is top-1 minus min(top-k) CLIP *image-image*
+// cosine score. Calibrated 2026-07-07 against the live index across all 3 brands
+// (45 real catalog self-matches + cross-brand/OOD queries):
+//   genuine self-match floor:  0.0372 (snitch/fashor; powerlook floor 0.0543)
+//   OOD / cross-brand ceiling: 0.030  (scripts/calibrate_match_confidence.py: 0.014-0.030)
+// 0.033 sits in that gap. The previous 0.04 clipped ~4/45 genuine self-matches as "low
+// confidence" (e.g. snitch aid 571/1008/833 at 0.037-0.038, fashor aid 3011 at 0.0385).
+//
+// NOT used for style-search (text): audited 24 genuine catalog-title queries + 9
+// deliberately-mismatched queries across all 3 brands and the two distributions
+// overlap completely (genuine max 0.031, mismatched max 0.031, mismatched queries
+// scored HIGHER than genuine ones in 2/3 brands). Text-mode CLIP text-image cosine is
+// not on the same scale as image-image cosine and this signal does not separate good
+// from bad text queries at all — do not gate or label text results on it until a
+// text-specific calibration exists.
+const IMAGE_LOW_CONFIDENCE_THRESHOLD = 0.033;
+
 // Extract average color from an image as a 6-digit hex string.
 // Uses a 16×16 canvas sample — fast and native, no server round-trip needed.
 function extractDominantColor(file: File): Promise<string> {
@@ -82,6 +99,7 @@ export default function HomePage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Search failed");
         setResults(data.results ?? []);
+        setMatchConfidence(data.match_confidence ?? null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong");
       } finally {
@@ -161,6 +179,10 @@ export default function HomePage() {
   };
 
   const brandMeta = BRAND_META[brand];
+  // Only image search has a validated confidence signal (see calibration note above) —
+  // text/style search never gates or labels results on matchConfidence.
+  const isLowConfidence =
+    searchMode === "image" && matchConfidence !== null && matchConfidence < IMAGE_LOW_CONFIDENCE_THRESHOLD;
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -203,7 +225,7 @@ export default function HomePage() {
                 Find Your Style
               </h1>
               <p className="text-sm text-zinc-500 mt-1">
-                {brandMeta.tagline} · Search by photo or describe what you&apos;re looking for
+                Search by photo or describe what you&apos;re looking for
               </p>
             </div>
             <div className="flex gap-4 text-xs text-zinc-400 hidden md:flex">
@@ -217,6 +239,13 @@ export default function HomePage() {
                 <Layers size={13} /> Outfit Builder
               </span>
             </div>
+          </div>
+
+          {/* Catalog scope — always visible so a shopper doesn't upload e.g. a men's tee
+              to a women's-only catalog expecting menswear back. */}
+          <div className="flex items-center gap-1.5 mb-4 px-3 py-1.5 bg-zinc-100 rounded-lg w-fit text-xs text-zinc-600">
+            <span className="font-semibold text-zinc-800">{brandMeta.label} carries:</span>
+            {brandMeta.tagline}
           </div>
 
           {/* Search mode toggle */}
@@ -267,16 +296,13 @@ export default function HomePage() {
                 </button>
               </form>
 
-              {/* Status / confidence indicator */}
+              {/* Status indicator — no confidence verdict here: audited 2026-07-07 and
+                  match_confidence does not separate good from bad text queries (see
+                  calibration note above). Showing a "Low match" claim here would be
+                  actively misleading, not just uninformative. */}
               <div className="mt-3 min-h-5">
                 {searching ? (
                   <p className="text-xs text-zinc-400">Searching {brandMeta.label} catalog…</p>
-                ) : matchConfidence !== null && results.length > 0 ? (
-                  <p className={`text-xs font-medium ${matchConfidence >= 0.04 ? "text-emerald-600" : "text-amber-500"}`}>
-                    {matchConfidence >= 0.04
-                      ? `Strong catalog match (confidence ${matchConfidence.toFixed(3)})`
-                      : `Low catalog match (confidence ${matchConfidence.toFixed(3)}) — catalog may lack this style`}
-                  </p>
                 ) : error ? (
                   <p className="text-xs text-red-500">{error}</p>
                 ) : null}
@@ -329,12 +355,25 @@ export default function HomePage() {
                         </div>
                       ) : results.length > 0 ? (
                         <div>
-                          <p className="font-semibold text-zinc-900">
-                            {results.length} matches found
-                          </p>
-                          <p className="text-sm text-zinc-500 mt-1">
-                            Sorted by visual similarity · Click any item to see similar styles and outfit ideas
-                          </p>
+                          {isLowConfidence ? (
+                            <p className="font-semibold text-zinc-900">No strong match found</p>
+                          ) : (
+                            <>
+                              <p className="font-semibold text-zinc-900">
+                                {results.length} matches found
+                              </p>
+                              <p className="text-sm text-zinc-500 mt-1">
+                                Sorted by visual similarity · Click any item to see similar styles and outfit ideas
+                              </p>
+                            </>
+                          )}
+                          {matchConfidence !== null && (
+                            <p className={`text-xs font-medium mt-2 ${isLowConfidence ? "text-amber-500" : "text-emerald-600"}`}>
+                              {isLowConfidence
+                                ? `Low catalog match (confidence ${matchConfidence.toFixed(3)}) — ${brandMeta.label} catalog may lack this style`
+                                : `Strong catalog match (confidence ${matchConfidence.toFixed(3)})`}
+                            </p>
+                          )}
                         </div>
                       ) : error ? (
                         <p className="text-sm text-red-600">{error}</p>
@@ -388,8 +427,30 @@ export default function HomePage() {
           </section>
         )}
 
+        {/* Low-confidence empty state (image search only — see calibration note above).
+            A low match_confidence means no catalog item stands out from the pool;
+            showing those marginal results reads as a broken model. Treat it as a
+            deliberate, labeled outcome instead. */}
+        {results.length > 0 && !searching && isLowConfidence && (
+          <div className="mt-4 py-12 text-center">
+            <p className="text-sm font-semibold text-zinc-700">
+              No strong matches in {brandMeta.label}&apos;s catalog
+            </p>
+            <p className="text-xs text-zinc-400 mt-1 max-w-md mx-auto">
+              {brandMeta.label} carries {brandMeta.tagline}. This photo doesn&apos;t closely match
+              anything in stock — try a different brand tab, or describe what you&apos;re looking for instead.
+            </p>
+            <button
+              onClick={() => onModeChange("text")}
+              className="mt-4 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 text-white hover:bg-zinc-700 transition-colors"
+            >
+              Switch to Style Search
+            </button>
+          </div>
+        )}
+
         {/* Results grid */}
-        {results.length > 0 && !searching && (
+        {results.length > 0 && !searching && !isLowConfidence && (
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-zinc-900 text-sm">
