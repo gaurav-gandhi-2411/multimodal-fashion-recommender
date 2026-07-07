@@ -12,6 +12,25 @@ type SearchMode = "image" | "text";
 
 const BRANDS: Brand[] = ["snitch", "fashor", "powerlook"];
 
+// Below this, the top-k CLIP scores are tightly clustered — no catalog item stands out.
+// Matches the calibration in scripts/calibrate_match_confidence.py (catalog self-matches
+// score 0.07-0.09+; OOD/out-of-catalog fashion scores 0.014-0.030).
+const LOW_CONFIDENCE_THRESHOLD = 0.04;
+
+// Cheap, client-side "might this brand fit?" signal for text queries — no extra API call.
+// Deliberately coarse (keyword containment); false positives just add an extra button,
+// false negatives just omit one. Never used to block or auto-redirect a search.
+const BRAND_KEYWORDS: Record<Brand, string[]> = {
+  snitch: ["shirt", "t-shirt", "tshirt", "tee", "jean", "jacket", "hoodie", "sweater", "cargo", "overshirt", "polo", "men"],
+  fashor: ["kurta", "kurti", "ethnic", "saree", "dress", "co-ord", "coord", "tunic", "fusion", "women"],
+  powerlook: ["shirt", "t-shirt", "tshirt", "tee", "vest", "track", "denim", "men"],
+};
+
+function suggestBrands(query: string, exclude: Brand): Brand[] {
+  const q = query.toLowerCase();
+  return BRANDS.filter((b) => b !== exclude && BRAND_KEYWORDS[b].some((kw) => q.includes(kw)));
+}
+
 // Extract average color from an image as a 6-digit hex string.
 // Uses a 16×16 canvas sample — fast and native, no server round-trip needed.
 function extractDominantColor(file: File): Promise<string> {
@@ -162,6 +181,8 @@ export default function HomePage() {
   };
 
   const brandMeta = BRAND_META[brand];
+  const isLowConfidence = matchConfidence !== null && matchConfidence < LOW_CONFIDENCE_THRESHOLD;
+  const suggestedBrands = searchMode === "text" ? suggestBrands(textQuery, brand) : [];
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -280,10 +301,10 @@ export default function HomePage() {
                 {searching ? (
                   <p className="text-xs text-zinc-400">Searching {brandMeta.label} catalog…</p>
                 ) : matchConfidence !== null && results.length > 0 ? (
-                  <p className={`text-xs font-medium ${matchConfidence >= 0.04 ? "text-emerald-600" : "text-amber-500"}`}>
-                    {matchConfidence >= 0.04
-                      ? `Strong catalog match (confidence ${matchConfidence.toFixed(3)})`
-                      : `Low catalog match (confidence ${matchConfidence.toFixed(3)}) — catalog may lack this style`}
+                  <p className={`text-xs font-medium ${isLowConfidence ? "text-amber-500" : "text-emerald-600"}`}>
+                    {isLowConfidence
+                      ? `Low catalog match (confidence ${matchConfidence.toFixed(3)}) — catalog may lack this style`
+                      : `Strong catalog match (confidence ${matchConfidence.toFixed(3)})`}
                   </p>
                 ) : error ? (
                   <p className="text-xs text-red-500">{error}</p>
@@ -337,17 +358,23 @@ export default function HomePage() {
                         </div>
                       ) : results.length > 0 ? (
                         <div>
-                          <p className="font-semibold text-zinc-900">
-                            {results.length} matches found
-                          </p>
-                          <p className="text-sm text-zinc-500 mt-1">
-                            Sorted by visual similarity · Click any item to see similar styles and outfit ideas
-                          </p>
+                          {isLowConfidence ? (
+                            <p className="font-semibold text-zinc-900">No strong match found</p>
+                          ) : (
+                            <>
+                              <p className="font-semibold text-zinc-900">
+                                {results.length} matches found
+                              </p>
+                              <p className="text-sm text-zinc-500 mt-1">
+                                Sorted by visual similarity · Click any item to see similar styles and outfit ideas
+                              </p>
+                            </>
+                          )}
                           {matchConfidence !== null && (
-                            <p className={`text-xs font-medium mt-2 ${matchConfidence >= 0.04 ? "text-emerald-600" : "text-amber-500"}`}>
-                              {matchConfidence >= 0.04
-                                ? `Strong catalog match (confidence ${matchConfidence.toFixed(3)})`
-                                : `Low catalog match (confidence ${matchConfidence.toFixed(3)}) — ${brandMeta.label} catalog may lack this style`}
+                            <p className={`text-xs font-medium mt-2 ${isLowConfidence ? "text-amber-500" : "text-emerald-600"}`}>
+                              {isLowConfidence
+                                ? `Low catalog match (confidence ${matchConfidence.toFixed(3)}) — ${brandMeta.label} catalog may lack this style`
+                                : `Strong catalog match (confidence ${matchConfidence.toFixed(3)})`}
                             </p>
                           )}
                         </div>
@@ -403,8 +430,36 @@ export default function HomePage() {
           </section>
         )}
 
+        {/* Low-confidence empty state — a low match_confidence means no catalog item
+            stands out from the pool; showing those marginal results reads as a broken
+            model. Treat it as a deliberate, labeled outcome instead. */}
+        {results.length > 0 && !searching && isLowConfidence && (
+          <div className="mt-4 py-12 text-center">
+            <p className="text-sm font-semibold text-zinc-700">
+              No strong matches in {brandMeta.label}&apos;s catalog
+            </p>
+            <p className="text-xs text-zinc-400 mt-1 max-w-md mx-auto">
+              {brandMeta.label} carries {brandMeta.tagline}. This {searchMode === "text" ? "description" : "photo"} doesn&apos;t
+              closely match anything in stock — try a different brand or search.
+            </p>
+            {suggestedBrands.length > 0 && (
+              <div className="flex gap-2 justify-center flex-wrap mt-4">
+                {suggestedBrands.map((b) => (
+                  <button
+                    key={b}
+                    onClick={() => { setBrand(b); runTextSearch(textQuery, b); }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 text-white hover:bg-zinc-700 transition-colors"
+                  >
+                    Try {BRAND_META[b].label} ({BRAND_META[b].tagline})
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Results grid */}
-        {results.length > 0 && !searching && (
+        {results.length > 0 && !searching && !isLowConfidence && (
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-zinc-900 text-sm">
