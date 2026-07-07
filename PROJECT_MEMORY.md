@@ -554,6 +554,7 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | Phase 8 (A/B) | Champion-Challenger + Online Learning | — | — |
 | **Phase 9 (FashionCLIP)** | **Visual-search encoder A/B + migration; LIVE on staging (rev 00040-sw8)** | 🟢 Complete | 2026-07-07 |
 | **Phase 10 (Round 3 hardening)** | **7 audit-finding PRs merged + LIVE on both platforms (Cloud Run rev 00041-ghc, Vercel prod)** | 🟢 Complete | 2026-07-07 |
+| **Phase 11 (catalog attributes)** | **Zero-shot FashionCLIP color/pattern/fabric/occasion tagging — color validated, other 3 flagged experimental** | 🟡 DRAFT PR #38, not deployed | 2026-07-07 |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
 - [x] Popularity baseline numbers confirmed on temporal test split, active pool AND full pool
@@ -1307,3 +1308,88 @@ original "do not fix without user sign-off" annotation — not touched in this p
 annotation still holds.
 
 | Secret stored with CRLF → three deploys to get Groq live | PowerShell pipe adds `\r\n`; fixed by writing key to temp file via `[System.IO.File]::WriteAllText` (ASCII, no newline) before `--data-file`. Future secret updates must use this pattern. |
+
+---
+
+## Phase 11 — Catalog Attribute Extraction (built 2026-07-07, DRAFT PR #38, not deployed)
+
+**Trigger:** Track 2 of an applied-AI feature assessment (3 candidates scored: attribute
+extraction, learned outfit-compatibility, multi-item "shop the look" detector). Attribute
+extraction won on lowest effort/zero new dependency (reuses the FashionCLIP encoder + the
+`visual_fashionclip.faiss` embeddings already computed in Phase 9), a confirmed real gap (none
+of the 3 Indian catalogs have ANY structured attribute fields — title/description/category/
+price/urls/image only), and a distinct catalog-ops product surface from the recommendation core.
+
+### What it is
+Zero-shot classification: for each catalog item, compare its FashionCLIP image embedding
+(reconstructed from the existing `visual_fashionclip.faiss` index — **no re-encoding**) against
+prompt-formatted text embeddings for each label in 4 taxonomies, cosine similarity, argmax +
+score-gap confidence (same convention as `match_confidence` on `/visual-search`). Taxonomies:
+- `color` (16 labels), `pattern` (12), `fabric` (13) — general fashion vocab
+- `occasion` (5) — **deliberately reuses `app/occasion.py`'s exact canonical set**
+  (casual/festive/formal/vacation/party), not a new vocabulary, so the two occasion signals
+  (visual vs. the existing production text-lexicon tagger) are directly comparable.
+
+New `GET /v1/{brand}/item/{item_id}/attributes` serves precomputed tags from
+`data/{brand}/attributes.json` (batch-computed via `scripts/extract_attributes.py`, zero live
+model inference at serve time — same offline-compute-then-serve pattern as `item_emb.npy`).
+Purely additive: `/recommend`, `/similar`, `/complete`, and the two-tower loading path are
+byte-identical to pre-PR `main` (verified via `git diff`).
+
+### Honest eval — read before trusting any tag (the whole point of this exercise)
+
+Two independent passes, both automated/reproducible, not a single feel-good number:
+
+**Text cross-validation** (`scripts/eval_attributes.py`, full catalog, keyword-match against
+title/description for color/pattern/fabric; set-membership against `app/occasion.py::tag_occasions()`
+for occasion, with an explicit majority-class-baseline comparison):
+
+| Attribute | Pooled accuracy | Coverage | Verdict |
+|---|---|---|---|
+| Color | 64.6% | 70.0% | Best of the 4 |
+| Pattern | 49.5% | 16.9% (thin) | Moderate, weak evidence base |
+| Fabric | 19.7% | 74.8% | Barely above random (13-label taxonomy, ~7.7% chance) |
+| Occasion | 74.4% pooled, but **worse than majority-class baseline** for snitch (-3.3pp) and powerlook (-3.5pp); fashor only +2.4pp | 70.9% | Fails the bar that matters — beating a trivial baseline |
+
+Confidence score does **not** separate correct from incorrect predictions for any attribute
+(`conf[correct] ≈ conf[incorrect]` everywhere, sometimes inverted) — not usable as a per-item
+trust filter.
+
+**Manual visual spot-check** (I directly viewed 20 real catalog images — 8 snitch, 6 fashor, 6
+powerlook — via the Read tool and judged each of the 4 predicted tags against a fixed rubric,
+not delegated): confirms the same ranking.
+- **Color** strongest (~90% in-sample). One real, diagnostically useful failure mode: accessory
+  items shot as part of a full outfit (a "Black Dress Belt" photographed on a model in a beige
+  sweater) get tagged with the *outfit's* dominant color, not the product's — the global image
+  embedding gets swamped by the larger garment in frame. Worth a caveat for accessory categories
+  specifically if this ships broadly.
+- **Pattern** moderate, brand-variable (Powerlook ~92% in-sample vs. Snitch/Fashor ~58-62%) —
+  model over-predicts "fancier" labels (embroidered, geometric) on what are actually plain
+  textures or flat prints.
+- **Fabric**: real, clear errors even on visually obvious cases — predicted "leather" for a woven
+  cotton shirt; predicted "linen" for two items explicitly titled "Denim" and "Cotton Crepe" in
+  their own catalog data. Also a genuine methodological ceiling, not purely a model failure —
+  fabric composition frequently isn't visually inferable from a product photo at all.
+- **Occasion**: surface-level visual agreement (~82.5%) does **not** rebut the text-eval's
+  majority-baseline finding — it mostly reflects that casual items get correctly tagged casual,
+  which a trivial "always guess casual" baseline achieves too. No real discriminative power
+  demonstrated.
+
+### Verdict — baked into the shipped code, not just this doc
+`app/attributes.py::ATTRIBUTE_RELIABILITY = {"color": "validated", "pattern": "experimental",
+"fabric": "experimental", "occasion": "experimental"}`, wired into every API response
+(`ItemAttributesResponse.reliability`) and the batch script's printed output. Structurally
+impossible for a consumer to see a tag without also seeing its trust tier — matches the explicit
+ask to flag unreliable attributes, not silently include them as equally trustworthy.
+`tests/test_attributes_serve_path.py` pins these tiers as a regression guard (real TestClient,
+real catalog data) against someone quietly relabeling an unvalidated attribute as trustworthy
+later.
+
+### Status
+DRAFT PR #38, 302 tests pass (1 pre-existing unrelated failure), ruff clean. **Not deployed** —
+this task's deliverable was build + DRAFT PR, not a live ship; no Docker build or Cloud Run
+trigger was run. If this ships: container-verify per the Deploy Verification Standard first
+(new serving-path behavior via the existing FashionCLIP encoder, same class of risk as Phase 9),
+and consider whether fabric/occasion should be withheld from the response entirely rather than
+returned-but-flagged, given how far below a usable bar they are — that's a product call, not
+purely an engineering one, worth surfacing explicitly before merge.
