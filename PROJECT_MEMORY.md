@@ -553,6 +553,7 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | **Phase 7 (LIVE + ranking features)** | **Deploy LIVE (Cloud Run); diversity #6, complete-the-look #7, occasion #10, visual-search #12; Groq explanations live** | 🟢 Complete | 2026-06-14 |
 | Phase 8 (A/B) | Champion-Challenger + Online Learning | — | — |
 | **Phase 9 (FashionCLIP)** | **Visual-search encoder A/B + migration; LIVE on staging (rev 00040-sw8)** | 🟢 Complete | 2026-07-07 |
+| **Phase 10 (Round 3 hardening)** | **7 audit-finding PRs merged to `main`; deploy pending user go-ahead** | 🟡 Merged, not yet deployed | 2026-07-07 |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
 - [x] Popularity baseline numbers confirmed on temporal test split, active pool AND full pool
@@ -1220,5 +1221,70 @@ traffic config is back to clean 100%-to-latest, no residual state left behind.
 **Verdict: /recommend, /similar, /complete are provably byte-identical pre/post migration** —
 by structural diff (the code that produces them was never touched) and by runtime diff (the
 outputs they produce weren't either). Safe to merge on this point.
+
+---
+
+## Phase 10 — Round 3 Hardening (audit findings, merged 2026-07-07)
+
+Autonomous run (orchestrator + executor/verifier subagents, no check-ins for routine work per
+explicit instruction). Cleared the backlog of open DRAFT PRs from the same "full end-to-end
+audit" session that originally found the shirt/tee gap (Phase 9's trigger), plus one new fix.
+
+### Merged (7 PRs, all squash-merged to `main`, branches deleted)
+
+| PR | Commit | What |
+|---|---|---|
+| #30 | `425e19d` | `docs(eval)`: Shirt/T-Shirt rerank fix — negative result. Documents that extending category-affinity rerank (not swapping the embedding model) does NOT fix the shirt/tee gap: zero effect on the failing query at any bonus level, and the max-bonus config regressed a clean self-match sample 100%→96%. This negative result is what justified the Phase 9 FashionCLIP A/B — docs/eval-script only, zero functional change. |
+| #28 | `b8da07c` | `fix(demo)`: surface `match_confidence` in image-search UI + catalog scope badge. Root cause of a reported "bad recommendations" complaint (men's tee → Fashor returns kurtis) was NOT a model bug — Fashor's catalog has zero menswear, so there's no correct answer, and `match_confidence` correctly fired low (0.0146, noise range). The actual bug: the confidence signal never reached the UI for image uploads (stale `match_quality` field, never wired up). Demo-only, no backend change. |
+| #32 | `1e473a9` | `fix(demo)`: `/phase2` claimed live per-request inference; data is a static snapshot (`phase2_users.json`, captured 2026-06-19, `h_and_m` isn't in the 3-brand live deployment so it couldn't be live even if it tried). Copy-only fix — reworded to "point-in-time snapshot." Flagged (not fixed) that `demo/app/api/personalized/route.ts` is dead code — see item #7 decision below. |
+| #33 | `71ca773` | `fix(demo)`: proxy routes leaked raw backend JSON (`{"detail":"..."}`) as the UI error message instead of a clean sentence. New `demo/lib/backend-error.ts::formatBackendError()` parses FastAPI's error shape (plain string or pydantic validation array), applied to all 4 active result-producing proxy routes. |
+| #29 | `b47e37b` | `fix(catalog)`: all 1803 Snitch PDP links 404'd live — the earlier co.in→com domain migration (#16) did a bare string replace and never added `www.` (snitch.com only redirects bare-domain→www at the root, not on `/products/*`). Fixed the source template + a one-off migration script + demo proxy routes now prefer the demo's own catalog snapshot over the backend field (matches `/similar`'s existing pattern). **Backend catalog fix is NOT live** — needs GCS re-upload of the fixed `data/snitch/items.parquet` + Cloud Run redeploy; deliberately not done autonomously, see Deploy status below. |
+| #31 | `cd8d18c` | `fix(api)`: `/recommend` and `/similar` never populated `pdp_url` (only `/visual-search`, `/style-search`, `/complete` did). Real gap for any API client integrating those two endpoints directly — the core "shop-the-look" business use case. Additive field population, no schema change. **Not live** — needs Cloud Run redeploy, see Deploy status below. |
+| #35 | `10961fc` | `fix(demo)`: mobile nav crowding at <375px (audit item #8). Confirmed real by layout-math investigation (min content width ~402px vs ~343px available), then fixed and **visually verified with a real headless-browser render** (Playwright, 375×800 viewport) — not just code review. `demo/app/page.tsx` only; `phase2/page.tsx`'s similar-looking nav doesn't have the problem (short right-hand content) and was left alone. |
+
+270 tests pass on merged `main` (269 + the pre-existing unrelated `test_dataset_getitem_keys_and_shapes` failure), `npx tsc --noEmit` + `npm run build` clean on the demo.
+
+### Item #7 decision: dead `personalized` proxy route — leave as scaffolding
+
+`demo/app/api/personalized/route.ts` calls `/v1/h_and_m/recommend` and is never invoked from any
+UI surface (confirmed by #32's investigation). It would fail if invoked today: no
+`FASHION_API_KEY_H_AND_M` configured on Vercel, and the live Cloud Run backend doesn't serve
+`h_and_m` (excluded from the 3-brand deployment per the Phase 7 decision — H&M is the
+eval/training brand, not a sellable tenant). **Decision: leave in place, do not delete.** It's
+plausible groundwork for a future live H&M personalization demo, costs nothing sitting unused,
+and deleting speculative scaffolding isn't this task's call to make unilaterally. Documented here
+so a future session doesn't have to re-discover this from scratch.
+
+### Deploy status — merged, NOT yet live (deliberate)
+
+This session's instructions explicitly listed "deploy" as an escalation category (autonomous for
+everything else). Two deploy actions are ready and pending user go-ahead, NOT executed:
+
+1. **Vercel (demo) production deploy** — 5 of the 7 merged PRs touch `demo/`. Discovered
+   mid-session that this Vercel project has **no GitHub auto-deploy integration** (`vercel git`
+   shows disconnected) — deploys are manual `vercel deploy --prod` from `demo/`, unlike this
+   project's Cloud Run backend which at least has a workflow_dispatch trigger. So "merged to
+   main" does NOT mean live for the demo either — same "merged==live must be proven, not
+   assumed" discipline applies here, not just to the backend.
+2. **Cloud Run (backend) redeploy** — PR #31 (`pdp_url` in `/recommend`/`/similar`) is
+   code-complete but inert until redeployed. PR #29's backend half (fixed
+   `data/snitch/items.parquet`) additionally needs a GCS asset re-upload BEFORE that redeploy,
+   per the standing GCS-before-deploy lesson (Phase 7's colors.json 404 precedent) — the fixed
+   parquet is local-only right now.
+
+Both are one-command actions (`vercel deploy --prod` for the demo; the standard
+`gh workflow run "Deploy to Cloud Run" --ref main -f environment=staging` for the backend, after
+the GCS upload) and will get the full container-verification + merged==live proof treatment from
+the Deploy Verification Standard once triggered — just not triggered in this autonomous pass.
+
+### Known-minor-issues memory cleanup
+
+`project_known_minor_issues.md` (external memory, last touched 2026-06-15) had 4 items; 2 are
+now stale/resolved and were updated in that file directly (not just here): `top_k` param ignored
+→ fixed by M4 (`hardening/m1m3m4m5`, merged 2026-06-20); `X-Api-Key` casing → confirmed not
+actually a bug by M5 (Starlette normalises headers). The remaining 2 (`/metrics` 307 redirect,
+Snitch visual-search price-band looseness) are unchanged, still deferred, still carry their
+original "do not fix without user sign-off" annotation — not touched in this pass, that
+annotation still holds.
 
 | Secret stored with CRLF → three deploys to get Groq live | PowerShell pipe adds `\r\n`; fixed by writing key to temp file via `[System.IO.File]::WriteAllText` (ASCII, no newline) before `--data-file`. Future secret updates must use this pattern. |
