@@ -1,8 +1,20 @@
 brand: h_and_m
-display_name: "H&M"
-catalog_path: data/h_and_m/items.parquet
-index_path: indices/h_and_m/active
-transactions_dir: data/h_and_m/transactions
+display_name: "H&M (Public Sandbox)"
+# SANDBOX BRAND — public Kaggle dataset, not a paying client. Exists so a prospect's
+# developer can integrate against real data + real validated personalization (3.06x
+# lift) before their own catalog is onboarded. Read-only, no destructive endpoints
+# exist anywhere in this API. Rate-limited per (IP, brand) via app/api/rate_limit.py's
+# _brand_ip_key -- a shared/public key is inherently self-isolating per caller, no
+# extra tier needed. See PROJECT_MEMORY.md "Tier 1 -- Sandbox key" for the full
+# rationale and QUICKSTART.md for the integration walkthrough.
+#
+# catalog_path/index_path/transactions_dir previously pointed at data/h_and_m/... and
+# indices/h_and_m/... which never existed -- this brand could not have booted before
+# this fix (confirmed: FileNotFoundError on catalog_path at container startup). The
+# real artifacts, built and validated in Phase 0.5, live under data/processed/.
+catalog_path: data/processed/articles.parquet
+index_path: data/processed/faiss_index_active
+transactions_dir: data/processed
 # Train-only history: model was validated on held-out val/test.
 # Loading only train keeps the 3.06x lift number defensible.
 transaction_splits: ["train"]
