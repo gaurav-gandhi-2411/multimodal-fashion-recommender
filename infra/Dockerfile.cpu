@@ -43,17 +43,17 @@ RUN mkdir -p /app/.cache/hf /app/.cache/torch
 
 # ── Bake model weights at build time ─────────────────────────────────────────
 # Cloud Run min-instances=0 means every cold start would otherwise re-download
-# ~350 MB of CLIP weights from the internet on first /visual-search call.
+# ~600 MB of FashionCLIP weights from the internet on first /visual-search call.
 # Baking them into the image layer eliminates that per-cold-start latency hit.
 #
-# open_clip uses HuggingFace Hub for the 'openai' pretrained ViT-B/32 weights;
-# HF_HOME controls where it caches.
+# FashionCLIP (patrickjohncyh/fashion-clip) is loaded via transformers'
+# CLIPModel/CLIPProcessor, which use HuggingFace Hub; HF_HOME controls where it caches.
 #
 # SBERT (all-MiniLM-L6-v2) is intentionally NOT baked: the visual-search route
-# no longer uses SBERT (pure CLIP-512 path). sentence-transformers remains
+# no longer uses SBERT (pure FashionCLIP-512 path). sentence-transformers remains
 # installed via --extra ml in case other tooling needs it, but downloading its
 # weights at image build time would add ~90 MB for zero serving benefit.
-RUN python -c "import open_clip; open_clip.create_model_and_transforms('ViT-B-32', pretrained='openai')"
+RUN python -c "from transformers import CLIPModel, CLIPProcessor; CLIPModel.from_pretrained('patrickjohncyh/fashion-clip'); CLIPProcessor.from_pretrained('patrickjohncyh/fashion-clip')"
 
 # chown /app so the non-root appuser can write GCS-synced brand assets
 # (data/, indices/, checkpoints/) into the working dir at startup.

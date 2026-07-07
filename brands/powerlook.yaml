@@ -3,7 +3,7 @@ display_name: Powerlook
 catalog_path: data/powerlook/items.parquet
 index_path: indices/powerlook/active.faiss
 embeddings_path: indices/powerlook/item_emb.npy
-visual_index_path: indices/powerlook/visual.faiss
+visual_index_path: indices/powerlook/visual_fashionclip.faiss
 color_index_path: data/powerlook/colors.json
 pdp_url_template: null
 api_key_env: POWERLOOK_API_KEY

@@ -348,7 +348,7 @@ def main() -> None:
     parser.add_argument("--api-base", default="https://fashion-recommender-staging-657468372797.asia-south1.run.app")
     parser.add_argument("--api-key", default="snitch-staging-key")
     parser.add_argument("--catalog", default=None, help="Catalog parquet (default: data/{brand}/items.parquet)")
-    parser.add_argument("--index-dir", default=None, help="Visual index dir (default: indices/{brand}/visual.faiss)")
+    parser.add_argument("--index-dir", default=None, help="Visual index dir (default: brand YAML's visual_index_path)")
     parser.add_argument("--delay", type=float, default=1.1,
                         help="Seconds between HTTP requests (default 1.1 — respects 60/min rate limit)")
     args = parser.parse_args()
@@ -367,8 +367,17 @@ def main() -> None:
     import pandas as pd
     from src.retrieval.faiss_index import FaissRetriever
 
+    # Load brand_cfg first so --index-dir's default reflects whatever the brand YAML
+    # actually points at (avoids eval/serve divergence if visual_index_path changes).
+    from app.brands.registry import BrandConfig
+    import yaml as _yaml
+    brand_yaml_path = Path(f"brands/{args.brand}.yaml")
+    with brand_yaml_path.open() as _fh:
+        brand_cfg = BrandConfig.model_validate(_yaml.safe_load(_fh))
+    rerank_cfg = brand_cfg.rerank
+
     catalog_path = args.catalog or f"data/{args.brand}/items.parquet"
-    index_dir = args.index_dir or f"indices/{args.brand}/visual.faiss"
+    index_dir = args.index_dir or brand_cfg.visual_index_path
 
     catalog = pd.read_parquet(catalog_path)
     catalog["article_id"] = catalog["article_id"].astype(int)
@@ -403,13 +412,8 @@ def main() -> None:
     print(f"Sample: {len(eval_rows)} items (seed=42)")
     print()
 
-    # Build art_map (matches API's state.art_map structure) and load rerank config
-    from app.brands.registry import BrandConfig
-    import yaml as _yaml
-    brand_yaml_path = Path(f"brands/{args.brand}.yaml")
-    with brand_yaml_path.open() as _fh:
-        brand_cfg = BrandConfig.model_validate(_yaml.safe_load(_fh))
-    rerank_cfg = brand_cfg.rerank
+    # Build art_map (matches API's state.art_map structure); brand_cfg/rerank_cfg
+    # were already loaded above (reused for the --index-dir default).
     art_map: dict = catalog_indexed.set_index("article_id").to_dict("index")
 
     if run_local:
