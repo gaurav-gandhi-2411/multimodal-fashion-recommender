@@ -235,10 +235,12 @@ export default function Phase2Page() {
                 their test-split behaviour was never seen during training.
               </p>
               <p>
-                Recommendations are fetched live from the same{" "}
-                <code className="bg-blue-100 px-1 rounded">/v1/h_and_m/recommend</code> endpoint your curl
-                hit. In production: swap in your own customer IDs and transaction data — same API, same model
-                architecture.
+                Recommendations shown here are a <strong>point-in-time snapshot</strong> (captured
+                2026-06-19) of real responses from{" "}
+                <code className="bg-blue-100 px-1 rounded">/v1/h_and_m/recommend</code> — not fetched
+                per-request on this page, since H&amp;M isn&apos;t part of the live 3-brand deployment.
+                In production: swap in your own customer IDs and transaction data, called live — same
+                API, same model architecture.
               </p>
             </div>
           </div>
@@ -323,7 +325,7 @@ export default function Phase2Page() {
                   Personalized Recommendations
                 </p>
                 <p className="text-[10px] text-zinc-400 mt-0.5">
-                  Live from /v1/h_and_m/recommend · user tower inference at request time
+                  Snapshot from /v1/h_and_m/recommend, captured 2026-06-19 — see callout above
                 </p>
               </div>
               <button
