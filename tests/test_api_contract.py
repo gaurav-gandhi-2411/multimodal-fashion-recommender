@@ -54,6 +54,24 @@ def test_recommend_result_item_ids_are_strings(api_client):
         assert isinstance(item["item_id"], str)
 
 
+def test_recommend_includes_pdp_url(api_client, mock_art_map):
+    """Regression test: /recommend silently dropped pdp_url for every result even
+    though /visual-search, /style-search, and /complete all populate it from the
+    same art_map (found in the 2026-07-07 audit)."""
+    mock_art_map[222]["pdp_url"] = "https://example.com/products/red-shirt"
+    try:
+        resp = api_client.post(
+            "/v1/test_brand/recommend",
+            json={"item_id": "111", "k": 3},
+            headers={"X-Api-Key": "test-api-key-123"},
+        )
+        results = resp.json()["results"]
+        by_id = {r["item_id"]: r for r in results}
+        assert by_id["222"]["pdp_url"] == "https://example.com/products/red-shirt"
+    finally:
+        del mock_art_map[222]["pdp_url"]
+
+
 def test_recommend_422_when_no_user_or_item(api_client):
     resp = api_client.post(
         "/v1/test_brand/recommend",
@@ -95,6 +113,23 @@ def test_similar_excludes_query_item(api_client):
     )
     result_ids = [r["item_id"] for r in resp.json()["results"]]
     assert "111" not in result_ids
+
+
+def test_similar_includes_pdp_url(api_client, mock_art_map):
+    """Regression test: /similar silently dropped pdp_url for every result even
+    though /visual-search, /style-search, and /complete all populate it from the
+    same art_map (found in the 2026-07-07 audit)."""
+    mock_art_map[222]["pdp_url"] = "https://example.com/products/red-shirt"
+    try:
+        resp = api_client.get(
+            "/v1/test_brand/item/111/similar",
+            headers={"X-Api-Key": "test-api-key-123"},
+        )
+        results = resp.json()["results"]
+        by_id = {r["item_id"]: r for r in results}
+        assert by_id["222"]["pdp_url"] == "https://example.com/products/red-shirt"
+    finally:
+        del mock_art_map[222]["pdp_url"]
 
 
 def test_health_returns_ok(api_client):
