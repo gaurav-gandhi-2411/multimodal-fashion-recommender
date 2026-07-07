@@ -554,7 +554,7 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | Phase 8 (A/B) | Champion-Challenger + Online Learning | — | — |
 | **Phase 9 (FashionCLIP)** | **Visual-search encoder A/B + migration; LIVE on staging (rev 00040-sw8)** | 🟢 Complete | 2026-07-07 |
 | **Phase 10 (Round 3 hardening)** | **7 audit-finding PRs merged + LIVE on both platforms (Cloud Run rev 00041-ghc, Vercel prod)** | 🟢 Complete | 2026-07-07 |
-| **Phase 11 (catalog attributes)** | **Zero-shot FashionCLIP color/pattern/fabric/occasion tagging — color validated, other 3 flagged experimental** | 🟡 DRAFT PR #38, not deployed | 2026-07-07 |
+| **Phase 11 (catalog attributes)** | **Zero-shot FashionCLIP color+pattern tagging LIVE (rev 00042-rbt); fabric/occasion evaluated + withheld (negative result)** | 🟢 Complete | 2026-07-07 |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
 - [x] Popularity baseline numbers confirmed on temporal test split, active pool AND full pool
@@ -1419,5 +1419,21 @@ present-and-flagged assertions) — a regression guard against silently re-addin
 without this decision being explicitly revisited.
 
 ### Status
-Merged and **LIVE** — see the Deploy section immediately below for the container-verification
-and live-verification detail.
+Merged (PR #38, squash commit `535c4da`) and **LIVE** on Cloud Run revision
+**`fashion-recommender-staging-00042-rbt`** (100% traffic).
+
+**Deploy, following the full Deploy Verification Standard:**
+1. GCS preflight: `data/{snitch,fashor,powerlook}/attributes.json` were NOT yet in GCS (checked,
+   confirmed absent) — uploaded all 3 before deploying. Caught exactly the class of gap the
+   standard exists to catch.
+2. Container-verified: built `infra/Dockerfile.cpu` from `main` locally, ran it with real data
+   bind-mounted, hit `GET /v1/snitch/item/1/attributes` inside that container — confirmed the
+   response has exactly `color`/`pattern`/`reliability` with `fabric`/`occasion` genuinely absent
+   (not null) — before touching Cloud Run. Also sanity-checked `/similar` inside the same
+   container to confirm no two-tower regression.
+3. Deployed from `main` HEAD (which was the PR #38 merge commit itself — zero gap between
+   deployed source and merged code).
+4. Live HTTP verification on the actual revision: `/v1/snitch/item/1/attributes` and
+   `/v1/fashor/item/2/attributes` both return the same 2-attribute shape as the container-verified
+   output; `/similar` and `/visual-search` (Phase 9's feature) both confirmed unaffected on the
+   same revision.
