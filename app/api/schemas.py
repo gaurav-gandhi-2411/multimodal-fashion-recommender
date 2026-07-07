@@ -89,6 +89,28 @@ class StyleSearchResponse(BaseModel):
     match_confidence: float = 0.0
 
 
+class ItemAttributesResponse(BaseModel):
+    request_id: str
+    brand: str
+    item_id: str
+    color: str
+    color_confidence: float
+    pattern: str
+    pattern_confidence: float
+    fabric: str
+    fabric_confidence: float
+    occasion: str
+    occasion_confidence: float
+    # Per-category honest reliability tier ("validated" | "experimental"), sourced from
+    # app.attributes.ATTRIBUTE_RELIABILITY. Two independent eval passes (full-catalog
+    # text-cross-validation + manual visual spot-check) found color the only category
+    # that clearly beats a naive baseline; pattern/fabric/occasion are experimental
+    # (occasion is worse than a majority-class baseline for 2 of 3 brands). Present in
+    # every response so no API consumer can miss which tags are trustworthy -- see
+    # app/attributes.py::ATTRIBUTE_RELIABILITY for the full cited evidence.
+    reliability: dict[str, str]
+
+
 class HealthBrand(BaseModel):
     brand: str
     display_name: str

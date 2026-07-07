@@ -78,6 +78,8 @@ def _collect_brand_paths(brands_dir: str) -> list[str]:
             paths.append(f"{vbase}/article_ids.pkl")
         if cfg.color_index_path:
             paths.append(cfg.color_index_path)
+        if cfg.attributes_path:
+            paths.append(cfg.attributes_path)
         if cfg.transactions_dir:
             tbase = cfg.transactions_dir.rstrip("/")
             for split in cfg.transaction_splits:

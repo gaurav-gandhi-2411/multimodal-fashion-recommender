@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from app.attributes import AttributeIndex, load_attribute_index
 from app.color import ColorIndex, load_color_index
 from app.complete import CompleteConfig
 from app.rerank import RerankConfig
@@ -61,6 +62,10 @@ class BrandConfig(BaseModel):
     # Path to the per-brand color index JSON file (item_id -> {h, s, v}).
     # When set, /visual-search accepts a ?color=<hex> param for color-aware reranking.
     color_index_path: str | None = None
+    # Path to the per-brand attribute index JSON file (item_id -> color/pattern/fabric/
+    # occasion tags + confidences). Built offline by scripts/extract_attributes.py.
+    # When set, GET /v1/{brand}/item/{item_id}/attributes serves precomputed tags.
+    attributes_path: str | None = None
     llm: LLMBrandConfig = Field(default_factory=LLMBrandConfig)
     rerank: RerankConfig = Field(default_factory=RerankConfig)
     complete: CompleteConfig = Field(default_factory=CompleteConfig)
@@ -87,6 +92,9 @@ class BrandState:
     visual_retriever: FaissRetriever | None = field(default=None)
     # Per-brand HSV color index loaded from color_index_path. Empty dict when unconfigured.
     color_index: ColorIndex = field(default_factory=dict)
+    # Per-brand zero-shot attribute index loaded from attributes_path. Empty dict when
+    # unconfigured or the file has not been built yet (scripts/extract_attributes.py).
+    attributes: AttributeIndex = field(default_factory=dict)
 
 
 class BrandRegistry:
@@ -176,6 +184,14 @@ def _load_brand(yaml_path: Path) -> BrandState:
             "color_index_loaded", brand=config.brand, n_items=len(color_index)
         )
 
+    attributes: AttributeIndex = {}
+    if config.attributes_path:
+        attributes = load_attribute_index(config.attributes_path)
+        import logging as _logging
+        _logging.getLogger(__name__).info(
+            "attributes_index_loaded", brand=config.brand, n_items=len(attributes)
+        )
+
     return BrandState(
         config=config,
         catalog=catalog,
@@ -190,6 +206,7 @@ def _load_brand(yaml_path: Path) -> BrandState:
         faiss_row_to_aid=faiss_row_to_aid,
         visual_retriever=visual_retriever,
         color_index=color_index,
+        attributes=attributes,
     )
 
 
