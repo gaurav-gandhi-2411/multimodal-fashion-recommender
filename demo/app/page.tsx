@@ -188,22 +188,27 @@ export default function HomePage() {
     <div className="min-h-screen bg-zinc-50">
       {/* Nav */}
       <nav className="bg-white border-b border-zinc-200 sticky top-0 z-30">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Zap className="text-zinc-900" size={20} strokeWidth={2.5} />
-            <span className="font-bold text-zinc-900 tracking-tight">FashionRec AI</span>
+        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0 shrink-0">
+            <Zap className="text-zinc-900 shrink-0" size={20} strokeWidth={2.5} />
+            <span className="font-bold text-zinc-900 tracking-tight text-sm sm:text-base whitespace-nowrap">
+              FashionRec AI
+            </span>
             <span className="text-xs text-zinc-400 font-normal hidden sm:inline">
               Multimodal · India
             </span>
           </div>
 
           {/* Brand tabs */}
-          <div className="flex gap-1 bg-zinc-100 rounded-xl p-1">
+          <div
+            className="flex gap-1 bg-zinc-100 rounded-xl p-1 min-w-0 overflow-x-auto"
+            style={{ WebkitOverflowScrolling: "touch" }}
+          >
             {BRANDS.map((b) => (
               <button
                 key={b}
                 onClick={() => onBrandChange(b)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-150 ${
                   brand === b
                     ? "bg-white text-zinc-900 shadow-sm"
                     : "text-zinc-500 hover:text-zinc-800"
