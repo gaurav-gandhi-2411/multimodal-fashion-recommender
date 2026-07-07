@@ -555,6 +555,7 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | **Phase 9 (FashionCLIP)** | **Visual-search encoder A/B + migration; LIVE on staging (rev 00040-sw8)** | 🟢 Complete | 2026-07-07 |
 | **Phase 10 (Round 3 hardening)** | **7 audit-finding PRs merged + LIVE on both platforms (Cloud Run rev 00041-ghc, Vercel prod)** | 🟢 Complete | 2026-07-07 |
 | **Phase 11 (catalog attributes)** | **Zero-shot FashionCLIP color+pattern tagging LIVE (rev 00042-rbt); fabric/occasion evaluated + withheld (negative result)** | 🟢 Complete | 2026-07-07 |
+| **Phase 12 (integration friction, Tier 1+2)** | **Public H&M sandbox brand + honest docs LIVE (rev 00043-grt)** | 🟢 Complete | 2026-07-08 |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
 - [x] Popularity baseline numbers confirmed on temporal test split, active pool AND full pool
@@ -1437,3 +1438,94 @@ Merged (PR #38, squash commit `535c4da`) and **LIVE** on Cloud Run revision
    `/v1/fashor/item/2/attributes` both return the same 2-attribute shape as the container-verified
    output; `/similar` and `/visual-search` (Phase 9's feature) both confirmed unaffected on the
    same revision.
+
+---
+
+## Phase 12 — Integration Friction: Tier 1+2 (built + LIVE 2026-07-08)
+
+**Trigger:** a friction-mapping exercise for the target buyer (small D2C brand, developer but
+no ML team) found two blocking, evidence-based problems: (1) onboarding a new brand's catalog
+onto the live product is 100% us-mediated — no client can self-serve any part of it past local
+ingestion — and (2) `CLIENT_ONBOARDING.md` documented a **fictional** localhost self-hosted
+flow that has nothing to do with the actual multi-tenant Cloud Run product (confirmed: zero
+mentions of Cloud Run, GCS, or the live URL anywhere in that file). Full friction map and
+5-candidate ranked proposal presented and approved before any build — see chat history for the
+complete assessment; this section covers the build.
+
+### Tier 1 — Public sandbox brand (H&M)
+
+**Real bug found and fixed, not just "re-enabled":** `brands/h_and_m.yaml` was broken.
+`catalog_path`/`index_path`/`transactions_dir` pointed at `data/h_and_m/...` and
+`indices/h_and_m/...`, none of which have ever existed — confirmed via `load_registry()`
+raising `FileNotFoundError` at the exact line before this fix. This brand could not have
+booted on any prior deploy; it was dead config sitting in the repo since Phase 7's
+`BRANDS_ENABLED` filter was introduced specifically to keep it from crashing startup.
+
+Repointed to the real, Phase-0.5-validated artifacts under `data/processed/`
+(`articles.parquet` — 20k items, `faiss_index_active/` — 10,556-item active pool, 256-dim,
+`train.parquet` for `transactions_dir`). This means the sandbox serves the SAME validated
+2.12x/3.06x-lift model on REAL data — `/recommend` with a real `customer_id` genuinely returns
+`cold_start: false` (verified locally, in the built container, and live), not an illustrative
+fallback like the Indian brands' synthetic demo users.
+
+**Safety, checked not assumed:**
+- Read-only — no destructive/mutating endpoint exists anywhere in this API.
+- Public Kaggle competition data, not a paying client's proprietary catalog — safe to expose
+  broadly.
+- Rate limiting already isolates per caller: `app/api/rate_limit.py::_brand_ip_key` keys on
+  `(ip, brand)`, not on the API key — a shared/public key doesn't let one abusive caller
+  exhaust another caller's quota. No new tiering was needed.
+
+**Infra (done via `gcloud`, not in the PR diff):** new Secret Manager secret
+`fashion-rec-h_and_m-key` (value `hm-sandbox-demo-key` — deliberately meant to be public, this
+is not a secret in the security sense, it's a published sandbox credential), deploy SA granted
+`secretmanager.secretAccessor`. `data/processed/{articles.parquet,train.parquet,
+faiss_index_active/{faiss.index,article_ids.pkl}}` uploaded to GCS (checked first — confirmed
+absent — before uploading, per the standing GCS-before-deploy discipline).
+
+### Tier 2 — Honest docs
+
+- **`QUICKSTART.md`** (new): copy-paste curl/JS against the sandbox key with real
+  request/response bodies (not fabricated examples — every response shown was actually
+  captured from a real call). Explicitly documents the CORS finding from the friction map: **no
+  `CORSMiddleware` exists anywhere in `app/`**, confirmed by code search, so a brand's
+  storefront JS cannot call this API directly from the browser — every integration needs a
+  server-side proxy. Shows the exact pattern this project's own demo app already uses
+  (`demo/app/api/similar/route.ts`) as the copy-paste template. Links the live `/docs` Swagger
+  UI — confirmed reachable (`HTTP 200` on both `/docs` and `/openapi.json`) but was never linked
+  from any document before this.
+- **`CLIENT_ONBOARDING.md` rewritten**, not patched. The old version's ingestion steps (Step
+  1/2, running `ingest_catalog.py`/`ingest_interactions.py`) were genuinely accurate and kept —
+  that part of the pipeline really does work standalone. What was replaced: the doc's ending,
+  which told a reader to run `uvicorn app.api.main:app --reload` on `localhost:8000` as if that
+  were "going live." The new version states plainly that going live today is a coordinated
+  handoff with us, not self-serve, and points to the sandbox so a prospect's integration work
+  isn't blocked waiting on that handoff. No inflated SLA claim was added — "under 30 minutes"
+  is gone and not replaced with a new unverified number.
+- **`app/api/auth.py`**: 401 detail now names the `X-Api-Key` header explicitly and points to
+  `QUICKSTART.md` / the sandbox key, replacing the bare `"Invalid or missing API key"`.
+- **`README.md`**: links `QUICKSTART.md`, `CLIENT_ONBOARDING.md`, and the live `/docs` near the
+  top of the file, ahead of the architecture/results sections — where a stranger evaluating
+  integration ease, not ML quality, would look first.
+
+### Verification and deploy
+
+302 tests pass (1 pre-existing unrelated failure), ruff clean. Container-verified per the
+Deploy Verification Standard: built `infra/Dockerfile.cpu` from the feature branch, ran it
+locally with all 4 brands enabled, confirmed `/v1/h_and_m/item/{id}/similar`,
+`/v1/h_and_m/recommend` (real personalized result), `/v1/snitch/item/{id}/similar` (other
+brands unaffected), and the new 401 message all work inside the real container — before
+merging or deploying.
+
+Merged (PR #41, squash commit `f1082bc`), deployed from `main` HEAD (same commit as the merge —
+zero gap), **LIVE on Cloud Run revision `fashion-recommender-staging-00043-grt`** (100%
+traffic). Live HTTP verification on the actual revision: sandbox `/similar` and `/recommend`
+both byte-identical to the container-verified output, Snitch unaffected, 401 message live,
+`/docs` returns `HTTP 200`.
+
+### Status
+Tier 1+2 complete and live. **Tier 3 (one-command onboarding runbook) is next** — the
+operational unblock that removes the 5-manual-step, incident-prone deploy path this phase's
+own friction map documented. **Tier 4 (true self-serve platform — dynamic brand registry,
+server-side ingestion job, programmatic secrets) is explicitly deferred**, scoped as a separate
+multi-week design effort, not started here, per the user's explicit sequencing decision.
