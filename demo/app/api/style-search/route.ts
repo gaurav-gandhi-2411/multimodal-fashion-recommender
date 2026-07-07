@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { lookupItem } from "@/lib/catalog";
+import { formatBackendError } from "@/lib/backend-error";
 import type { Brand, EnrichedItem } from "@/lib/types";
 
 const API_BASE = process.env.FASHION_API_BASE!;
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (!res.ok) {
     const errText = await res.text();
-    return NextResponse.json({ error: errText }, { status: res.status });
+    return NextResponse.json({ error: formatBackendError(errText) }, { status: res.status });
   }
 
   const data = await res.json();
