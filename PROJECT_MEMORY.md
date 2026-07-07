@@ -553,7 +553,7 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | **Phase 7 (LIVE + ranking features)** | **Deploy LIVE (Cloud Run); diversity #6, complete-the-look #7, occasion #10, visual-search #12; Groq explanations live** | 🟢 Complete | 2026-06-14 |
 | Phase 8 (A/B) | Champion-Challenger + Online Learning | — | — |
 | **Phase 9 (FashionCLIP)** | **Visual-search encoder A/B + migration; LIVE on staging (rev 00040-sw8)** | 🟢 Complete | 2026-07-07 |
-| **Phase 10 (Round 3 hardening)** | **7 audit-finding PRs merged to `main`; deploy pending user go-ahead** | 🟡 Merged, not yet deployed | 2026-07-07 |
+| **Phase 10 (Round 3 hardening)** | **7 audit-finding PRs merged + LIVE on both platforms (Cloud Run rev 00041-ghc, Vercel prod)** | 🟢 Complete | 2026-07-07 |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
 - [x] Popularity baseline numbers confirmed on temporal test split, active pool AND full pool
@@ -1255,27 +1255,46 @@ plausible groundwork for a future live H&M personalization demo, costs nothing s
 and deleting speculative scaffolding isn't this task's call to make unilaterally. Documented here
 so a future session doesn't have to re-discover this from scratch.
 
-### Deploy status — merged, NOT yet live (deliberate)
+### Deploy status — LIVE on both platforms (2026-07-07, user-confirmed go-ahead)
 
-This session's instructions explicitly listed "deploy" as an escalation category (autonomous for
-everything else). Two deploy actions are ready and pending user go-ahead, NOT executed:
+Both deploys flagged above were executed after explicit user go-ahead, with the full
+container-verification + merged==live treatment.
 
-1. **Vercel (demo) production deploy** — 5 of the 7 merged PRs touch `demo/`. Discovered
-   mid-session that this Vercel project has **no GitHub auto-deploy integration** (`vercel git`
-   shows disconnected) — deploys are manual `vercel deploy --prod` from `demo/`, unlike this
-   project's Cloud Run backend which at least has a workflow_dispatch trigger. So "merged to
-   main" does NOT mean live for the demo either — same "merged==live must be proven, not
-   assumed" discipline applies here, not just to the backend.
-2. **Cloud Run (backend) redeploy** — PR #31 (`pdp_url` in `/recommend`/`/similar`) is
-   code-complete but inert until redeployed. PR #29's backend half (fixed
-   `data/snitch/items.parquet`) additionally needs a GCS asset re-upload BEFORE that redeploy,
-   per the standing GCS-before-deploy lesson (Phase 7's colors.json 404 precedent) — the fixed
-   parquet is local-only right now.
+**Cloud Run (backend):**
+1. GCS preflight: confirmed `gs://fashion-rec-staging-iconic-reactor-496423-m4/data/snitch/items.parquet`
+   still had the broken bare-domain PDP URLs (0/1803 with `www.`); uploaded the local fixed copy
+   (1803/1803 `www.snitch.com`) BEFORE deploying — the GCS-before-deploy lesson applied, not just
+   stated.
+2. Deploy Verification Standard: built `infra/Dockerfile.cpu` from `main` locally, ran it with
+   real data bind-mounted, hit `/v1/snitch/item/2/similar` and `/v1/snitch/recommend` inside that
+   container — confirmed `pdp_url` populated with the `www.` domain — BEFORE touching Cloud Run.
+3. Deployed from `main` (not a feature branch) via the standard workflow_dispatch. New revision:
+   **`fashion-recommender-staging-00041-ghc`**, 100% traffic (confirmed via
+   `gcloud run services describe`).
+4. merged==live: the deploy source was local `main` HEAD (`df665ca`) at trigger time — same
+   commit, no gap to diff (unlike Phase 9's incident where a docs-only gap existed; here there
+   was none).
+5. Live HTTP verification: `/v1/snitch/item/2/similar` and `/v1/snitch/recommend` both return
+   `pdp_url` with `www.snitch.com` on the live revision, byte-identical to the container-verified
+   output. All 3 returned URLs independently curled — **200 on every one**.
 
-Both are one-command actions (`vercel deploy --prod` for the demo; the standard
-`gh workflow run "Deploy to Cloud Run" --ref main -f environment=staging` for the backend, after
-the GCS upload) and will get the full container-verification + merged==live proof treatment from
-the Deploy Verification Standard once triggered — just not triggered in this autonomous pass.
+**Vercel (demo):**
+1. `vercel deploy --prod` from `demo/` — deployed and aliased to the canonical
+   `drobe-tau.vercel.app` URL, `readyState: READY`, `target: production`.
+2. Live verification via a real headless-browser (Playwright) session against
+   `https://drobe-tau.vercel.app` (not localhost):
+   - Mobile nav at 375px: `document.body.scrollWidth === document.documentElement.clientWidth`
+     (375===375) — no horizontal overflow, on the actual production URL.
+   - Snitch PDP links on live `/similar` results: 3/3 sampled resolve to `www.snitch.com` URLs.
+   - Low-confidence banner (PR #28): found a genuinely below-threshold cross-brand query (a
+     Snitch T-shirt image → Fashor, `match_confidence=0.0188` via direct API call first to find
+     a real below-0.04 example, not guessed) — the UI correctly rendered "Low catalog match
+     (confidence 0.024) — Fashor catalog may lack this style". (First attempt with a different
+     T-shirt image scored 0.056, above threshold, and correctly did NOT show the banner —
+     confirms the signal is genuinely dynamic, not hardcoded.)
+
+Both platforms verified against their ACTUAL production/live endpoints, not local approximations
+— closes the gap this session opened by merging without deploying.
 
 ### Known-minor-issues memory cleanup
 
