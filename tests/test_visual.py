@@ -5,7 +5,7 @@ Phase-7 pure-CLIP guardrails:
     with encode_query_image MOCKED so CI never needs GPU/large model weights.
   - The 503 test verifies state.visual_retriever is None -> HTTP 503 (not a 500).
   - A separate optional test (guarded by pytest.importorskip) exercises the real
-    CLIP encoder and checks the output is (512,) unit-norm float32 -- no tower/SBERT.
+    FashionCLIP encoder and checks the output is (512,) unit-norm float32 -- no tower/SBERT.
 """
 
 from __future__ import annotations
@@ -191,7 +191,7 @@ def test_visual_search_route_400_on_non_image_bytes() -> None:
     registry = _make_registry(state)
 
     # Do NOT mock encode_query_image -- we want the real ValueError to propagate to 400.
-    # But encode_query_image lazily imports open_clip; to avoid that dep in unit tests
+    # But encode_query_image lazily imports transformers; to avoid that dep in unit tests
     # we post bytes that PIL will reject, triggering the ValueError before any import.
     garbage = b"this is not an image"
 
@@ -234,9 +234,9 @@ def test_visual_search_route_401_without_api_key() -> None:
 def test_encode_query_image_shape_and_unit_norm() -> None:
     """encode_query_image returns a (512,) float32 vector with L2-norm ~= 1.0.
 
-    Pure CLIP-512 path: no item tower, no SBERT. Requires open_clip; skipped when absent.
+    Pure FashionCLIP-512 path: no item tower, no SBERT. Requires transformers; skipped when absent.
     """
-    pytest.importorskip("open_clip", reason="open_clip not installed")
+    pytest.importorskip("transformers", reason="transformers not installed")
 
     from app.visual import encode_query_image
 

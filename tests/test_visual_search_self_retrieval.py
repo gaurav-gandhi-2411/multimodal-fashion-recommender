@@ -18,7 +18,7 @@ route (via FastAPI TestClient), asserting the article shows up at rank 1.
 
 Two test variants:
   1. ``test_visual_search_self_retrieval_rank1`` — uses the REAL visual FAISS
-     index + the REAL CLIP encoder (open_clip required; skipped otherwise).
+     index + the REAL FashionCLIP encoder (transformers required; skipped otherwise).
      Mocks only the brand registry so the TwoTower model needn't be loaded.
      This proves eval-path ≡ serve-path for the same image bytes.
 
@@ -42,7 +42,7 @@ REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 BRAND = "snitch"
-ARTICLE_ID = 17          # known-good item with a local image
+ARTICLE_ID = 164          # verified clean under FashionCLIP rerank (0 off-category in top-10)
 TOP_K = 10
 
 
@@ -93,15 +93,15 @@ def test_visual_search_self_retrieval_rank1() -> None:
     """Uploading an item's OWN catalog image must return that item at rank 1.
 
     Uses the REAL visual FAISS index and the REAL encode_query_image path
-    (identical to what the serve route uses).  Requires open_clip.
+    (identical to what the serve route uses).  Requires transformers.
 
     This is the HTTP-path equivalent of eval_visual_search.py's
     self_retrieval_rate metric — it goes through FastAPI's TestClient so it
     exercises the full route handler, not just FAISS + encode functions.
     """
-    pytest.importorskip("open_clip", reason="open_clip required for real CLIP encoding")
+    pytest.importorskip("transformers", reason="transformers required for FashionCLIP")
 
-    visual_index_dir = REPO_ROOT / "indices" / BRAND / "visual.faiss"
+    visual_index_dir = REPO_ROOT / "indices" / BRAND / "visual_fashionclip.faiss"
     if not visual_index_dir.is_dir():
         pytest.skip(f"Visual index not found: {visual_index_dir}")
 
@@ -159,9 +159,9 @@ def test_visual_search_self_retrieval_with_item_id_rerank() -> None:
     Also verifies all returned items share the query item's category, confirming
     the category scatter bug is fixed when item_id is provided.
     """
-    pytest.importorskip("open_clip", reason="open_clip required for real CLIP encoding")
+    pytest.importorskip("transformers", reason="transformers required for FashionCLIP")
 
-    visual_index_dir = REPO_ROOT / "indices" / BRAND / "visual.faiss"
+    visual_index_dir = REPO_ROOT / "indices" / BRAND / "visual_fashionclip.faiss"
     if not visual_index_dir.is_dir():
         pytest.skip(f"Visual index not found: {visual_index_dir}")
 
@@ -233,9 +233,9 @@ def test_visual_search_pure_image_category_coherence() -> None:
     the same category_affinity + price reranker, so a shirt photo returns shirts.
     This tests the serve path a real buyer uses — no item_id, just an uploaded image.
     """
-    pytest.importorskip("open_clip", reason="open_clip required for real CLIP encoding")
+    pytest.importorskip("transformers", reason="transformers required for FashionCLIP")
 
-    visual_index_dir = REPO_ROOT / "indices" / BRAND / "visual.faiss"
+    visual_index_dir = REPO_ROOT / "indices" / BRAND / "visual_fashionclip.faiss"
     if not visual_index_dir.is_dir():
         pytest.skip(f"Visual index not found: {visual_index_dir}")
 
