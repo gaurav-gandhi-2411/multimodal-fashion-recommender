@@ -5,6 +5,7 @@ index_path: indices/fashor/active.faiss
 embeddings_path: indices/fashor/item_emb.npy
 visual_index_path: indices/fashor/visual_fashionclip.faiss
 color_index_path: data/fashor/colors.json
+attributes_path: data/fashor/attributes.json
 pdp_url_template: null
 api_key_env: FASHOR_API_KEY
 llm:

@@ -16,7 +16,6 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.api.auth import require_brand
-from app.api.rate_limit import limiter
 from app.api.metrics import (
     EXPLANATION_CACHE_HITS,
     EXPLANATION_CACHE_MISSES,
@@ -27,9 +26,11 @@ from app.api.metrics import (
     REQUEST_COUNT,
     REQUEST_LATENCY,
 )
+from app.api.rate_limit import limiter
 from app.api.schemas import (
     CompleteResponse,
     HealthResponse,
+    ItemAttributesResponse,
     OutfitItem,
     RecommendedItem,
     RecommendRequest,
@@ -38,6 +39,7 @@ from app.api.schemas import (
     StyleSearchResponse,
     VisualSearchResponse,
 )
+from app.attributes import ATTRIBUTE_RELIABILITY, SERVED_ATTRIBUTES
 from app.brands.registry import BrandState
 from app.cache import ExplanationCache, get_cache
 from app.color import color_rerank, hex_to_hsv
@@ -428,6 +430,87 @@ async def similar(
         query_item_id=item_id,
         results=results,
         latency_ms=round(latency_ms, 2),
+    )
+
+
+@router.get("/v1/{brand}/item/{item_id}/attributes", response_model=ItemAttributesResponse)
+@limiter.limit("60/minute")
+async def item_attributes(
+    brand: str,
+    item_id: str,
+    request: Request,
+    *,
+    state: Annotated[BrandState, Depends(require_brand)],
+) -> ItemAttributesResponse:
+    """Return precomputed zero-shot color/pattern tags for a catalogue item.
+
+    This is a fast read of state.attributes (built offline by
+    scripts/extract_attributes.py from the brand's FashionCLIP visual index) -- NOT a
+    live model inference per request, matching how /similar reads precomputed FAISS
+    embeddings rather than re-encoding on every call.
+
+    fabric/occasion are also computed offline and stored in state.attributes, but are
+    withheld from this endpoint entirely -- both failed the reliability bar in eval (see
+    app/attributes.py::ATTRIBUTE_RELIABILITY) and are held back pending a better approach,
+    not just flagged as experimental.
+
+    Returns HTTP 503 when the brand has no attribute index configured/built at all.
+    Returns HTTP 404 when the item is not in the brand's catalogue, or the catalogue
+    item exists but has no attribute tags (e.g. it had no local image at extraction time).
+    """
+    t0 = time.perf_counter()
+    request_id = str(uuid.uuid4())
+    structlog.contextvars.bind_contextvars(request_id=request_id, brand=brand)
+    log = logger.bind(request_id=request_id, brand=brand)
+
+    try:
+        aid_int = int(item_id)
+    except ValueError:
+        aid_int = None
+    if aid_int is None or aid_int not in state.art_map:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Item '{item_id}' not found in catalogue",
+        )
+
+    if not state.attributes:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                f"Attribute extraction not configured for brand '{brand}'. "
+                "Run scripts/extract_attributes.py and set attributes_path in the brand YAML."
+            ),
+        )
+
+    entry = state.attributes.get(str(aid_int))
+    if entry is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Item '{item_id}' has no attribute tags "
+                "(no catalogue image at extraction time)"
+            ),
+        )
+
+    latency_ms = (time.perf_counter() - t0) * 1000
+    log.info(
+        "item_attributes",
+        item_id=item_id,
+        latency_ms=round(latency_ms, 2),
+        usd_cost=0.0,
+    )
+    REQUEST_COUNT.labels(brand=brand, endpoint="item_attributes", status="200").inc()
+    REQUEST_LATENCY.labels(brand=brand, endpoint="item_attributes").observe(latency_ms / 1000)
+
+    return ItemAttributesResponse(
+        request_id=request_id,
+        brand=brand,
+        item_id=item_id,
+        color=entry["color"],
+        color_confidence=entry["color_confidence"],
+        pattern=entry["pattern"],
+        pattern_confidence=entry["pattern_confidence"],
+        reliability={k: v for k, v in ATTRIBUTE_RELIABILITY.items() if k in SERVED_ATTRIBUTES},
     )
 
 

@@ -1,0 +1,1352 @@
+[
+  {
+    "brand": "snitch",
+    "article_id": 624,
+    "product_id": "8651972739234",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8651972739234.jpg",
+    "title": "Light Blue Baggy Fit Jeans ( Jeans)",
+    "attributes": {
+      "color": {
+        "label": "blue",
+        "confidence": 0.0358
+      },
+      "pattern": {
+        "label": "embroidered",
+        "confidence": 0.0026
+      },
+      "fabric": {
+        "label": "denim",
+        "confidence": 0.0688
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0059
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 823,
+    "product_id": "8640219578530",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8640219578530.jpg",
+    "title": "Blue Skinny Fit Distressed Jeans ( Jeans)",
+    "attributes": {
+      "color": {
+        "label": "blue",
+        "confidence": 0.0442
+      },
+      "pattern": {
+        "label": "textured",
+        "confidence": 0.02
+      },
+      "fabric": {
+        "label": "denim",
+        "confidence": 0.0748
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0289
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 431,
+    "product_id": "8930528133282",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8930528133282.jpg",
+    "title": "Off White Regular Fit Trousers ( Trousers)",
+    "attributes": {
+      "color": {
+        "label": "grey",
+        "confidence": 0.0121
+      },
+      "pattern": {
+        "label": "solid",
+        "confidence": 0.0167
+      },
+      "fabric": {
+        "label": "polyester",
+        "confidence": 0.0036
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.008
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 580,
+    "product_id": "8756618264738",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8756618264738.jpg",
+    "title": "100% Cotton Relaxed Fit Textured Trousers ( Trousers)",
+    "attributes": {
+      "color": {
+        "label": "navy",
+        "confidence": 0.0123
+      },
+      "pattern": {
+        "label": "solid",
+        "confidence": 0.0046
+      },
+      "fabric": {
+        "label": "wool",
+        "confidence": 0.0015
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0245
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 993,
+    "product_id": "8651973263522",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8651973263522.jpg",
+    "title": "Relaxed Fit Stretch Navy Blue Cargo Pants ( Cargo Pants)",
+    "attributes": {
+      "color": {
+        "label": "navy",
+        "confidence": 0.0536
+      },
+      "pattern": {
+        "label": "solid",
+        "confidence": 0.019
+      },
+      "fabric": {
+        "label": "cotton",
+        "confidence": 0.0075
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0282
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 1041,
+    "product_id": "8620089016482",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8620089016482.jpg",
+    "title": "Khaki Relaxed Fit Cargo Pants ( Cargo Pants)",
+    "attributes": {
+      "color": {
+        "label": "beige",
+        "confidence": 0.0103
+      },
+      "pattern": {
+        "label": "solid",
+        "confidence": 0.0121
+      },
+      "fabric": {
+        "label": "polyester",
+        "confidence": 0.0039
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0219
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 1476,
+    "product_id": "8536889327778",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8536889327778.jpg",
+    "title": "Light Grey Cord Textured Overshirt ( Overshirt)",
+    "attributes": {
+      "color": {
+        "label": "grey",
+        "confidence": 0.0203
+      },
+      "pattern": {
+        "label": "checked",
+        "confidence": 0.0156
+      },
+      "fabric": {
+        "label": "cotton",
+        "confidence": 0.0007
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0381
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 1442,
+    "product_id": "8549062377634",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8549062377634.jpg",
+    "title": "Olive Relaxed Fit Corduroy Overshirt ( Overshirt)",
+    "attributes": {
+      "color": {
+        "label": "green",
+        "confidence": 0.0139
+      },
+      "pattern": {
+        "label": "solid",
+        "confidence": 0.005
+      },
+      "fabric": {
+        "label": "velvet",
+        "confidence": 0.0042
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0339
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 1144,
+    "product_id": "8714574102690",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8714574102690.jpg",
+    "title": "Double Pocket Regular Fit Jacket ( Jackets)",
+    "attributes": {
+      "color": {
+        "label": "grey",
+        "confidence": 0.0463
+      },
+      "pattern": {
+        "label": "solid",
+        "confidence": 0.0205
+      },
+      "fabric": {
+        "label": "polyester",
+        "confidence": 0.0168
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0598
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 1203,
+    "product_id": "8627388317858",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8627388317858.jpg",
+    "title": "Relaxed Fit Denim Jacket ( Jackets)",
+    "attributes": {
+      "color": {
+        "label": "black",
+        "confidence": 0.0076
+      },
+      "pattern": {
+        "label": "solid",
+        "confidence": 0.0018
+      },
+      "fabric": {
+        "label": "denim",
+        "confidence": 0.0556
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.041
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 175,
+    "product_id": "8909399195810",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8909399195810.jpg",
+    "title": "Red Slim Fit Shirt ( Shirts)",
+    "attributes": {
+      "color": {
+        "label": "red",
+        "confidence": 0.0
+      },
+      "pattern": {
+        "label": "textured",
+        "confidence": 0.0129
+      },
+      "fabric": {
+        "label": "linen",
+        "confidence": 0.0189
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0017
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 112,
+    "product_id": "9224476459170",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\9224476459170.jpg",
+    "title": "Slim Fit Abstract Luxe Shirt ( Shirts)",
+    "attributes": {
+      "color": {
+        "label": "brown",
+        "confidence": 0.0408
+      },
+      "pattern": {
+        "label": "floral",
+        "confidence": 0.0008
+      },
+      "fabric": {
+        "label": "leather",
+        "confidence": 0.0112
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0174
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 325,
+    "product_id": "8905983459490",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8905983459490.jpg",
+    "title": "Hampton Oversized Polo T-Shirt ( T-Shirts)",
+    "attributes": {
+      "color": {
+        "label": "brown",
+        "confidence": 0.0202
+      },
+      "pattern": {
+        "label": "printed",
+        "confidence": 0.0094
+      },
+      "fabric": {
+        "label": "knit",
+        "confidence": 0.0114
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0033
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 330,
+    "product_id": "8795670020258",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8795670020258.jpg",
+    "title": "100% Cotton Contrast Collar Polo T-Shirt ( T-Shirts)",
+    "attributes": {
+      "color": {
+        "label": "beige",
+        "confidence": 0.0225
+      },
+      "pattern": {
+        "label": "striped",
+        "confidence": 0.0036
+      },
+      "fabric": {
+        "label": "cotton",
+        "confidence": 0.0016
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0325
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 1537,
+    "product_id": "8748909887650",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8748909887650.jpg",
+    "title": "Regular Fit Purple Sweater ( Sweaters)",
+    "attributes": {
+      "color": {
+        "label": "purple",
+        "confidence": 0.0802
+      },
+      "pattern": {
+        "label": "textured",
+        "confidence": 0.0058
+      },
+      "fabric": {
+        "label": "knit",
+        "confidence": 0.0203
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0303
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 1615,
+    "product_id": "8553934553250",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8553934553250.jpg",
+    "title": "Core Lab Orange Solid Sweater ( Sweaters)",
+    "attributes": {
+      "color": {
+        "label": "orange",
+        "confidence": 0.0006
+      },
+      "pattern": {
+        "label": "color block",
+        "confidence": 0.0063
+      },
+      "fabric": {
+        "label": "knit",
+        "confidence": 0.0159
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0483
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 1665,
+    "product_id": "8722128568482",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8722128568482.jpg",
+    "title": "Regular Fit Stretch Plus Size Shorts ( Shorts)",
+    "attributes": {
+      "color": {
+        "label": "brown",
+        "confidence": 0.0322
+      },
+      "pattern": {
+        "label": "textured",
+        "confidence": 0.0026
+      },
+      "fabric": {
+        "label": "knit",
+        "confidence": 0.0123
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0001
+      }
+    }
+  },
+  {
+    "brand": "snitch",
+    "article_id": 1791,
+    "product_id": "8122087964834",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\snitch\\images\\8122087964834.jpg",
+    "title": "Think Less Blue Hoodie ( Hoodies)",
+    "attributes": {
+      "color": {
+        "label": "blue",
+        "confidence": 0.0495
+      },
+      "pattern": {
+        "label": "printed",
+        "confidence": 0.0066
+      },
+      "fabric": {
+        "label": "knit",
+        "confidence": 0.0019
+      },
+      "occasion": {
+        "label": "vacation",
+        "confidence": 0.0134
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 212,
+    "product_id": "7857868832854",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7857868832854.jpg",
+    "title": "Floral Printed A-Line Kurta with Pant & Dupatta - Rust ( 3P Kurta Set)",
+    "attributes": {
+      "color": {
+        "label": "orange",
+        "confidence": 0.0381
+      },
+      "pattern": {
+        "label": "printed",
+        "confidence": 0.0042
+      },
+      "fabric": {
+        "label": "georgette",
+        "confidence": 0.0108
+      },
+      "occasion": {
+        "label": "festive",
+        "confidence": 0.038
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 875,
+    "product_id": "7732235141206",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7732235141206.jpg",
+    "title": "Ethnic Printed & Embroidered Straight Kurta with Pant & Dupatta - Maroon ( 3P Kurta Set)",
+    "attributes": {
+      "color": {
+        "label": "red",
+        "confidence": 0.0015
+      },
+      "pattern": {
+        "label": "floral",
+        "confidence": 0.007
+      },
+      "fabric": {
+        "label": "georgette",
+        "confidence": 0.0008
+      },
+      "occasion": {
+        "label": "festive",
+        "confidence": 0.0356
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 2885,
+    "product_id": "7545093390422",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7545093390422.jpg",
+    "title": "Floral & Stripes Printed Straight Kurta with Pant & Pure Cotton Dupatta - Purple ( 3P Kurta Set)",
+    "attributes": {
+      "color": {
+        "label": "purple",
+        "confidence": 0.061
+      },
+      "pattern": {
+        "label": "floral",
+        "confidence": 0.0027
+      },
+      "fabric": {
+        "label": "georgette",
+        "confidence": 0.0201
+      },
+      "occasion": {
+        "label": "party",
+        "confidence": 0.0002
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 465,
+    "product_id": "7831686742102",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7831686742102.jpg",
+    "title": "Ethnic Booti Printed Straight Kurta with Palazzo & Dupatta - Mustard ( 3P Kurta Set)",
+    "attributes": {
+      "color": {
+        "label": "gold",
+        "confidence": 0.0043
+      },
+      "pattern": {
+        "label": "geometric",
+        "confidence": 0.0004
+      },
+      "fabric": {
+        "label": "georgette",
+        "confidence": 0.0188
+      },
+      "occasion": {
+        "label": "festive",
+        "confidence": 0.0192
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 2986,
+    "product_id": "7541130756182",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7541130756182.jpg",
+    "title": "Ethnic & Printed & Embroidered Straight Cut Crepe Kurta with Palazzo & Dupatta - Mauve ( 3P Kurta Set)",
+    "attributes": {
+      "color": {
+        "label": "purple",
+        "confidence": 0.0097
+      },
+      "pattern": {
+        "label": "printed",
+        "confidence": 0.0128
+      },
+      "fabric": {
+        "label": "georgette",
+        "confidence": 0.0228
+      },
+      "occasion": {
+        "label": "festive",
+        "confidence": 0.0076
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 3572,
+    "product_id": "7109788401750",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7109788401750.jpg",
+    "title": "Floral Printed A-Line Paneled Kurta with Pant - Off White ( 2P Kurta Set)",
+    "attributes": {
+      "color": {
+        "label": "multicolor",
+        "confidence": 0.0135
+      },
+      "pattern": {
+        "label": "floral",
+        "confidence": 0.0192
+      },
+      "fabric": {
+        "label": "rayon",
+        "confidence": 0.009
+      },
+      "occasion": {
+        "label": "festive",
+        "confidence": 0.012
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 2523,
+    "product_id": "7584383107158",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7584383107158.jpg",
+    "title": "Solid Abstract Embroidered Straight Fit Kurta with Pant - Teal Green ( 2P Kurta Set)",
+    "attributes": {
+      "color": {
+        "label": "blue",
+        "confidence": 0.0061
+      },
+      "pattern": {
+        "label": "floral",
+        "confidence": 0.0034
+      },
+      "fabric": {
+        "label": "rayon",
+        "confidence": 0.0058
+      },
+      "occasion": {
+        "label": "festive",
+        "confidence": 0.0006
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 2374,
+    "product_id": "7602972328022",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7602972328022.jpg",
+    "title": "Floral Printed Straight Fit Cotton Crepe Co-ord Set - White ( 2P Kurta Set)",
+    "attributes": {
+      "color": {
+        "label": "white",
+        "confidence": 0.0038
+      },
+      "pattern": {
+        "label": "floral",
+        "confidence": 0.0039
+      },
+      "fabric": {
+        "label": "linen",
+        "confidence": 0.0004
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.007
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 3189,
+    "product_id": "7522672443478",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7522672443478.jpg",
+    "title": "Abstract Floral Printed & Embroidered Straight Fit Kurta - Green ( Kurtas)",
+    "attributes": {
+      "color": {
+        "label": "green",
+        "confidence": 0.032
+      },
+      "pattern": {
+        "label": "floral",
+        "confidence": 0.0008
+      },
+      "fabric": {
+        "label": "georgette",
+        "confidence": 0.0014
+      },
+      "occasion": {
+        "label": "festive",
+        "confidence": 0.0273
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 830,
+    "product_id": "7535235137622",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7535235137622.jpg",
+    "title": "Ethnic Floral Printed Straight Fit Kurta - Pink ( Kurtas)",
+    "attributes": {
+      "color": {
+        "label": "multicolor",
+        "confidence": 0.0058
+      },
+      "pattern": {
+        "label": "printed",
+        "confidence": 0.0002
+      },
+      "fabric": {
+        "label": "cotton",
+        "confidence": 0.0086
+      },
+      "occasion": {
+        "label": "festive",
+        "confidence": 0.0046
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 2332,
+    "product_id": "7607421534294",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7607421534294.jpg",
+    "title": "Abstract Printed A-Line Tiered Flared Midi Dress - Yellow ( Dresses)",
+    "attributes": {
+      "color": {
+        "label": "yellow",
+        "confidence": 0.0329
+      },
+      "pattern": {
+        "label": "floral",
+        "confidence": 0.0058
+      },
+      "fabric": {
+        "label": "rayon",
+        "confidence": 0.0044
+      },
+      "occasion": {
+        "label": "vacation",
+        "confidence": 0.0056
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 2254,
+    "product_id": "7612344074326",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7612344074326.jpg",
+    "title": "Ethnic Floral Printed A-Line Paneled Kurti - Off White ( Kurti/Tunics)",
+    "attributes": {
+      "color": {
+        "label": "purple",
+        "confidence": 0.0081
+      },
+      "pattern": {
+        "label": "embroidered",
+        "confidence": 0.0054
+      },
+      "fabric": {
+        "label": "georgette",
+        "confidence": 0.017
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0241
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 19,
+    "product_id": "7896939888726",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7896939888726.jpg",
+    "title": "Ikat Printed Straight Kurta with Pant & Hand Painted Dupatta - Off White ( Kurta Set)",
+    "attributes": {
+      "color": {
+        "label": "multicolor",
+        "confidence": 0.0241
+      },
+      "pattern": {
+        "label": "printed",
+        "confidence": 0.0067
+      },
+      "fabric": {
+        "label": "georgette",
+        "confidence": 0.014
+      },
+      "occasion": {
+        "label": "festive",
+        "confidence": 0.0075
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 2159,
+    "product_id": "6829473497174",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\6829473497174.jpg",
+    "title": "Ethnic Embroidered Co-ord Set - Powder Blue ( Fashion)",
+    "attributes": {
+      "color": {
+        "label": "blue",
+        "confidence": 0.0032
+      },
+      "pattern": {
+        "label": "striped",
+        "confidence": 0.0007
+      },
+      "fabric": {
+        "label": "linen",
+        "confidence": 0.0197
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0069
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 532,
+    "product_id": "7823023013974",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7823023013974.jpg",
+    "title": "Ethnic Chevron Printed A-Line Flared Kurta - Magenta ( Kurta)",
+    "attributes": {
+      "color": {
+        "label": "pink",
+        "confidence": 0.0268
+      },
+      "pattern": {
+        "label": "geometric",
+        "confidence": 0.0079
+      },
+      "fabric": {
+        "label": "cotton",
+        "confidence": 0.0095
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0039
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 75,
+    "product_id": "7879721123926",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7879721123926.jpg",
+    "title": "Abstract Printed A-Line Co-ord Set - Brown ( Co-ord Set)",
+    "attributes": {
+      "color": {
+        "label": "multicolor",
+        "confidence": 0.0067
+      },
+      "pattern": {
+        "label": "printed",
+        "confidence": 0.0045
+      },
+      "fabric": {
+        "label": "rayon",
+        "confidence": 0.009
+      },
+      "occasion": {
+        "label": "festive",
+        "confidence": 0.013
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 288,
+    "product_id": "7849785753686",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7849785753686.jpg",
+    "title": "Floral Block Printed & Embroidered A-Line Pleated Maxi Dress - Off White ( Dress)",
+    "attributes": {
+      "color": {
+        "label": "multicolor",
+        "confidence": 0.0448
+      },
+      "pattern": {
+        "label": "printed",
+        "confidence": 0.0009
+      },
+      "fabric": {
+        "label": "cotton",
+        "confidence": 0.0068
+      },
+      "occasion": {
+        "label": "festive",
+        "confidence": 0.0169
+      }
+    }
+  },
+  {
+    "brand": "fashor",
+    "article_id": 2367,
+    "product_id": "7606178906198",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\fashor\\images\\7606178906198.jpg",
+    "title": "Solid Resham & Sequin Embroidered Straight Fit Palazzo - Cream ( Bottom)",
+    "attributes": {
+      "color": {
+        "label": "beige",
+        "confidence": 0.0214
+      },
+      "pattern": {
+        "label": "textured",
+        "confidence": 0.002
+      },
+      "fabric": {
+        "label": "linen",
+        "confidence": 0.0283
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.023
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 726,
+    "product_id": "8895071191290",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\8895071191290.jpg",
+    "title": "Olive Denim Overshirt 100% Cotton ( Shirt)",
+    "attributes": {
+      "color": {
+        "label": "green",
+        "confidence": 0.0463
+      },
+      "pattern": {
+        "label": "solid",
+        "confidence": 0.0137
+      },
+      "fabric": {
+        "label": "linen",
+        "confidence": 0.005
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0405
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 659,
+    "product_id": "8931014770938",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\8931014770938.jpg",
+    "title": "Ochre Jacquard Overshirt ( Shirt)",
+    "attributes": {
+      "color": {
+        "label": "orange",
+        "confidence": 0.0125
+      },
+      "pattern": {
+        "label": "printed",
+        "confidence": 0.0201
+      },
+      "fabric": {
+        "label": "cotton",
+        "confidence": 0.0076
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0219
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 888,
+    "product_id": "8895070667002",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\8895070667002.jpg",
+    "title": "Indigo Denim Shirt With Pockets 100% Cotton ( Shirt)",
+    "attributes": {
+      "color": {
+        "label": "blue",
+        "confidence": 0.002
+      },
+      "pattern": {
+        "label": "solid",
+        "confidence": 0.0027
+      },
+      "fabric": {
+        "label": "denim",
+        "confidence": 0.0392
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0417
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 215,
+    "product_id": "9135578710266",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\9135578710266.jpg",
+    "title": "Off-White Floral Embroidery Shirt 100% Cotton ( Shirt)",
+    "attributes": {
+      "color": {
+        "label": "white",
+        "confidence": 0.0419
+      },
+      "pattern": {
+        "label": "embroidered",
+        "confidence": 0.0096
+      },
+      "fabric": {
+        "label": "linen",
+        "confidence": 0.0026
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0084
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 518,
+    "product_id": "9058364457210",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\9058364457210.jpg",
+    "title": "White & Royal Brushed Checks Shirt 100% Cotton ( Shirt)",
+    "attributes": {
+      "color": {
+        "label": "blue",
+        "confidence": 0.0094
+      },
+      "pattern": {
+        "label": "checked",
+        "confidence": 0.0312
+      },
+      "fabric": {
+        "label": "cotton",
+        "confidence": 0.0024
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0418
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 352,
+    "product_id": "9150350950650",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\9150350950650.jpg",
+    "title": "Light Wine Linen Blend Shirt ( Shirt)",
+    "attributes": {
+      "color": {
+        "label": "maroon",
+        "confidence": 0.0041
+      },
+      "pattern": {
+        "label": "solid",
+        "confidence": 0.0109
+      },
+      "fabric": {
+        "label": "linen",
+        "confidence": 0.024
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0352
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 864,
+    "product_id": "8895067488506",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\8895067488506.jpg",
+    "title": "Wine Linen Blend Shirt ( Shirt)",
+    "attributes": {
+      "color": {
+        "label": "maroon",
+        "confidence": 0.0351
+      },
+      "pattern": {
+        "label": "solid",
+        "confidence": 0.0095
+      },
+      "fabric": {
+        "label": "linen",
+        "confidence": 0.0129
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0366
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 604,
+    "product_id": "8984888836346",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\8984888836346.jpg",
+    "title": "Brown Flat Knit T-Shirt 100% Cotton ( T-Shirt)",
+    "attributes": {
+      "color": {
+        "label": "maroon",
+        "confidence": 0.0275
+      },
+      "pattern": {
+        "label": "striped",
+        "confidence": 0.0263
+      },
+      "fabric": {
+        "label": "cotton",
+        "confidence": 0.0029
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0502
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 597,
+    "product_id": "8938495443194",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\8938495443194.jpg",
+    "title": "Brown And Black Stripe Knit T-Shirt 100% Cotton ( T-Shirt)",
+    "attributes": {
+      "color": {
+        "label": "brown",
+        "confidence": 0.0086
+      },
+      "pattern": {
+        "label": "color block",
+        "confidence": 0.0323
+      },
+      "fabric": {
+        "label": "knit",
+        "confidence": 0.0238
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0179
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 25,
+    "product_id": "8843169759482",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\8843169759482.jpg",
+    "title": "Black Geometric Knit Polo T-Shirt 100% Cotton ( T-Shirt)",
+    "attributes": {
+      "color": {
+        "label": "black",
+        "confidence": 0.0249
+      },
+      "pattern": {
+        "label": "geometric",
+        "confidence": 0.0189
+      },
+      "fabric": {
+        "label": "cotton",
+        "confidence": 0.0029
+      },
+      "occasion": {
+        "label": "vacation",
+        "confidence": 0.0009
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 213,
+    "product_id": "9166468055290",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\9166468055290.jpg",
+    "title": "Natural Linen Blend Pleated Trousers ( Bottom)",
+    "attributes": {
+      "color": {
+        "label": "beige",
+        "confidence": 0.0191
+      },
+      "pattern": {
+        "label": "solid",
+        "confidence": 0.0019
+      },
+      "fabric": {
+        "label": "linen",
+        "confidence": 0.0286
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0409
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 193,
+    "product_id": "8843148558586",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\8843148558586.jpg",
+    "title": "Black Baggy Fit Denim Jeans ( Bottom)",
+    "attributes": {
+      "color": {
+        "label": "navy",
+        "confidence": 0.0098
+      },
+      "pattern": {
+        "label": "textured",
+        "confidence": 0.0023
+      },
+      "fabric": {
+        "label": "denim",
+        "confidence": 0.0534
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0411
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 355,
+    "product_id": "9108141539578",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\9108141539578.jpg",
+    "title": "Brown Ombre Graphic Sando 100% Cotton ( Vest)",
+    "attributes": {
+      "color": {
+        "label": "beige",
+        "confidence": 0.017
+      },
+      "pattern": {
+        "label": "printed",
+        "confidence": 0.0011
+      },
+      "fabric": {
+        "label": "knit",
+        "confidence": 0.0073
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0124
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 225,
+    "product_id": "9124154573050",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\9124154573050.jpg",
+    "title": "Beige Structured Cord Set ( Co-ord)",
+    "attributes": {
+      "color": {
+        "label": "beige",
+        "confidence": 0.0337
+      },
+      "pattern": {
+        "label": "solid",
+        "confidence": 0.0138
+      },
+      "fabric": {
+        "label": "silk",
+        "confidence": 0.0002
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0186
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 891,
+    "product_id": "8895071420666",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\8895071420666.jpg",
+    "title": "Black Structured Knit Cardigan ( Jacket)",
+    "attributes": {
+      "color": {
+        "label": "black",
+        "confidence": 0.0117
+      },
+      "pattern": {
+        "label": "textured",
+        "confidence": 0.0074
+      },
+      "fabric": {
+        "label": "knit",
+        "confidence": 0.0056
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0491
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 113,
+    "product_id": "8988731474170",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\8988731474170.jpg",
+    "title": "Navy Double Cloth Stripe Co-Ord Set 100% Cotton ( Track-Suit)",
+    "attributes": {
+      "color": {
+        "label": "navy",
+        "confidence": 0.0266
+      },
+      "pattern": {
+        "label": "solid",
+        "confidence": 0.0194
+      },
+      "fabric": {
+        "label": "linen",
+        "confidence": 0.0122
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0307
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 92,
+    "product_id": "9223076872442",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\9223076872442.jpg",
+    "title": "Black Dress Belt ( Belts)",
+    "attributes": {
+      "color": {
+        "label": "beige",
+        "confidence": 0.0018
+      },
+      "pattern": {
+        "label": "textured",
+        "confidence": 0.0156
+      },
+      "fabric": {
+        "label": "leather",
+        "confidence": 0.0164
+      },
+      "occasion": {
+        "label": "casual",
+        "confidence": 0.0375
+      }
+    }
+  },
+  {
+    "brand": "powerlook",
+    "article_id": 335,
+    "product_id": "8895075877114",
+    "image_path": "C:\\Users\\gaura\\ml-projects\\multimodal-fashion-recommender\\data\\powerlook\\images\\8895075877114.jpg",
+    "title": "White Unisex N95 Mask ( Accessories)",
+    "attributes": {
+      "color": {
+        "label": "white",
+        "confidence": 0.0695
+      },
+      "pattern": {
+        "label": "solid",
+        "confidence": 0.0169
+      },
+      "fabric": {
+        "label": "polyester",
+        "confidence": 0.021
+      },
+      "occasion": {
+        "label": "formal",
+        "confidence": 0.0003
+      }
+    }
+  }
+]

@@ -5,6 +5,7 @@ index_path: indices/snitch/active.faiss
 embeddings_path: indices/snitch/item_emb.npy
 visual_index_path: indices/snitch/visual_fashionclip.faiss
 color_index_path: data/snitch/colors.json
+attributes_path: data/snitch/attributes.json
 pdp_url_template: null
 api_key_env: SNITCH_API_KEY
 llm:

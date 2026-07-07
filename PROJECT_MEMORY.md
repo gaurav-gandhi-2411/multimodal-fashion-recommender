@@ -1375,21 +1375,49 @@ not delegated): confirms the same ranking.
   which a trivial "always guess casual" baseline achieves too. No real discriminative power
   demonstrated.
 
-### Verdict — baked into the shipped code, not just this doc
-`app/attributes.py::ATTRIBUTE_RELIABILITY = {"color": "validated", "pattern": "experimental",
-"fabric": "experimental", "occasion": "experimental"}`, wired into every API response
-(`ItemAttributesResponse.reliability`) and the batch script's printed output. Structurally
-impossible for a consumer to see a tag without also seeing its trust tier — matches the explicit
-ask to flag unreliable attributes, not silently include them as equally trustworthy.
-`tests/test_attributes_serve_path.py` pins these tiers as a regression guard (real TestClient,
-real catalog data) against someone quietly relabeling an unvalidated attribute as trustworthy
-later.
+### Ship decision (user, 2026-07-07): color + pattern ship, fabric + occasion withheld entirely
+
+Initial build shipped all 4 categories with a `reliability` tier per tag ("validated" vs
+"experimental"). User's call after reviewing the eval: **a tier label isn't enough for fabric and
+occasion — a wrong "leather" tag on a cotton shirt reads as "broken" to a merchandising team
+regardless of what it's labeled, so both are withheld from the API response entirely**, not
+shipped flagged-experimental. Color (validated) and pattern (experimental-but-genuinely-useful,
+70% with real brand variance) ship.
+
+**This is an honest negative result on 2 of 4 attempted attributes, recorded plainly, matching
+this project's established practice** (see the Shirt/T-Shirt rerank negative-result precedent,
+PR #30):
+- **Fabric attempted and failed the bar.** 19.7% pooled accuracy against a ~7.7% random-guess
+  floor for a 13-label taxonomy — barely better than guessing. Root cause is partly a genuine
+  methodological ceiling (fabric composition frequently isn't visually inferable from a product
+  photo at all, a limit a human reviewer hits too) and partly real model error (predicted
+  "leather" for a plainly woven cotton shirt; predicted "linen" for two items whose own catalog
+  titles say "Denim" and "Cotton Crepe").
+- **Occasion attempted and failed the bar.** Worse than a naive "always guess the brand's most
+  common occasion" baseline for 2 of 3 brands (snitch -3.3pp, powerlook -3.5pp; fashor only
+  +2.4pp). The manual visual spot-check's surface-level agreement (~82.5%) does NOT rebut this —
+  it mostly reflects that genuinely-casual items get correctly tagged casual, which the trivial
+  baseline achieves too, without demonstrating any real discriminative signal.
+- **A third failure mode, found only by direct visual inspection, applies more broadly than just
+  fabric/occasion**: accessory items photographed as part of a full outfit (a "Black Dress Belt"
+  shot on a model wearing a beige sweater) get tagged with the *outfit's* dominant color, not the
+  product's, because the global image embedding is dominated by the larger garment in frame.
+  Color still cleared the bar despite this failure mode existing in the sample — worth revisiting
+  if accessory categories grow, e.g. by cropping to the product bounding box before encoding.
+- **Both are withheld, not deleted.** `app/attributes.py::ATTRIBUTE_TAXONOMY`,
+  `PROMPT_TEMPLATES`, and `classify_embeddings` still compute all 4 categories; `data/{brand}/
+  attributes.json` still stores all 4 on disk. `app/attributes.py::SERVED_ATTRIBUTES = ("color",
+  "pattern")` is the single source of truth for what the API actually exposes — a future revisit
+  (e.g. fabric-from-text+image instead of image-alone, since title/description already mention
+  fabric ~53-90% of the time per the text-eval's own coverage numbers; or occasion redesigned as
+  a coarser binary rather than 5-way) can flip fabric/occasion back on by adding them to that
+  tuple, without needing to re-derive the taxonomy or re-run extraction.
+
+`tests/test_attributes_serve_path.py` and `tests/test_attributes.py` now actively assert
+fabric/occasion keys are ABSENT from every response (inverted from their original
+present-and-flagged assertions) — a regression guard against silently re-adding them later
+without this decision being explicitly revisited.
 
 ### Status
-DRAFT PR #38, 302 tests pass (1 pre-existing unrelated failure), ruff clean. **Not deployed** —
-this task's deliverable was build + DRAFT PR, not a live ship; no Docker build or Cloud Run
-trigger was run. If this ships: container-verify per the Deploy Verification Standard first
-(new serving-path behavior via the existing FashionCLIP encoder, same class of risk as Phase 9),
-and consider whether fabric/occasion should be withheld from the response entirely rather than
-returned-but-flagged, given how far below a usable bar they are — that's a product call, not
-purely an engineering one, worth surfacing explicitly before merge.
+Merged and **LIVE** — see the Deploy section immediately below for the container-verification
+and live-verification detail.
