@@ -97,17 +97,20 @@ class ItemAttributesResponse(BaseModel):
     color_confidence: float
     pattern: str
     pattern_confidence: float
-    fabric: str
-    fabric_confidence: float
-    occasion: str
-    occasion_confidence: float
-    # Per-category honest reliability tier ("validated" | "experimental"), sourced from
-    # app.attributes.ATTRIBUTE_RELIABILITY. Two independent eval passes (full-catalog
-    # text-cross-validation + manual visual spot-check) found color the only category
-    # that clearly beats a naive baseline; pattern/fabric/occasion are experimental
-    # (occasion is worse than a majority-class baseline for 2 of 3 brands). Present in
-    # every response so no API consumer can miss which tags are trustworthy -- see
-    # app/attributes.py::ATTRIBUTE_RELIABILITY for the full cited evidence.
+    # fabric and occasion are NOT served here. Both were evaluated (full-catalog
+    # text-cross-validation + manual visual spot-check) and failed the reliability bar --
+    # fabric scored 19.7% against a ~7.7% random-guess floor, occasion scored worse than a
+    # naive majority-class baseline for 2 of 3 brands. A wrong "leather" tag on a cotton
+    # shirt damages buyer trust regardless of whether it's labeled "experimental", so both
+    # are withheld from the API response entirely pending a better approach. The
+    # classification code and taxonomy for both are kept intact in app/attributes.py and
+    # data/{brand}/attributes.json still stores all 4 categories on disk -- see
+    # app/attributes.py::ATTRIBUTE_RELIABILITY / PROJECT_MEMORY.md Phase 11 for the full
+    # cited evidence.
+    # Per-category honest reliability tier ("validated" | "experimental") for the two
+    # served categories, sourced from app.attributes.ATTRIBUTE_RELIABILITY (filtered to
+    # app.attributes.SERVED_ATTRIBUTES). Present in every response so no API consumer can
+    # miss which tags are trustworthy.
     reliability: dict[str, str]
 
 

@@ -95,6 +95,12 @@ ATTRIBUTE_RELIABILITY: dict[str, str] = {
     "occasion": "experimental",
 }
 
+# Only these categories are exposed via the public API (ItemAttributesResponse);
+# fabric/occasion are computed and stored in data/{brand}/attributes.json but withheld
+# from the served response -- a wrong tag (e.g. "leather" on a cotton shirt) damages
+# buyer trust regardless of an "experimental" label. See PROJECT_MEMORY.md Phase 11.
+SERVED_ATTRIBUTES: tuple[str, ...] = ("color", "pattern")
+
 
 def classify_embeddings(
     image_embeddings: np.ndarray, encoder: FashionCLIPEncoder

@@ -81,6 +81,11 @@ def _print_distributions(brand: str, index: AttributeIndex) -> None:
         "worse than a majority-class baseline for 2/3 brands). Do not present "
         "experimental tags as reliable."
     )
+    print(
+        "  NOTE: only color/pattern are served via GET /v1/{brand}/item/{item_id}/attributes "
+        "-- fabric/occasion are computed and stored here for future use but withheld from "
+        "the API response (see app/attributes.py::SERVED_ATTRIBUTES)."
+    )
 
 
 def extract_brand_attributes(brand: str, encoder: FashionCLIPEncoder) -> None:

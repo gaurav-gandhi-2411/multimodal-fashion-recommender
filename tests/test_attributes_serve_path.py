@@ -8,12 +8,15 @@ mocked -- so it exercises the exact request a caller sends.
 This is also a regression guard for the attribute-reliability honesty tiers
 (app.attributes.ATTRIBUTE_RELIABILITY): the eval passes documented there found color
 the only category that clearly beats a naive baseline (64.6% pooled text-cross-
-validation accuracy, ~90% in a manual 20-image spot-check), while pattern/fabric/
-occasion are experimental (fabric ~19.7% vs ~7.7% random; occasion WORSE than a
-majority-class baseline for 2 of 3 brands). The 200-path test below asserts
-reliability["color"] == "validated" and the other three are "experimental" so that a
-future change quietly re-labeling an unvalidated attribute as trustworthy fails CI
-instead of shipping silently.
+validation accuracy, ~90% in a manual 20-image spot-check), while pattern is
+experimental and fabric/occasion failed the reliability bar outright (fabric ~19.7% vs
+~7.7% random; occasion WORSE than a majority-class baseline for 2 of 3 brands). fabric
+and occasion are therefore withheld from the API response entirely (not just flagged
+experimental) -- see app/attributes.py::SERVED_ATTRIBUTES. The 200-path test below
+asserts reliability == {"color": "validated", "pattern": "experimental"} and that
+fabric/occasion keys are absent from the response body, so that a future change
+quietly re-adding an unvalidated attribute to the response fails CI instead of
+shipping silently.
 
 Follows the mock-registry + TestClient pattern established in
 ``tests/test_visual_search_fashionclip_serve_path.py`` (real data, real route, a
@@ -57,11 +60,12 @@ def _make_registry(state: MagicMock, brand: str) -> MagicMock:
 
 
 def test_item_attributes_200_real_data_has_reliability_tiers() -> None:
-    """A real snitch item returns 200 with all 4 attributes and the honesty tiers.
+    """A real snitch item returns 200 with only color/pattern and the honesty tiers.
 
-    Pins reliability["color"] == "validated" and the other three == "experimental" --
-    this is the regression guard: it fails if someone quietly relabels an unvalidated
-    attribute as trustworthy without rerunning the evals.
+    Pins reliability == {"color": "validated", "pattern": "experimental"} and asserts
+    fabric/occasion are absent from the response body -- this is the regression guard:
+    it fails if someone quietly re-adds an unvalidated/withheld attribute to the API
+    response without that decision being revisited.
     """
     attributes_path = REPO_ROOT / "data" / BRAND / "attributes.json"
     if not attributes_path.exists():
@@ -99,16 +103,22 @@ def test_item_attributes_200_real_data_has_reliability_tiers() -> None:
 
     assert body["item_id"] == str(ARTICLE_ID)
     assert body["brand"] == BRAND
-    for category in ("color", "pattern", "fabric", "occasion"):
+    for category in ("color", "pattern"):
         assert category in body
         assert f"{category}_confidence" in body
 
+    # Regression guard: fabric/occasion are computed and stored in attributes.json but
+    # must never appear in the served API response -- see app/attributes.py::
+    # SERVED_ATTRIBUTES and the module docstring above.
+    assert "fabric" not in body
+    assert "fabric_confidence" not in body
+    assert "occasion" not in body
+    assert "occasion_confidence" not in body
+
     assert "reliability" in body
-    assert set(body["reliability"].keys()) == {"color", "pattern", "fabric", "occasion"}
+    assert set(body["reliability"].keys()) == {"color", "pattern"}
     assert body["reliability"]["color"] == "validated"
     assert body["reliability"]["pattern"] == "experimental"
-    assert body["reliability"]["fabric"] == "experimental"
-    assert body["reliability"]["occasion"] == "experimental"
 
 
 def test_item_attributes_404_unknown_item_id() -> None:

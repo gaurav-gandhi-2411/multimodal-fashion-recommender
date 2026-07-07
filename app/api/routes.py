@@ -39,7 +39,7 @@ from app.api.schemas import (
     StyleSearchResponse,
     VisualSearchResponse,
 )
-from app.attributes import ATTRIBUTE_RELIABILITY
+from app.attributes import ATTRIBUTE_RELIABILITY, SERVED_ATTRIBUTES
 from app.brands.registry import BrandState
 from app.cache import ExplanationCache, get_cache
 from app.color import color_rerank, hex_to_hsv
@@ -442,12 +442,17 @@ async def item_attributes(
     *,
     state: Annotated[BrandState, Depends(require_brand)],
 ) -> ItemAttributesResponse:
-    """Return precomputed zero-shot color/pattern/fabric/occasion tags for a catalogue item.
+    """Return precomputed zero-shot color/pattern tags for a catalogue item.
 
     This is a fast read of state.attributes (built offline by
     scripts/extract_attributes.py from the brand's FashionCLIP visual index) -- NOT a
     live model inference per request, matching how /similar reads precomputed FAISS
     embeddings rather than re-encoding on every call.
+
+    fabric/occasion are also computed offline and stored in state.attributes, but are
+    withheld from this endpoint entirely -- both failed the reliability bar in eval (see
+    app/attributes.py::ATTRIBUTE_RELIABILITY) and are held back pending a better approach,
+    not just flagged as experimental.
 
     Returns HTTP 503 when the brand has no attribute index configured/built at all.
     Returns HTTP 404 when the item is not in the brand's catalogue, or the catalogue
@@ -505,11 +510,7 @@ async def item_attributes(
         color_confidence=entry["color_confidence"],
         pattern=entry["pattern"],
         pattern_confidence=entry["pattern_confidence"],
-        fabric=entry["fabric"],
-        fabric_confidence=entry["fabric_confidence"],
-        occasion=entry["occasion"],
-        occasion_confidence=entry["occasion_confidence"],
-        reliability=ATTRIBUTE_RELIABILITY,
+        reliability={k: v for k, v in ATTRIBUTE_RELIABILITY.items() if k in SERVED_ATTRIBUTES},
     )
 
 

@@ -205,9 +205,14 @@ def test_item_attributes_200_returns_precomputed_tags() -> None:
     assert body["color"] == "black"
     assert body["color_confidence"] == 0.12
     assert body["pattern"] == "solid"
-    assert body["fabric"] == "cotton"
-    assert body["occasion"] == "casual"
     assert "request_id" in body
+    # fabric/occasion are withheld from the API response entirely -- see
+    # app/attributes.py::SERVED_ATTRIBUTES and app/api/schemas.py::ItemAttributesResponse.
+    assert "fabric" not in body
+    assert "fabric_confidence" not in body
+    assert "occasion" not in body
+    assert "occasion_confidence" not in body
+    assert set(body["reliability"].keys()) == {"color", "pattern"}
 
 
 def test_item_attributes_404_when_item_not_in_catalog() -> None:
