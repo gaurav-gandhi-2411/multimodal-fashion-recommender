@@ -519,7 +519,7 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | **Phase 6 (demo-fixes)** | **Rerank bug fix + Snitch expansion + A/B items** | ✅ Complete | 2026-06-11 |
 | **Phase 7 (LIVE + ranking features)** | **Deploy LIVE (Cloud Run); diversity #6, complete-the-look #7, occasion #10, visual-search #12; Groq explanations live** | 🟢 Complete | 2026-06-14 |
 | Phase 8 (A/B) | Champion-Challenger + Online Learning | — | — |
-| **Phase 9 (FashionCLIP A/B)** | **Visual-search encoder A/B (current CLIP vs FashionCLIP)** | ✅ Evaluated — awaiting migration decision | 2026-07-07 |
+| **Phase 9 (FashionCLIP)** | **Visual-search encoder A/B + migration; LIVE on staging (rev 00040-sw8)** | 🟢 Complete | 2026-07-07 |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
 - [x] Popularity baseline numbers confirmed on temporal test split, active pool AND full pool
@@ -1077,10 +1077,63 @@ Decision made: migrate `/visual-search` and `/style-search` from open_clip CLIP 
   the fixture to `164` (verified clean, 0 off-category in top-10) rather than loosen the test's
   assertion, since a hard rank-1 + zero-off-category bar is the stronger regression guard when the
   fixture itself is confirmed clean.
-- **Still pending as of this edit**: live Cloud Run deploy of the repointed indices/encoder, and a
-  re-run of `scripts/eval_serve_path.py` against `visual_fashionclip.faiss` to get the new locked
-  serve-path category-recall number to compare against the existing 67.5% baseline (see Caveat 2
-  above — the Phase 9 A/B numbers are raw-FAISS, not serve-path, and must not be quoted as if they
-  were the locked pitch metric). A later session will fill in that number once measured.
+### Live deploy + incident + serve-path re-eval (2026-07-07)
+
+**Incident (contained, ~8 min window, staging only):** first deploy of this migration
+(Cloud Run revision `fashion-recommender-staging-00039-wfp`) returned HTTP 500 on every
+`/visual-search` call. Root cause: `uv.lock` had resolved `transformers==5.10.2` for the Docker
+build (`pyproject.toml`'s `[ml]` extra only had a floor, `>=4.44.0`, no ceiling), while every bit
+of local verification during this migration ran against the ambient conda env's
+`transformers==4.57.6` — a version never actually exercised against the frozen lock until deploy.
+`transformers` 5.x changed `CLIPModel.get_image_features()` to return a `BaseModelOutputWithPooling`
+object instead of a plain tensor, breaking `FashionCLIPEncoder._encode_images_with_mask`'s
+`embs.norm(...)` call. **No successful `/visual-search` requests were served on the broken
+revision** — every call failed immediately with 500, so this was a hard failure, not degraded
+quality. Traffic was rolled back to the previous good revision (`00038-qf6`, old CLIP) within
+minutes of the first failed live check.
+
+**Fix**: pinned `transformers>=4.44.0,<5.0.0` in `pyproject.toml`, regenerated `uv.lock`
+(resolves to `4.57.6`, matching what had actually been tested). This time verified against the
+**exact locked environment** before redeploying: `uv sync --frozen --extra ml` into a fresh
+`.venv`, ran the failing code path directly through it (clean `(512,)` unit-norm output, no
+error), full test suite (268 passed, 1 pre-existing unrelated failure) — then went one step
+further and built the actual `infra/Dockerfile.cpu` image locally (Docker Desktop), ran it with
+brand data bind-mounted, and hit `/visual-search`, `/style-search`, `/similar`, `/recommend`,
+`/complete` over real HTTP before trusting a second deploy. This is the verification depth that
+should have happened before the first deploy — the lesson: **local ambient-env testing does not
+substitute for testing the exact frozen lockfile** the Docker build actually uses, for any
+dependency added to the serving path for the first time.
+
+**Redeploy**: revision `fashion-recommender-staging-00040-sw8`, 100% traffic, healthy.
+
+**Live verification (production revision, not local)**:
+- Powerlook T-Shirt image query → 5/5 T-Shirt results (`aid=1,53,44,329,137`), the literal bug fixed
+- Snitch T-Shirt image query → 5/5 T-Shirt/Polo-T-Shirt results
+- Fashor kurta style-search (`"cotton kurta for casual wear"`) → 5/5 Kurtas results
+- Fashor small-category spot-check (Kurta n=56, Fashion n=36 — excluded from the n=100 A/B sample
+  at n<3): Kurta image query → 5/5 clean kurta matches; Fashion-category item (a floral maxi
+  dress) → mixed dress/kurta-with-dupatta results, which is expected since "Fashion" itself is a
+  heterogeneous catch-all bucket in this catalog, not a red flag
+- `/recommend`, `/similar`, `/complete` (snitch) → unchanged scores, confirming the two-tower path
+  is unaffected on the live revision, not just in code review
+- Warm latency: 450ms (visual-search); cold-start first request after deploy: ~6s (model load)
+
+**New locked serve-path number** (`scripts/eval_serve_path.py --mode style --local --http-mode`,
+snitch, n=40, seed=42 — identical methodology to the existing 67.5% baseline in
+[[project_positioning_claims]]):
+
+| | Local (FAISS-100 + reranker) | HTTP (live API) | Gap |
+|---|---|---|---|
+| Category recall@5 | 92.5% (37/40) | 92.5% (37/40) | 0.0% |
+
+**92.5%, up from 67.5%** — a full serve-path win, not just raw retrieval. The old 67.5% number
+was depressed by the rerank's "infer category from rank-1 hit" step cascading a wrong category
+guess into the reranked result when rank-1 itself was miscategorized (a raw-CLIP retrieval
+failure mode). FashionCLIP's better rank-1 accuracy fixes the cascade, not just the top-5 set.
+Note: 92.5% happens to numerically match the old *raw-FAISS-without-rerank* number documented in
+[[project_known_minor_issues]] as an "eval flaw" — that is coincidence, not the same measurement
+resurfacing; this number is the full serve path (FAISS-100 + reranker, local/HTTP gap confirmed
+0%), the old 92.5% was raw FAISS only. **Use 92.5% for style-search pitch material going
+forward; 67.5% is now superseded.**
 
 | Secret stored with CRLF → three deploys to get Groq live | PowerShell pipe adds `\r\n`; fixed by writing key to temp file via `[System.IO.File]::WriteAllText` (ASCII, no newline) before `--data-file`. Future secret updates must use this pattern. |
