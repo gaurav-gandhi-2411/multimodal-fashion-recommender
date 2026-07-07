@@ -32,7 +32,11 @@ PARQUET_SOURCES: dict[str, Path] = {
 }
 
 PDP_BASES: dict[str, str] = {
-    "snitch": "https://snitch.co.in/products/",
+    # snitch.com (unlike snitch.co.in) only redirects bare-domain -> www at the root;
+    # /products/<slug> without www 404s. Must include www. explicitly. See #16 migration
+    # (scripts/fix_snitch_domain.py) which moved co.in -> com but missed this, breaking
+    # all 1803 Snitch PDP links.
+    "snitch": "https://www.snitch.com/products/",
     "fashor": "https://fashor.com/products/",
     "powerlook": "https://powerlook.in/products/",
 }

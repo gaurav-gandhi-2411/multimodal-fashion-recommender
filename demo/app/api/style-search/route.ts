@@ -46,7 +46,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       title: meta?.title ?? `Item ${r.item_id}`,
       image_url: meta?.image_url ?? "",
       price_inr: meta?.price_inr ?? 0,
-      pdp_url: r.pdp_url || meta?.pdp_url || "",
+      // Prefer the demo's own catalog snapshot over the backend's pdp_url — see
+      // visual-search/route.ts for why (stale/broken backend catalog field shielding).
+      pdp_url: meta?.pdp_url || r.pdp_url || "",
       category: meta?.category ?? "",
     };
   });
