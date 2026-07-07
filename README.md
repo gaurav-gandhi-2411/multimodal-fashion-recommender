@@ -8,6 +8,14 @@ A two-tower retrieval system for personalised fashion recommendations, combining
 
 **[Live Demo](https://huggingface.co/spaces/gauravgandhi2411/multimodal-fashion-recommender)**
 
+### Try the production API right now
+
+No signup, no catalog handoff — a public sandbox key against real data:
+
+- **[QUICKSTART.md](QUICKSTART.md)** — copy-paste curl/JS in under 5 minutes
+- **[Live interactive API docs](https://fashion-recommender-staging-rm7rz66wza-el.a.run.app/docs)** — every endpoint, every field, try-it-out in the browser
+- Onboarding your own catalog: **[CLIENT_ONBOARDING.md](CLIENT_ONBOARDING.md)**
+
 ---
 
 ## Table of Contents

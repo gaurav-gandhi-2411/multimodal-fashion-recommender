@@ -20,6 +20,10 @@ def require_brand(
     if not x_api_key or x_api_key != state.api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API key",
+            detail=(
+                "Invalid or missing API key. Send it as the 'X-Api-Key' request header. "
+                "See QUICKSTART.md, or try the public sandbox key against brand 'h_and_m' "
+                "if you don't have a key yet."
+            ),
         )
     return state

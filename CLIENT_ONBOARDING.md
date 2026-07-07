@@ -1,18 +1,46 @@
 # Client Onboarding Guide
 
-Get from "here's our catalog" to live recommendations in under 30 minutes.
+## Try it before you commit to anything
 
-## Prerequisites
+You don't need to wait for your own catalog to be onboarded to start evaluating this API
+or building your integration. There's a public sandbox — a real dataset, the real trained
+model, no catalog handoff required:
 
-- Python 3.11+ installed in your environment
-- API credentials provided by your integration contact (you will receive a `<BRAND>_API_KEY` value)
-- One of the following catalog sources:
-  - A Shopify store with `/products.json` enabled (most stores have this by default)
-  - A CSV export of your product catalog (column requirements below)
+**See `QUICKSTART.md`** — copy-paste curl/JS examples against the sandbox, ready right now.
+
+The rest of this document covers getting **your own** catalog live.
 
 ---
 
-## Step 1 — Clone the repository and install dependencies
+## Honest state of this process today
+
+Getting your catalog into our ingestion pipeline is fully documented below and works as
+described — you (or we, on your behalf) can run it right now. **Going live on the shared
+production service is currently a short, coordinated process with us, not a fully
+self-serve one.** Concretely: after your catalog is ingested, someone on our side syncs the
+resulting index to our cloud storage, provisions your API key, and deploys — that part
+isn't automated yet. We're actively shortening this (tracked internally); this doc will be
+updated with a firm SLA once that lands. In the meantime, treat Step 2 below as "hand this
+to your integration contact," not "you're live."
+
+## Prerequisites
+
+- Python 3.11+ (only needed if you're running catalog preparation yourself, rather than
+  sending us a catalog export directly)
+- One of the following catalog sources:
+  - A Shopify store with `/products.json` enabled (most stores have this by default)
+  - A CSV export of your product catalog (column requirements below)
+- Your integration contact will provision your `<BRAND>_API_KEY` once your catalog is live
+
+---
+
+## Step 1 — Prepare your catalog
+
+This step produces the files your integration contact needs — it does not itself make
+anything live. You can run it yourself (fastest — send us the output), or send us your raw
+catalog export/Shopify URL and we'll run it.
+
+### If running it yourself
 
 ```bash
 git clone https://github.com/<org>/multimodal-fashion-recommender.git
@@ -20,12 +48,6 @@ cd multimodal-fashion-recommender
 pip install uv
 uv sync --extra ml
 ```
-
-**Expected result:** Dependencies install without errors. The `[ml]` extra pulls in CLIP and sentence-transformers — required for embedding your catalog.
-
----
-
-## Step 2 — Prepare your catalog
 
 ### Option A — Shopify (recommended)
 
@@ -70,27 +92,22 @@ INFO Step 4/6 — ItemTower fusion
 INFO Step 5/6 — building FAISS index
 INFO Step 6/6 — writing catalog parquet
 INFO Brand YAML written → brands/your_brand.yaml
-
-Next steps:
-  1. Set the API key:  export YOUR_BRAND_API_KEY=<your-key>
-  2. Start the server: uvicorn app.api.main:app --reload
-  3. Test cold-start:  curl ...
 ```
 
-**Files written:**
+**Files written (local only at this point — see Step 2):**
 ```
 data/your_brand/images/          ← downloaded product images
 data/your_brand/items.parquet    ← catalog with article_ids
-indices/your_brand/active.faiss/ ← FAISS index (queryable immediately)
+indices/your_brand/active.faiss/ ← FAISS index (queryable immediately, locally)
 indices/your_brand/item_emb.npy  ← 256-dim item embeddings
-brands/your_brand.yaml           ← brand config (loaded at API startup)
+brands/your_brand.yaml           ← brand config
 ```
 
 **Resumability:** If the script is interrupted during image download, re-run the same command. Already-downloaded images are skipped. Failed images are recorded in `data/your_brand/images/failed_images.json`.
 
 ---
 
-## Step 3 — (Optional) Ingest interaction history
+## Step 2 — (Optional) Ingest interaction history
 
 Without interaction data, the API serves item-to-item similarity (cold-start mode). This already powers "similar items" and "complete the look" use cases.
 
@@ -126,69 +143,38 @@ python scripts/ingest_interactions.py \
   --path /path/to/events.csv
 ```
 
-**Expected output:**
-```
-INFO Loaded catalog: 150 products
-INFO Loaded 4200 raw interaction rows
-INFO 4150 rows after mapping to article_ids
-INFO Split: train=3320  val=415  test=415
-INFO Wrote 3320 rows → data/your_brand/transactions/train.parquet
-INFO Wrote 415 rows → data/your_brand/transactions/val.parquet
-INFO Wrote 415 rows → data/your_brand/transactions/test.parquet
-INFO Updated brands/your_brand.yaml with transactions_dir
-```
+**Note:** personalization quality depends on interaction volume. With little to no history,
+`/recommend` transparently falls back to item-based cold-start — see `README.md`'s
+"Multi-Brand Indian Demo" section for how this was handled for our existing brands.
 
 ---
 
-## Step 4 — Set the API key and start the server
+## Step 3 — Hand off to go live
+
+This is the step that isn't self-serve yet. Send your integration contact:
+- The `data/your_brand/`, `indices/your_brand/`, and `brands/your_brand.yaml` output from
+  Step 1 (or just the raw catalog/Shopify URL if you'd rather we run Step 1)
+- Confirmation of whether interaction data (Step 2) is included
+
+We sync the assets to our cloud storage, provision your `<BRAND>_API_KEY`, and deploy. Once
+that's done, your integration contact will confirm you're live and share your key.
+
+## Step 4 — Test locally before you have a live key (optional)
+
+If you want to verify your catalog ingested correctly before we deploy it, you can run the
+API against your local output:
 
 ```bash
-export YOUR_BRAND_API_KEY=<key-provided-by-integration-contact>
+export YOUR_BRAND_API_KEY=<any-value-you-choose-for-local-testing>
 uvicorn app.api.main:app --host 0.0.0.0 --port 8000
-```
-
-Verify the brand loaded correctly:
-
-```bash
 curl http://localhost:8000/health
-```
-
-Expected:
-```json
-{
-  "status": "ok",
-  "brands": [
-    {
-      "brand": "your_brand",
-      "display_name": "Your Brand",
-      "item_count": 150
-    }
-  ]
-}
-```
-
----
-
-## Step 5 — Test your first recommendation call
-
-### Item-to-item similarity (cold-start, no interaction history needed)
-
-```bash
-curl -H "X-Api-Key: <your-key>" \
+curl -H "X-Api-Key: <your-local-value>" \
   http://localhost:8000/v1/your_brand/item/1/similar?k=5
 ```
 
-This returns the 5 most visually and semantically similar items to item `1`.
-
-### Personalized recommendations (requires Step 3)
-
-```bash
-curl -X POST \
-  -H "X-Api-Key: <your-key>" \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": "alice@example.com", "k": 10}' \
-  http://localhost:8000/v1/your_brand/recommend
-```
+**This is local-only sanity-checking** — it doesn't touch the production service and the
+key you set here has no relationship to the real key you'll receive when you're live. Most
+integrators can skip this and just review the ingestion script's console output instead.
 
 ---
 
@@ -197,8 +183,8 @@ curl -X POST \
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
 | `RuntimeError: /products.json returned 404` | Store has JSON API disabled | Use `--source csv` instead |
-| `ValueError: Generic CSV missing required columns: ['price_inr']` | Missing column in your CSV | Add the column (see column table in Step 2B) |
-| `FileNotFoundError: Catalog parquet not found` | Ran `ingest_interactions` before `ingest_catalog` | Run Step 2 first |
+| `ValueError: Generic CSV missing required columns: ['price_inr']` | Missing column in your CSV | Add the column (see column table in Step 1B) |
+| `FileNotFoundError: Catalog parquet not found` | Ran `ingest_interactions` before `ingest_catalog` | Run Step 1 first |
 | `50%+ of catalog rows invalid` | Widespread data quality issue | Check CSV encoding; ensure `price_inr` > 0 for all rows |
 | Images downloading slowly | Large catalog with many images | Add `--workers 16` to `ingest_catalog.py` (default: 8) |
 | `ModuleNotFoundError: No module named 'open_clip'` | Installed without `[ml]` extra | Re-install: `uv sync --extra ml` |
@@ -209,10 +195,9 @@ By default, the Shopify ingestion logs a warning if robots.txt restricts `/produ
 
 ---
 
-## What happens next
+## What happens once you're live
 
-Once the brand is live:
 - `/v1/your_brand/item/{id}/similar` is immediately available (cold-start, no interaction data needed)
-- `/v1/your_brand/recommend` with `user_id` requires interaction data from Step 3
-- Re-running `ingest_catalog.py` rebuilds the index cleanly (idempotent)
-- Re-running `ingest_interactions.py` replaces the existing train/val/test splits
+- `/v1/your_brand/recommend` with `user_id` requires interaction data from Step 2
+- Re-running `ingest_catalog.py` rebuilds the index cleanly (idempotent) — send us the updated output the same way as Step 3
+- See `QUICKSTART.md` for the full API reference and integration patterns (including the CORS/proxy requirement — read this before you start building your frontend)
