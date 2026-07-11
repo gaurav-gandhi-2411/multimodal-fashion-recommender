@@ -134,7 +134,7 @@ def main() -> int:
         return 1
 
     brand_upper = args.brand.upper()
-    print("\n✓ Ingestion complete.")
+    print("\nIngestion complete.")
     print(f"  Brand YAML : {yaml_path}")
     print("\nNext steps:")
     print(f"  1. Set the API key:  export {brand_upper}_API_KEY=<your-key>")

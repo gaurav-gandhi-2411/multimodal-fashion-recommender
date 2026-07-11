@@ -55,11 +55,16 @@ RUN mkdir -p /app/.cache/hf /app/.cache/torch
 # weights at image build time would add ~90 MB for zero serving benefit.
 RUN python -c "from transformers import CLIPModel, CLIPProcessor; CLIPModel.from_pretrained('patrickjohncyh/fashion-clip'); CLIPProcessor.from_pretrained('patrickjohncyh/fashion-clip')"
 
-# chown /app so the non-root appuser can write GCS-synced brand assets
-# (data/, indices/, checkpoints/) into the working dir at startup.
-# The cache dirs created above are inside /app and are covered by this chown.
-RUN adduser --disabled-password --no-create-home --uid 1001 appuser \
-    && chown -R appuser /app
+# chown only the directories appuser actually needs to WRITE at runtime:
+# data/, indices/, checkpoints/ (GCS-synced brand assets, created empty here since
+# app/storage.py populates them at startup) and .cache/ (HF/torch cache dirs — see
+# comment above). Deliberately NOT `chown -R /app`: /app/.venv is the entire ML
+# dependency tree (~1.7 GB, ~39k files) that appuser only ever needs to READ, and a
+# recursive chown over it was costing several minutes on every build with no
+# functional benefit (default COPY permissions already make it world-readable).
+RUN adduser --disabled-password --gecos "" --no-create-home --uid 1001 appuser \
+    && mkdir -p /app/data /app/indices /app/checkpoints \
+    && chown -R appuser /app/.cache /app/data /app/indices /app/checkpoints
 USER appuser
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
