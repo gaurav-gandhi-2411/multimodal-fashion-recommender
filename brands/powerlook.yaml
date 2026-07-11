@@ -33,7 +33,34 @@ rerank:
   # (slight price loosening). Keyword lexicon only; ethnic/traditional excluded (non-discriminating).
   w_occasion: 0.08
   parse_explicit_occasion: false
-  category_groups: []
+  # Human-reviewed, conservative -- NOT re-attempting the Shirt/T-Shirt merge Phase 10
+  # (PR #30) already tried and found to be a negative result (a genuine model confusion,
+  # not a taxonomy artifact -- extending category-affinity there regressed a clean sample
+  # for zero gain). These two pairs are different: each is a real product-family
+  # relationship, not a fix for a known confusion. Deliberately RELATED tier (0.4), not
+  # equivalent (0.7) -- a belt is a specific type of accessory and a tracksuit is a
+  # specific type of matching set, not fully interchangeable with the broader category.
+  category_groups:
+    - name: accessories_general
+      members:
+        - Accessories
+      related_groups:
+        - accessories_belts
+    - name: accessories_belts
+      members:
+        - Belts
+      related_groups:
+        - accessories_general
+    - name: matching_set_coord
+      members:
+        - Co-ord
+      related_groups:
+        - matching_set_tracksuit
+    - name: matching_set_tracksuit
+      members:
+        - Track-Suit
+      related_groups:
+        - matching_set_coord
 # Complete-the-Look (outfit completion): menswear separates → strong fit.
 # Co-ord (complete set) is intentionally left unslotted so co-ord queries return empty.
 complete:
