@@ -26,6 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from app.ingestion.filters import excluded_category_breakdown, filter_excluded_categories
 from app.ingestion.pipeline import run_catalog_pipeline
 from app.ingestion.sources import CsvSource, ShopifySource
 
@@ -83,6 +84,19 @@ def _parse_args() -> argparse.Namespace:
         default=8,
         help="Concurrent image download workers (default: 8).",
     )
+    parser.add_argument(
+        "--exclude-categories",
+        default="",
+        help=(
+            "Comma-separated category names to drop before ingestion (case-insensitive "
+            "exact match against the catalog's category field), e.g. 'Fragrance,Gift-Card'. "
+            "Some catalogs mix non-apparel SKUs into an otherwise apparel catalog -- a "
+            "perfume or gift-card photo has no meaningful visual-similarity relationship to "
+            "garments, so leaving them in surfaces as a broken-looking 'similar item' result. "
+            "No default exclusions: every catalog's composition differs, so this is opt-in "
+            "per onboarding, not a hardcoded brand rule."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -119,6 +133,23 @@ def main() -> int:
         return 1
 
     print(f"  {len(items)} valid items fetched.")
+
+    excluded_categories = {c.strip() for c in args.exclude_categories.split(",") if c.strip()}
+    if excluded_categories:
+        items, excluded = filter_excluded_categories(items, excluded_categories)
+        if excluded:
+            print(f"  Excluded {len(excluded)} item(s) by category filter:")
+            for category, count in excluded_category_breakdown(excluded).most_common():
+                print(f"    - {category}: {count}")
+        print(f"  {len(items)} item(s) remain after category exclusion.")
+
+        if not items:
+            print(
+                "ERROR: category exclusion removed every item — nothing left to ingest.",
+                file=sys.stderr,
+            )
+            return 1
+
     print(f"\nRunning ingestion pipeline for brand '{args.brand}'...")
 
     try:
