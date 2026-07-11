@@ -394,7 +394,6 @@ def main() -> None:
     st.markdown(
         "<hr style='margin-top:4rem'>"
         "<p style='text-align:center;color:#bbb;font-size:0.8em'>"
-        "Built by Gaurav Gandhi · "
         "<a href='https://github.com/gaurav-gandhi-2411/multimodal-fashion-recommender'"
         " style='color:#bbb'>GitHub</a>"
         "</p>",

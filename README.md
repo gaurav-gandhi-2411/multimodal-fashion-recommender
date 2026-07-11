@@ -27,7 +27,7 @@ No signup, no catalog handoff — a public sandbox key against real data:
 5. [Results](#results)
 6. [Deployment](#deployment)
 7. [Multi-Brand Indian Demo](#multi-brand-indian-demo)
-8. [What I Learned](#what-i-learned)
+8. [Technical Findings](#technical-findings)
 9. [Project Structure](#project-structure)
 10. [Reproducing](#reproducing)
 
@@ -190,7 +190,7 @@ The **user tower** was trained on H&M interaction sequences and does **not** tra
 
 ---
 
-## What I Learned
+## Technical Findings
 
 ### Text > Image for single-type specialists
 Users who browse one product type exclusively (e.g. all Dresses) are better served by SBERT text embeddings than CLIP image embeddings. Image scores for pure-category users hovered near zero (−0.01 to 0.12) while text scores stayed 0.31–0.43. SBERT's product-description embeddings carry stronger categorical signal than CLIP for users with no visual diversity in their history.
