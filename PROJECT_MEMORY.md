@@ -1928,16 +1928,65 @@ style queries per brand (90 total, `evals/fixtures/style_search_queries/`), reus
 through the exact same serve path. Result (n=30 matched methodology, same brands/k as the
 title-derived baseline):
 
-| Brand | Title-derived | Honest free-text | Gap |
-|---|---|---|---|
-| snitch | 90.0% (27/30) | 70.0% (21/30) | 20.0pp |
-| fashor | 90.0% (27/30) | 43.3% (13/30) | 46.7pp |
-| powerlook | 100.0% (30/30) | 63.3% (19/30) | 36.7pp |
+| Brand | Title-derived | Honest free-text (strict) | Honest free-text (affinity) | Gap (strict) |
+|---|---|---|---|---|
+| snitch | 90.0% (27/30) | 70.0% (21/30) | 73.3% (22/30) | 20.0pp |
+| fashor | 90.0% (27/30) | **43.3%** (13/30) | **86.7%** (26/30) | 46.7pp |
+| powerlook | 100.0% (30/30) | 63.3% (19/30) | 63.3% (19/30, no change — empty `category_groups`) | 36.7pp |
 
-Real, substantial, brand-dependent gap — fashor's ethnic-wear category boundaries are
-genuinely harder to describe unambiguously in free text than snitch/powerlook's more
-visually-distinct categories. Reported alongside the title-derived number, not as a
-replacement.
+Real, substantial, brand-dependent gap — reported alongside the title-derived number, not
+as a replacement. **Fashor's strict-vs-affinity spread (43.3%→86.7%, +43.4pp) is far larger
+than snitch's (+3.3pp) or powerlook's (+0pp)** — this by itself is a real finding: it's
+driven by fashor's own pre-existing `ethnic_set` rerank category-affinity group
+(`2P Kurta Set`/`3P Kurta Set`/`Kurta Set`/`Co-ord Set` — configured since Phase 5, not new
+in this phase), which the strict-only metric doesn't credit. Powerlook shows zero
+affinity lift because it still has `category_groups: []` (the same gap the Phase 14 audit
+flagged for visual-search).
+
+### Diagnosis: why Fashor's 43.3% is so much lower (per-query breakdown)
+
+Built `scripts/diagnose_style_search_failures.py` to show exactly which of the 30 fashor
+queries miss and what they retrieve instead (reuses the same FAISS→rank-1-category→rerank
+pipeline as the real serve path — not a separate implementation). Full per-query output
+committed; summary:
+
+- **NOT a FashionCLIP text-encoder weakness on Indian-ethnic vocabulary.** Queries using
+  "puja," "dupatta," "festive," "wedding" for the two best-populated categories score
+  perfectly: `3P Kurta Set` 4/4, `Dresses` 3/3. The encoder understands the vocabulary fine
+  when the target category has enough catalog support.
+- **The real driver is catalog category-imbalance.** `2P Kurta Set` + `3P Kurta Set` alone
+  are 2,705 of fashor's 3,618 indexed items (74.7%). Thin categories — `Co-ord Set` (22
+  items, 0.6%), `Bottom` (3 items, 0.08%), `Kurta Set` (62, 1.7%), `Kurti/Tunics` (63,
+  1.7%) — get systematically absorbed into the two mega-categories by nearest-neighbor
+  retrieval regardless of query wording. All 4 `Co-ord Set` queries explicitly say
+  "co-ord set" in the text and still land on `2P Kurta Set` — this rules out a vocabulary
+  gap; the query is lexically unambiguous and still loses to sheer catalog-count gravity.
+- **Most of this is already credited at the affinity tier** (see table above) because
+  `Co-ord Set`/`Kurta Set` are already grouped with `2P/3P Kurta Set` as `ethnic_set`.
+  The genuine, uncredited remainder: `Bottom` (2/2 miss, both tiers — 3 items total is not
+  a model problem, it's a catalog-depth problem, unfixable by any ML change) and
+  `Kurti/Tunics` (3/5 miss at both tiers — confused with `Kurtas` and `Dresses`, NOT
+  currently in any affinity group).
+
+### Closability assessment — query expansion and prompt changes REJECTED, one narrow candidate
+
+- **Query expansion**: rejected. The `Co-ord Set` failures already use the literal words
+  "co-ord set" — expansion adds no new signal to a query that's already lexically exact.
+  Doesn't address either root cause (pool imbalance, taxonomy fuzziness).
+- **Better text-encoder prompt engineering**: rejected, same reason — the encoder already
+  understands the vocabulary correctly for well-populated categories; the failure is a
+  retrieval-pool/taxonomy issue, not a prompt-comprehension issue no prompt change fixes.
+- **Extending `category_groups` further**: NOT recommended for `Co-ord Set` (already
+  covered) or as a blanket fix. **One narrow, human-judgment-gated candidate**: adding
+  `Kurti/Tunics` to a related-group (0.4 tier, not 0.7 equivalent) with `Kurtas`, since a
+  kurti is colloquially a short/casual kurta in real shopping usage — plausibly a genuine
+  near-substitution, not metric gaming (unlike Phase 9's explicit rejection of merging
+  Shirt/T-Shirt, which are a real model confusion, not a taxonomy artifact). Affects only
+  63/3,618 items (1.7% of catalog) — **honest expected gain is small** (at most a few
+  points on this 30-query fixture); proposing for consideration, not building without
+  sign-off, same bar as every other category_groups change in this project's history.
+- **`Bottom` (3 items) is not closable by any model or taxonomy change** — it's a
+  catalog-composition gap. Flagging for awareness, not proposing an ML fix for it.
 
 ### Status
 Measurement phase and all 3 approved fixes complete, honestly reported — including two
