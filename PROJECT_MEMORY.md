@@ -557,7 +557,7 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | **Phase 11 (catalog attributes)** | **Zero-shot FashionCLIP color+pattern tagging LIVE (rev 00042-rbt); fabric/occasion evaluated + withheld (negative result)** | 🟢 Complete | 2026-07-07 |
 | **Phase 12 (integration friction, Tier 1+2)** | **Public H&M sandbox brand + honest docs LIVE (rev 00043-grt)** | 🟢 Complete | 2026-07-08 |
 | **Phase 13 (Tier 3 onboarding runbook)** | **`scripts/onboard_brand.ps1` MERGED (#44); Virgio (5th brand) LIVE on Cloud Run rev `fashion-recommender-staging-00044-qvf`** | 🟢 Complete | 2026-07-11 |
-| **Phase 14 (full-system accuracy audit)** | **Honest ceiling analysis across recommendation/visual/style/attributes; 3 defensibility fixes approved (taxonomy normalization, color-eval synonyms, honest style-search eval)** | 🟢 Measured, fixes in progress | 2026-07-11 |
+| **Phase 14 (full-system accuracy audit)** | **Honest ceiling analysis + 3 defensibility fixes merged+deployed; color ~90% retired (cite ~64%); Fashor free-text 43% diagnosed (catalog imbalance, not vocab); Powerlook affinity-groups follow-up identified** | 🟢 Complete | 2026-07-11 |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
 - [x] Popularity baseline numbers confirmed on temporal test split, active pool AND full pool
@@ -1988,12 +1988,36 @@ committed; summary:
 - **`Bottom` (3 items) is not closable by any model or taxonomy change** — it's a
   catalog-composition gap. Flagging for awareness, not proposing an ML fix for it.
 
+### LOCKED PITCH NUMBERS — style-search, as of 2026-07-11
+
+Three genuinely different numbers exist for "style-search quality." Never conflate them —
+state which methodology backs which number, every time.
+
+| Methodology | Snitch | Fashor | Powerlook | What it means |
+|---|---|---|---|---|
+| **Title-derived retrieval** (query = the item's own title) | 90.0% | 90.0% | 100.0% | A **retrieval-quality** number — how well the encoder+index finds the right category when the query already echoes catalog vocabulary. **NOT a free-text-search number.** This is where the original "92.5%" (n=40) lineage lives; the n=30 numbers above are a fresh same-methodology cross-check. |
+| **Free-text, strict match** (human-written realistic queries, exact category string) | 70% | **43%** | 63% | The conservative floor for how style-search performs on queries a real shopper would actually type. **Deflated by taxonomy redundancy** — see affinity column. |
+| **Free-text, affinity match** (credits taxonomy-equivalent categories — right garment KIND, not just exact label) | 73% | **87%** | 63% | The more realistic number for "did the customer get the right kind of garment." Fashor's huge strict→affinity jump (43%→87%) comes from its own pre-existing `ethnic_set` rerank config (Phase 5) crediting `Kurta Set`/`Co-ord Set`/`2P`/`3P Kurta Set` as related. **Powerlook shows NO lift (63%→63%) because it has zero `category_groups` configured** — see the follow-up below. |
+
+**Honest limitation, stated plainly**: thin catalog categories (fashor's `Bottom`, n=3;
+`Co-ord Set`, n=22) underperform at every methodology and every metric — this is a
+**catalog-depth gap**, not something a model change, prompt change, or query expansion can
+fix. Diagnosed and ruled out both of the latter two explicitly (see above) before concluding
+this.
+
 ### Status
-Measurement phase and all 3 approved fixes complete, honestly reported — including two
+Measurement phase and all 3 approved fixes complete, deployed, and locked. Two
 "already at ceiling, don't chase it" negative results from the original audit (fabric and
 occasion attributes), one measurement-only doc correction (`/health` contract, Phase 13),
-and one HYPOTHESIS THAT DID NOT HOLD from fix #2 (color-eval accuracy did not rise with
-better coverage — reported as a correction to this phase's own earlier reasoning, not
-smoothed over). Held #4 (tower+CF blending) remains unbuilt per the user's explicit
-decision. All 3 fixes are DRAFT PRs (#53, #54, #55), awaiting review — none deployed to
-production; the corrected local catalog data (fix #1) has not been re-uploaded to GCS.
+one HYPOTHESIS THAT DID NOT HOLD (color-eval accuracy did not rise with better text-match
+coverage — 64.6%→64.3%, not the hoped-for ~90%; **90% is retired, cite ~64%**), and one
+diagnosed-and-explained real gap (Fashor's free-text strict number, now shown to be mostly
+a strict-metric artifact once affinity is credited, with a small remaining genuine gap from
+thin categories). Held #4 (tower+CF blending) remains unbuilt per explicit decision.
+
+**Merged + deployed**: #52 (audit doc), #53 (taxonomy normalization — LIVE on revision
+`fashion-recommender-staging-00045-whx`, merged==live confirmed, all 5 brands + two-tower
+regression-checked), #54 (color negative result), #55 (Fashor diagnosis), #56 (color-number
+doc correction). **One real follow-up identified, not yet built**: configure Powerlook
+category-affinity groups (it's the only brand with none) and re-measure — proposed as a
+separate, human-reviewed, before/after-A/B'd DRAFT PR.
