@@ -122,8 +122,8 @@ jobs:
             --cpu 1 \
             --timeout 60s \
             --concurrency 80 \
-            --set-env-vars "^##^LOG_FORMAT=json##GCS_PROJECT=${{ secrets.GCS_PROJECT }}##GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}##USD_TO_INR=83.0##BRANDS_ENABLED=snitch,fashor,powerlook,h_and_m" \
-            --set-secrets "SNITCH_API_KEY=fashion-rec-snitch-key:latest,FASHOR_API_KEY=fashion-rec-fashor-key:latest,POWERLOOK_API_KEY=fashion-rec-powerlook-key:latest,H_AND_M_API_KEY=fashion-rec-h_and_m-key:latest,GROQ_API_KEY=fashion-rec-groq-key:latest" \
+            --set-env-vars "^##^LOG_FORMAT=json##GCS_PROJECT=${{ secrets.GCS_PROJECT }}##GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}##USD_TO_INR=83.0##BRANDS_ENABLED=snitch,fashor,powerlook,h_and_m,zzdemo_brand" \
+            --set-secrets "SNITCH_API_KEY=fashion-rec-snitch-key:latest,FASHOR_API_KEY=fashion-rec-fashor-key:latest,POWERLOOK_API_KEY=fashion-rec-powerlook-key:latest,H_AND_M_API_KEY=fashion-rec-h_and_m-key:latest,GROQ_API_KEY=fashion-rec-groq-key:latest,ZZDEMO_BRAND_API_KEY=fashion-rec-zzdemo_brand-key:latest" \
             --service-account "${{ secrets.GCP_SERVICE_ACCOUNT }}" \
             --allow-unauthenticated \
             --project "${{ secrets.GCS_PROJECT }}"

@@ -1,0 +1,10 @@
+brand: zzdemo_brand
+display_name: Zzdemo Brand
+catalog_path: data/zzdemo_brand/items.parquet
+index_path: indices/zzdemo_brand/active.faiss
+embeddings_path: indices/zzdemo_brand/item_emb.npy
+pdp_url_template: null
+api_key_env: ZZDEMO_BRAND_API_KEY
+llm:
+  provider: template
+  enabled: true
