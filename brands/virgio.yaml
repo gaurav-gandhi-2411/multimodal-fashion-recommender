@@ -1,0 +1,10 @@
+brand: virgio
+display_name: Virgio
+catalog_path: data/virgio/items.parquet
+index_path: indices/virgio/active.faiss
+embeddings_path: indices/virgio/item_emb.npy
+pdp_url_template: null
+api_key_env: VIRGIO_API_KEY
+llm:
+  provider: template
+  enabled: true
