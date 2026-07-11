@@ -557,6 +557,7 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | **Phase 11 (catalog attributes)** | **Zero-shot FashionCLIP color+pattern tagging LIVE (rev 00042-rbt); fabric/occasion evaluated + withheld (negative result)** | 🟢 Complete | 2026-07-07 |
 | **Phase 12 (integration friction, Tier 1+2)** | **Public H&M sandbox brand + honest docs LIVE (rev 00043-grt)** | 🟢 Complete | 2026-07-08 |
 | **Phase 13 (Tier 3 onboarding runbook)** | **`scripts/onboard_brand.ps1` MERGED (#44); Virgio (5th brand) LIVE on Cloud Run rev `fashion-recommender-staging-00044-qvf`** | 🟢 Complete | 2026-07-11 |
+| **Phase 14 (full-system accuracy audit)** | **Honest ceiling analysis across recommendation/visual/style/attributes; 3 defensibility fixes approved (taxonomy normalization, color-eval synonyms, honest style-search eval)** | 🟢 Measured, fixes in progress | 2026-07-11 |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
 - [x] Popularity baseline numbers confirmed on temporal test split, active pool AND full pool
@@ -1795,3 +1796,147 @@ bugs from the first real run, 1 content-quality gap — non-apparel SKUs — and
 frictions), each verified with evidence, not assumed fixed. **Virgio is the 5th live brand**
 on Cloud Run revision `fashion-recommender-staging-00044-qvf`. Tier 4 (true client
 self-serve) remains explicitly out of scope, unstarted.
+
+---
+
+## Phase 14 — Full-System Accuracy Audit + Honest Ceiling Analysis (2026-07-11)
+
+**Trigger:** MEASURE-then-improve request — push every metric as high as it GENUINELY goes,
+meaning: find each metric's realistic ceiling, measure the honest gap to it, and close only
+what's closable without fabrication. Explicit instruction: a number that looks too good
+(recall@10 near 1.0, category-match ~100%) is a measurement error or leak, not a win — flag
+it, don't celebrate it. No new fixes without an A/B proving real gain without regression.
+
+### Method
+Ran the two-tower's first-ever stratified cold-start evaluation (`scripts/07_coldstart_
+stratified_eval.py` — a complete, rigorous script that existed untracked in the repo,
+apparently written in a prior session and never committed or run to completion; verified
+its dependencies existed, ran it fresh, and this is the FIRST time this exact stratified
+result has been produced). Dispatched two parallel research passes: one re-verifying the
+92.5% style-search / visual-search category-match numbers for reproducibility and ceiling
+reasoning, one re-verifying the Phase 11 attribute-accuracy numbers for reproducibility and
+ceiling reasoning. Then personally checked one flagged-as-unverified leakage risk (rerank-
+weight-tuning-sample vs. pitch-eval-sample overlap) and one new taxonomy-hygiene finding
+(near-duplicate category strings) with real counts, not assumption.
+
+### Part 1 — Measurement table
+
+| Metric | Current (serve-path) | n / seed / split | Realistic ceiling | Trustworthy? |
+|---|---|---|---|---|
+| Recommendation, overall | Tower R@10=0.0299, NDCG@10=0.0191 vs item-kNN CF R@10=0.0103, NDCG@10=0.0054 (2.90×/3.54× lift) | n=110,390 test interactions, seed=42, temporal 80/10/10 split, `bisect_left` leakage guard | Low-single-digit % recall over a 20k-item implicit-feedback catalog **is** the realistic ceiling for this problem class — already there | ✅ Reproduces Phase 0.5's locked 0.0299 exactly |
+| Recommendation, stratified by cold-start bucket (NEW this phase) | Bucket 0 (44.2% of real test cases, item has 0 train interactions): Tower 0.0213 vs **CF 0.0000** (structurally impossible for CF) · 1-5 (3.3%): 0.0154 vs 0.0047 (3.29×) · 6-20 (2.9%): 0.0165 vs 0.0092 (1.79×) · 20+ (49.6%, CF's home turf): 0.0393 vs 0.0200 (1.97×) | Same split/seed | N/A — a coverage question, not a ceiling question | ✅ |
+| Visual-search category-match | snitch 87.1%, powerlook 89.4%, fashor 76.6% (raw FAISS, FashionCLIP) | n=100/brand, seed=42, Phase 9 A/B | Below 100% by design — cross-category visual matches are correct results the metric penalizes | ✅ |
+| Style-search category recall@5 | 92.5% (snitch) | n=40, seed=42; **re-run fresh this phase**: 37/40 local, 37/40 HTTP, 0% gap, on live revision `00044-qvf` | ~90-95% band (rank-1-cascade dependency + non-disjoint taxonomy) — 92.5% sits at the top | ⚠️ Reproducible; 2 caveats below |
+| Attribute: color | 64.6% pooled text-eval (70% coverage) / ~90% manual visual spot-check (n=20) | Phase 11 | ~90% for whole-image zero-shot embeddings | ⚠️ 64.6% is a measurement-methodology artifact, not the true model quality — see below |
+| Attribute: pattern | 49.5% pooled (16.9% coverage), brand-variable (Powerlook ~92%, Snitch/Fashor ~58-62%) | Phase 11 | Brand variance is a real model bias (over-predicts "fancy" labels on plain items) | ⚠️ Directionally right, wide uncertainty from thin coverage |
+| Attribute: fabric | 19.7% pooled vs ~7.7% random floor (13-label) | Phase 11 | Already near the honest ceiling for image-only zero-shot | ✅ Correctly withheld, negative result confirmed |
+| Attribute: occasion | Worse than majority-class baseline for 2/3 brands (snitch -3.3pp, powerlook -3.5pp; fashor +2.4pp) | Phase 11; **re-verified live this phase** (snitch -3.3pp exact match) | N/A — fails the bar that matters | ✅ Confirmed negative result, reproducible |
+| Retrieval self-match | ~100% all brands | Phase 7 | N/A — trivial by construction | ✅ Correctly never presented as a standalone win |
+
+### The real headline: cold-start coverage, not the blended lift number
+
+44.2% of real test-set interactions involve items the CF baseline structurally cannot
+recommend at all (zero train interactions; CF's item universe is 9,313 of 20,000 catalog
+items). The tower recovers 2.13% recall in exactly this bucket, where CF is mathematically
+stuck at zero — infinite lift, but more importantly: coverage CF cannot produce at ANY
+hyperparameter setting. This is a bigger, more defensible story than the single blended
+2.90× number, and it had never been measured before this phase (the script existed,
+untracked, unrun). One honest caveat, not oversold: bucket 20+ shows the tower beating CF
+even on CF's home turf (1.97×) — genuinely interesting, but CF's smaller item universe
+mildly favors CF in that comparison per the script's own note.
+
+### Two caveats on the 92.5% style-search number, found by this audit
+
+1. **Task-realism gap**: the eval query is the item's own product title (e.g. "Solid Cotton
+   Kurta") — closer to lexical retrieval than a realistic free-text style query ("something
+   for a summer wedding"). 92.5% likely overstates real-user-query performance. **Addressed
+   by Part 2 fix #3 below.**
+2. **Leakage check, done not assumed**: verified whether the rerank-weight-tuning eval
+   sample and this pitch-metric eval sample could overlap. They use completely different
+   sampling code — `eval_serve_path.py` uses Python's `random.seed(42)` uniform sampling;
+   the weight-tuning scripts (`ablate_rerank.py`/`eval_similarity_quality.py`) use a
+   category-stratified `numpy` RNG with per-category derived seeds. Different RNG streams,
+   different algorithms — overlap risk confirmed negligible, not just assumed clean.
+
+### The color-attribute number is more conservative than reality
+
+64.6% pooled text-eval accuracy only counts a prediction correct if the exact taxonomy
+label appears as a whole word in title/description — synonyms ("charcoal" vs. taxonomy's
+"grey") and items where color isn't mentioned in text at all get marked wrong or excluded,
+even when the visual prediction is right. The 20-image manual spot-check (~90%) is closer
+to the true ceiling. The 25pp gap is largely a measurement artifact. **Addressed by Part 2
+fix #2 below.**
+
+### Part 2 — Approved fixes (defensibility, not target-chasing)
+
+User approved 3 of 4 proposed fixes — all "make the number honest," none "make the number
+bigger":
+
+1. **Category-taxonomy string normalization** (fashor, virgio). Confirmed with real counts,
+   not speculation: fashor has "Dress" (17 items) / "Dresses" (192 items) and "Kurta" (56) /
+   "Kurtas" (462) as separate category strings — near-certain singular/plural splits of the
+   same real category (raw Shopify `product_type` inconsistency). Virgio has "Skort" (1) /
+   "Skorts" (3), same pattern. "Kurta Set" (62 items) is confirmed a genuinely DIFFERENT
+   product (a multi-piece set, not a plural of Kurta) and must NOT be merged.
+2. **Color-eval synonym mapping** — human-reviewed list (charcoal/grey, navy/blue, etc.),
+   not fuzzy auto-match (off-white must not match black). Reveals the true ~90% number
+   instead of the understated 64.6% artifact; report both, labeled as a methodology
+   correction, not a model improvement.
+3. **Honest free-text style-search eval** — 30-40 human-written realistic queries per brand
+   ("summer wedding outfit"), category recall@5 measured separately, reported ALONGSIDE the
+   title-derived 92.5%, methodology difference stated plainly.
+
+**Held, not built**: #4 (hybrid tower+CF score blending for warm-item buckets). Per this
+audit's own numbers the expected gain is modest (CF only adds value where tower already
+wins), and it touches `/recommend`'s live production ranking — not worth the regression
+risk speculatively. Revisit only with real pilot traffic, with explicit escalation per the
+standing two-tower-model rule.
+
+### Fixes #1-3 — results (measured, not assumed)
+
+**#1 Category-taxonomy normalization** (PR #53): fashor's "Dress"/"Dresses" and
+"Kurta"/"Kurtas" (singular/plural feed splits), virgio's "Skort"/"Skorts", merged via a
+human-reviewed per-brand map (`app/ingestion/category_normalize.py`). `"Kurta Set"`
+confirmed to stay distinct (genuinely different product). Before/after on
+`eval_similarity_quality.py` (n=100, seed=42): fashor strict raw 64%→**67%** (+3pp),
+reranked 85%→**88%** (+3pp); snitch/powerlook byte-identical controls (untouched). Modest,
+fully explained by the merged category pools — not a target number.
+
+**#2 Color-eval synonym mapping** (PR #54): built a human-reviewed color-synonym map
+(`app/attribute_synonyms.py`) hypothesizing the 64.6% pooled color accuracy was a
+measurement artifact of exact-word matching, with the true number closer to Phase 11's
+~90% manual 20-image spot-check. **The hypothesis did NOT hold** — coverage rose as
+designed (70.0%→77.9%, +7.9pp, more items now have a determinable ground truth) but
+accuracy stayed flat (64.6%→64.3%, within noise, per-brand: snitch −0.6pp, fashor 0.0pp
+exactly, powerlook +1.3pp). **Conclusion, corrected from the original hypothesis**: the
+64.6% number, now confirmed on a larger sample, is the more statistically reliable
+estimate of color-attribute accuracy — Phase 11's tiny (n=20) manual spot-check was likely
+small-sample noise, not the true ceiling. Reporting the negative result on the hypothesis,
+not defending it.
+
+**#3 Honest free-text style-search eval** (PR #55): built 30 human-written, realistic
+style queries per brand (90 total, `evals/fixtures/style_search_queries/`), reusing
+`run_local_style`/`run_http_style` from `eval_serve_path.py` unmodified so this measures
+through the exact same serve path. Result (n=30 matched methodology, same brands/k as the
+title-derived baseline):
+
+| Brand | Title-derived | Honest free-text | Gap |
+|---|---|---|---|
+| snitch | 90.0% (27/30) | 70.0% (21/30) | 20.0pp |
+| fashor | 90.0% (27/30) | 43.3% (13/30) | 46.7pp |
+| powerlook | 100.0% (30/30) | 63.3% (19/30) | 36.7pp |
+
+Real, substantial, brand-dependent gap — fashor's ethnic-wear category boundaries are
+genuinely harder to describe unambiguously in free text than snitch/powerlook's more
+visually-distinct categories. Reported alongside the title-derived number, not as a
+replacement.
+
+### Status
+Measurement phase and all 3 approved fixes complete, honestly reported — including two
+"already at ceiling, don't chase it" negative results from the original audit (fabric and
+occasion attributes), one measurement-only doc correction (`/health` contract, Phase 13),
+and one HYPOTHESIS THAT DID NOT HOLD from fix #2 (color-eval accuracy did not rise with
+better coverage — reported as a correction to this phase's own earlier reasoning, not
+smoothed over). Held #4 (tower+CF blending) remains unbuilt per the user's explicit
+decision. All 3 fixes are DRAFT PRs (#53, #54, #55), awaiting review — none deployed to
+production; the corrected local catalog data (fix #1) has not been re-uploaded to GCS.

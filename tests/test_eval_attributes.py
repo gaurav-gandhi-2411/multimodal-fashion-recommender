@@ -21,12 +21,14 @@ from eval_attributes import (  # noqa: E402
     confidence_gap,
     eval_category_text_xval,
     eval_occasion_text_xval,
+    find_canonical_labels_with_synonyms,
     find_text_labels,
     majority_baseline_accuracy,
     majority_predicted_label,
     pool_category_results,
     pool_occasion_results,
     unambiguous_text_label,
+    unambiguous_text_label_with_synonyms,
 )
 
 _COLOR_LABELS = ["black", "white", "navy", "multicolor"]
@@ -71,6 +73,58 @@ def test_unambiguous_text_label_returns_none_when_ambiguous() -> None:
 
 def test_unambiguous_text_label_returns_none_when_no_match() -> None:
     assert unambiguous_text_label("a plain grey trouser", _COLOR_LABELS) is None
+
+
+# ---------------------------------------------------------------------------
+# find_canonical_labels_with_synonyms / unambiguous_text_label_with_synonyms
+# ---------------------------------------------------------------------------
+
+_SYNONYMS = {"black": ["ebony"], "white": ["ivory", "off-white"], "navy": []}
+
+
+def test_find_canonical_labels_with_synonyms_matches_synonym() -> None:
+    assert find_canonical_labels_with_synonyms(
+        "a charcoal-free ebony jacket", _COLOR_LABELS, _SYNONYMS
+    ) == ["black"]
+
+
+def test_find_canonical_labels_with_synonyms_dedupes_direct_and_synonym_match() -> None:
+    # "black" (direct) and "ebony" (synonym for black) both present -- must count as ONE
+    # canonical label, not become spuriously ambiguous.
+    result = find_canonical_labels_with_synonyms(
+        "a black ebony jacket", _COLOR_LABELS, _SYNONYMS
+    )
+    assert result == ["black"]
+
+
+def test_find_canonical_labels_with_synonyms_no_match() -> None:
+    result = find_canonical_labels_with_synonyms("a plain grey trouser", _COLOR_LABELS, _SYNONYMS)
+    assert result == []
+
+
+def test_unambiguous_text_label_with_synonyms_single_synonym_match() -> None:
+    assert (
+        unambiguous_text_label_with_synonyms("an ivory dress", _COLOR_LABELS, _SYNONYMS)
+        == "white"
+    )
+
+
+def test_unambiguous_text_label_with_synonyms_dedup_not_ambiguous() -> None:
+    assert (
+        unambiguous_text_label_with_synonyms("a black ebony jacket", _COLOR_LABELS, _SYNONYMS)
+        == "black"
+    )
+
+
+def test_unambiguous_text_label_with_synonyms_still_ambiguous_across_labels() -> None:
+    # ebony (-> black) and ivory (-> white) are two DIFFERENT canonical labels -- still
+    # correctly excluded as ambiguous, same as the original design.
+    assert (
+        unambiguous_text_label_with_synonyms(
+            "ebony and ivory piano-key top", _COLOR_LABELS, _SYNONYMS
+        )
+        is None
+    )
 
 
 # ---------------------------------------------------------------------------
