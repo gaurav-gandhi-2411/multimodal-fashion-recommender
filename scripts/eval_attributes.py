@@ -55,6 +55,7 @@ import pandas as pd
 REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from app.attribute_synonyms import COLOR_SYNONYMS  # noqa: E402
 from app.attributes import ATTRIBUTE_TAXONOMY, AttributeIndex, load_attribute_index  # noqa: E402
 from app.occasion import DEFAULT_OCCASION_LEXICON, tag_occasions  # noqa: E402
 
@@ -94,6 +95,30 @@ def unambiguous_text_label(text: str, labels: list[str]) -> str | None:
     return found[0] if len(found) == 1 else None
 
 
+def find_canonical_labels_with_synonyms(
+    text: str, labels: list[str], synonyms: dict[str, list[str]]
+) -> list[str]:
+    """Like `find_text_labels`, but a synonym-word match also counts as evidence for its
+    canonical taxonomy label. Returns the DEDUPLICATED set of canonical labels found --
+    e.g. text matching both "grey" and its synonym "charcoal" still counts as one label
+    (grey), not two, so it doesn't spuriously become "ambiguous"."""
+    found = set(find_text_labels(text, labels))
+    for canonical, syns in synonyms.items():
+        if any(_label_pattern(syn).search(text) for syn in syns):
+            found.add(canonical)
+    return sorted(found)
+
+
+def unambiguous_text_label_with_synonyms(
+    text: str, labels: list[str], synonyms: dict[str, list[str]]
+) -> str | None:
+    """Synonym-aware variant of `unambiguous_text_label` -- still requires exactly one
+    CANONICAL label match; genuinely ambiguous items (two different canonical labels) are
+    still excluded, same as the original."""
+    found = find_canonical_labels_with_synonyms(text, labels, synonyms)
+    return found[0] if len(found) == 1 else None
+
+
 # ---------------------------------------------------------------------------
 # Category (color/pattern/fabric) text cross-validation
 # ---------------------------------------------------------------------------
@@ -123,7 +148,11 @@ class CategoryEvalResult:
 
 
 def eval_category_text_xval(
-    items: pd.DataFrame, attr_index: AttributeIndex, category: str
+    items: pd.DataFrame,
+    attr_index: AttributeIndex,
+    category: str,
+    *,
+    use_color_synonyms: bool = False,
 ) -> CategoryEvalResult:
     """Cross-validate one attribute category's predictions against unambiguous text labels.
 
@@ -131,12 +160,18 @@ def eval_category_text_xval(
         items: brand catalogue with at least ``article_id``, ``title``, ``description``.
         attr_index: brand's loaded attributes.json (AttributeIndex).
         category: one of "color", "pattern", "fabric" (ATTRIBUTE_TAXONOMY key).
+        use_color_synonyms: when True AND category == "color", also match the
+            human-reviewed synonym list in `app/attribute_synonyms.py` (e.g. "charcoal"
+            counts as evidence for "grey"). Off by default so the original, more
+            conservative number is always reproducible unchanged; this is a reporting
+            toggle, not a new default.
 
     Returns:
         CategoryEvalResult with raw counts and confidence lists (not just rates), so callers
         can pool results across brands by summing counts rather than averaging rates.
     """
     labels = ATTRIBUTE_TAXONOMY[category]
+    use_synonyms = use_color_synonyms and category == "color"
     n_total = 0
     n_unambiguous = 0
     n_evaluated = 0
@@ -147,7 +182,11 @@ def eval_category_text_xval(
     for row in items.itertuples(index=False):
         n_total += 1
         text = f"{row.title} {row.description}"
-        gt = unambiguous_text_label(text, labels)
+        gt = (
+            unambiguous_text_label_with_synonyms(text, labels, COLOR_SYNONYMS)
+            if use_synonyms
+            else unambiguous_text_label(text, labels)
+        )
         if gt is None:
             continue
         n_unambiguous += 1
@@ -562,6 +601,17 @@ def _parse_args() -> argparse.Namespace:
         metavar="BRAND1,BRAND2,...",
         help="Comma-separated list of brand slugs to process.",
     )
+    p.add_argument(
+        "--color-synonyms",
+        action="store_true",
+        default=False,
+        help=(
+            "Also match the human-reviewed color synonym list (app/attribute_synonyms.py) "
+            "-- e.g. 'charcoal' counts as evidence for 'grey'. Off by default; this is a "
+            "methodology-correction toggle, run once without and once with to report both "
+            "numbers side by side, not a new default."
+        ),
+    )
     return p.parse_args()
 
 
@@ -587,9 +637,21 @@ def main() -> None:
         )
 
     # --- 1. Text-keyword cross-validation: color, pattern, fabric ---
+    if args.color_synonyms:
+        print(
+            "\n[NOTE] --color-synonyms enabled: color's text ground truth also counts "
+            "human-reviewed synonyms (see app/attribute_synonyms.py) as evidence for their "
+            "canonical taxonomy label. This is a methodology correction for reporting "
+            "alongside the default (conservative) number, not a new default.\n"
+        )
     for category in TEXT_CATEGORIES:
         per_brand: dict[str, CategoryEvalResult] = {
-            brand: eval_category_text_xval(brand_items[brand], brand_attrs[brand], category)
+            brand: eval_category_text_xval(
+                brand_items[brand],
+                brand_attrs[brand],
+                category,
+                use_color_synonyms=args.color_synonyms,
+            )
             for brand in brand_items
         }
         pooled = pool_category_results(list(per_brand.values()), category)
