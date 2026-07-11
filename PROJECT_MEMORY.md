@@ -1892,9 +1892,51 @@ wins), and it touches `/recommend`'s live production ranking — not worth the r
 risk speculatively. Revisit only with real pilot traffic, with explicit escalation per the
 standing two-tower-model rule.
 
+### Fixes #1-3 — results (measured, not assumed)
+
+**#1 Category-taxonomy normalization** (PR #53): fashor's "Dress"/"Dresses" and
+"Kurta"/"Kurtas" (singular/plural feed splits), virgio's "Skort"/"Skorts", merged via a
+human-reviewed per-brand map (`app/ingestion/category_normalize.py`). `"Kurta Set"`
+confirmed to stay distinct (genuinely different product). Before/after on
+`eval_similarity_quality.py` (n=100, seed=42): fashor strict raw 64%→**67%** (+3pp),
+reranked 85%→**88%** (+3pp); snitch/powerlook byte-identical controls (untouched). Modest,
+fully explained by the merged category pools — not a target number.
+
+**#2 Color-eval synonym mapping** (PR #54): built a human-reviewed color-synonym map
+(`app/attribute_synonyms.py`) hypothesizing the 64.6% pooled color accuracy was a
+measurement artifact of exact-word matching, with the true number closer to Phase 11's
+~90% manual 20-image spot-check. **The hypothesis did NOT hold** — coverage rose as
+designed (70.0%→77.9%, +7.9pp, more items now have a determinable ground truth) but
+accuracy stayed flat (64.6%→64.3%, within noise, per-brand: snitch −0.6pp, fashor 0.0pp
+exactly, powerlook +1.3pp). **Conclusion, corrected from the original hypothesis**: the
+64.6% number, now confirmed on a larger sample, is the more statistically reliable
+estimate of color-attribute accuracy — Phase 11's tiny (n=20) manual spot-check was likely
+small-sample noise, not the true ceiling. Reporting the negative result on the hypothesis,
+not defending it.
+
+**#3 Honest free-text style-search eval** (PR #55): built 30 human-written, realistic
+style queries per brand (90 total, `evals/fixtures/style_search_queries/`), reusing
+`run_local_style`/`run_http_style` from `eval_serve_path.py` unmodified so this measures
+through the exact same serve path. Result (n=30 matched methodology, same brands/k as the
+title-derived baseline):
+
+| Brand | Title-derived | Honest free-text | Gap |
+|---|---|---|---|
+| snitch | 90.0% (27/30) | 70.0% (21/30) | 20.0pp |
+| fashor | 90.0% (27/30) | 43.3% (13/30) | 46.7pp |
+| powerlook | 100.0% (30/30) | 63.3% (19/30) | 36.7pp |
+
+Real, substantial, brand-dependent gap — fashor's ethnic-wear category boundaries are
+genuinely harder to describe unambiguously in free text than snitch/powerlook's more
+visually-distinct categories. Reported alongside the title-derived number, not as a
+replacement.
+
 ### Status
-Measurement phase complete, honestly reported (including two "already at ceiling, don't
-chase it" negative results — fabric and occasion attributes — and one measurement-only
-correction to a previously-cited API contract line, `/health`, corrected in Phase 13).
-Fixes #1-3 in progress as separate DRAFT PRs, each with before/after numbers reported
-per this project's standing no-fake-wins discipline.
+Measurement phase and all 3 approved fixes complete, honestly reported — including two
+"already at ceiling, don't chase it" negative results from the original audit (fabric and
+occasion attributes), one measurement-only doc correction (`/health` contract, Phase 13),
+and one HYPOTHESIS THAT DID NOT HOLD from fix #2 (color-eval accuracy did not rise with
+better coverage — reported as a correction to this phase's own earlier reasoning, not
+smoothed over). Held #4 (tower+CF blending) remains unbuilt per the user's explicit
+decision. All 3 fixes are DRAFT PRs (#53, #54, #55), awaiting review — none deployed to
+production; the corrected local catalog data (fix #1) has not been re-uploaded to GCS.
