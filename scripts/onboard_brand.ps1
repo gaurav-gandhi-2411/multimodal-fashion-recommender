@@ -358,14 +358,28 @@ $patch = Get-DeployYmlPatch -Content $originalContent -Brand $Brand
 if ($patch.AlreadyPresent) {
   Write-Host "  '$Brand' already present in deploy.yml (BRANDS_ENABLED + --set-secrets) -- nothing to patch." -ForegroundColor DarkGray
 } else {
-  $existingPr = gh pr list --head $onboardBranch --repo $Repo --json url, state | ConvertFrom-Json
+  $existingPr = gh pr list --head $onboardBranch --repo $Repo --json "url,state" | ConvertFrom-Json
   if ($existingPr -and $existingPr.Count -gt 0) {
     Write-Host "  Onboarding PR already open for '$Brand': $($existingPr[0].url)" -ForegroundColor DarkGray
   } else {
+    # infra/Dockerfile.cpu does `COPY brands/ brands/` at build time -- data/indices/checkpoints
+    # are gitignored and only ever reach the container via the runtime GCS sync, but
+    # brands/<brand>.yaml is baked into the image. Without committing it alongside deploy.yml,
+    # BRANDS_ENABLED would list the brand while the image silently never contains its config --
+    # the exact silent-no-op failure class this project has been burned by before.
+    $brandYamlPath = "brands/$Brand.yaml"
+    if (-not (Test-Path $brandYamlPath)) {
+      throw "brands/$Brand.yaml not found -- run ingest_catalog.py (and friends) first; this script onboards an ALREADY-ingested brand."
+    }
+
     # Working-tree safety: refuse to mix unrelated dirty state into the onboarding commit.
-    $dirty = git status --porcelain
-    if ($dirty) {
-      throw "Working tree is not clean (unrelated modified/staged files present) -- commit or stash before onboarding. `n$dirty"
+    # Scoped to exactly the two paths this step commits -- deploy.yml and the brand's own
+    # yaml -- so pre-existing unrelated untracked/modified files elsewhere in the repo don't
+    # falsely block onboarding (this script must not silently sweep up someone else's WIP).
+    $dirty = git status --porcelain -- $deployYmlPath $brandYamlPath
+    $unexpectedDirty = $dirty | Where-Object { $_ -notmatch [regex]::Escape($brandYamlPath) -or $_ -notmatch '^\?\? ' }
+    if ($unexpectedDirty) {
+      throw "$deployYmlPath has pre-existing local modifications -- commit or stash before onboarding.`n$unexpectedDirty"
     }
 
     $switchedBranch = $false
@@ -379,12 +393,12 @@ if ($patch.AlreadyPresent) {
       $switchedBranch = $true
 
       [IO.File]::WriteAllText((Resolve-Path $deployYmlPath), $patch.Patched)
-      $pendingDiff = git status --porcelain -- $deployYmlPath
+      $pendingDiff = git status --porcelain -- $deployYmlPath $brandYamlPath
       if ($pendingDiff) {
-        Step "stage deploy.yml" { git add $deployYmlPath }
-        Step "commit deploy.yml" { git commit -m "feat(deploy): onboard $Brand brand" }
+        Step "stage deploy.yml + brands/$Brand.yaml" { git add $deployYmlPath $brandYamlPath }
+        Step "commit deploy.yml + brands/$Brand.yaml" { git commit -m "feat(deploy): onboard $Brand brand" }
       } else {
-        Write-Host "  deploy.yml already committed on $onboardBranch (partial-run resume)." -ForegroundColor DarkGray
+        Write-Host "  deploy.yml + brands/$Brand.yaml already committed on $onboardBranch (partial-run resume)." -ForegroundColor DarkGray
       }
       Step "push $onboardBranch" { git push -u origin $onboardBranch }
 
