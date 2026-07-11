@@ -556,6 +556,7 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | **Phase 10 (Round 3 hardening)** | **7 audit-finding PRs merged + LIVE on both platforms (Cloud Run rev 00041-ghc, Vercel prod)** | 🟢 Complete | 2026-07-07 |
 | **Phase 11 (catalog attributes)** | **Zero-shot FashionCLIP color+pattern tagging LIVE (rev 00042-rbt); fabric/occasion evaluated + withheld (negative result)** | 🟢 Complete | 2026-07-07 |
 | **Phase 12 (integration friction, Tier 1+2)** | **Public H&M sandbox brand + honest docs LIVE (rev 00043-grt)** | 🟢 Complete | 2026-07-08 |
+| **Phase 13 (Tier 3 onboarding runbook)** | **`scripts/onboard_brand.ps1` — one-command brand onboarding, DRAFT PR #44 (not yet merged)** | 🟡 Built + live-tested | 2026-07-11 |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
 - [x] Popularity baseline numbers confirmed on temporal test split, active pool AND full pool
@@ -1529,3 +1530,92 @@ operational unblock that removes the 5-manual-step, incident-prone deploy path t
 own friction map documented. **Tier 4 (true self-serve platform — dynamic brand registry,
 server-side ingestion job, programmatic secrets) is explicitly deferred**, scoped as a separate
 multi-week design effort, not started here, per the user's explicit sequencing decision.
+
+---
+
+## Phase 13 — Tier 3: One-Command Onboarding Runbook (built + live-tested 2026-07-11, DRAFT PR #44, not merged)
+
+**Trigger:** Phase 12's own friction map named Tier 3 as the next step — collapse the 5
+manual, incident-prone steps for onboarding a new brand tenant (catalog ingestion → GCS
+asset upload → Secret Manager key → `BRANDS_ENABLED`/`deploy.yml` patch → redeploy trigger)
+into one repeatable, idempotent, dry-runnable script **we** run (Tier 4 client self-serve
+remains explicitly out of scope).
+
+### What was built
+Full design rationale in `docs/architecture/adr/0001-brand-onboarding-runbook.md`.
+
+| File | Purpose |
+|------|---------|
+| `app/storage.py` | Extracted `brand_asset_paths(cfg: BrandConfig) -> list[str]` out of `_collect_brand_paths` (now a thin wrapper). Pure refactor, zero behavior change — `tests/test_storage.py` passes unmodified. This is the single source of truth the runtime GCS sync AND the new CLI pre-flight tool both call, so they can never diverge — closes the exact divergence class behind Phase 7's "5th boot blocker" incident. |
+| `scripts/brand_preflight.py` (new) | Validates a brand YAML via the real `BrandConfig` pydantic model (not raw YAML), derives required asset paths via `brand_asset_paths`, reports local presence as machine-parseable JSON (diagnostics on stderr). |
+| `scripts/onboard_brand.ps1` (new) | Repeatable per-brand pipeline: pre-flight (local + GCS existence, read-only) → `-DryRun` (zero-mutation) → Secret Manager (fresh cryptographically-random key, idempotent create/rotate) → GCS upload → **mandatory** container-verify (real `infra/Dockerfile.cpu` build + boot + HTTP calls, matching the Deploy Verification Standard) → `deploy.yml` + `brands/<brand>.yaml` patch as a DRAFT PR → stop. `-TriggerDeploy`/`-VerifyLive` are separate, explicit, later invocations after a human merges. **Never merges a PR or bypasses `workflow_dispatch`** — merges stay human-only. |
+| `tests/test_brand_preflight.py` (new, 4 tests) | |
+
+Distinct from `scripts/deploy_staging.ps1` (a one-time, 3-brand-hardcoded bootstrap of the
+*shared infrastructure* — bucket, AR repo, SA, WIF): `onboard_brand.ps1` assumes that
+infrastructure already exists and is generic + repeatable over any `brands/<brand>.yaml`.
+
+### Verification (all done before any live GCP mutation)
+- `ruff check` clean on all new/touched Python files.
+- `tests/test_storage.py` 7/7 pass, unmodified.
+- Full suite: 306 passed, 5 skipped, 1 pre-existing unrelated failure
+  (`test_dataset_getitem_keys_and_shapes`, same one documented since Phase 1).
+- `-DryRun` against a real live brand (`powerlook`): correctly reported all 12 required
+  assets present locally and in GCS, secret already exists, `deploy.yml` already contains
+  the brand → zero patch needed. **Zero mutations made** (confirmed via `git status` +
+  no non-`describe` GCP calls).
+- Pre-flight failure mode: pointed a throwaway brand YAML at nonexistent asset paths —
+  confirmed the script fails loudly with the exact missing-file list and exits 1 **before**
+  touching Secret Manager, GCS, docker, or git. This is the literal "test it by
+  deliberately pointing at a missing asset" gate the phase's own goal required.
+
+### Real end-to-end throwaway-brand test (`zzdemo_brand`, 6-item synthetic catalog)
+Ran the full real (non-dry-run) pipeline, gated on explicit user go-ahead scoped to
+"up to DRAFT PR, not an actual Cloud Run redeploy" (merges/production redeploys stay
+human-gated per standing project rule):
+1. `ingest_catalog.py --source csv` against a tiny synthetic 6-item catalog (real CLIP +
+   SBERT + ItemTower fusion, real FAISS index) — proved the assumed upstream ingestion
+   step still produces exactly what `onboard_brand.ps1` expects.
+2. Real Secret Manager key created (`fashion-rec-zzdemo_brand-key`), real GCS upload (5
+   files to the actual staging bucket), real `infra/Dockerfile.cpu` build, real container
+   boot with the brand bind-mounted: `/health` → 200 (all brands including `zzdemo_brand`
+   loaded), `/v1/zzdemo_brand/item/1/similar` → 200 **inside the container** — before
+   `deploy.yml` was touched, matching the Deploy Verification Standard.
+3. Real DRAFT PR opened (#43) with `deploy.yml` + `brands/zzdemo_brand.yaml` committed
+   together.
+
+**This live run — not code review — surfaced and fixed 3 real bugs** (commit `0fcdb02`):
+- `infra/Dockerfile.cpu` bakes `brands/` into the image at build time (`COPY brands/
+  brands/`); `data/`/`indices/`/`checkpoints/` are gitignored and reach the container only
+  via the runtime GCS sync. The first script version patched `deploy.yml` but never
+  committed the new brand's YAML — `BRANDS_ENABLED` would list a brand the image never
+  actually contained. **A silent no-op, the exact bug class this project has been burned
+  by three times before** (Phase 6 rerank no-op, Phase 7 checkpoint-sync no-op, Phase 9's
+  version-skew incident). Fixed: the onboarding commit now includes both files.
+- The working-tree-clean safety guard checked the whole repo instead of just the two
+  paths this step touches, so pre-existing unrelated untracked scratch files (not part of
+  this work) falsely blocked onboarding. Fixed: scoped the check to `deploy.yml` +
+  `brands/<brand>.yaml` only.
+- `gh pr list --json url, state` (space after the comma) broke `gh`'s flag parser.
+
+Re-ran end-to-end after the fix: full pipeline passed clean (secret/GCS steps correctly
+no-op'd as already-present — idempotency proven across the two runs — container-verify
+passed again, PR opened cleanly).
+
+**Cleanup (all throwaway resources, nothing left live):** closed PR #43 without merging,
+deleted its branch (local + remote), deleted the real secret
+`fashion-rec-zzdemo_brand-key`, deleted the 5 real GCS objects uploaded for
+`zzdemo_brand` (`checkpoints/best.pt` untouched — shared, pre-existing), deleted local
+`brands/zzdemo_brand.yaml` + `data/zzdemo_brand/` + `indices/zzdemo_brand/`, deleted the
+local `fashion-rec-onboard-test` Docker image.
+
+### Status
+Built, ruff-clean, full-suite-clean, and **live-tested end-to-end against real GCP/GitHub
+resources** (not just unit tests) — pre-flight failure mode, dry-run zero-mutation
+guarantee, and the full real pipeline (secret → GCS → container-verify → draft PR) all
+independently confirmed. **DRAFT PR #44 open, not yet merged** (per standing "merges are
+human-only" rule) — scoped to exactly the intended 5 files (`app/storage.py`,
+`scripts/brand_preflight.py`, `scripts/onboard_brand.ps1`,
+`tests/test_brand_preflight.py`, the ADR). No brand has been onboarded through this
+script into the live product yet — the first real use (`-TriggerDeploy` against an actual
+new paying-tenant brand) is a separate, later, human-gated action after this PR merges.

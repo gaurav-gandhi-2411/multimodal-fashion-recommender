@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 import yaml
+
+if TYPE_CHECKING:
+    from app.brands.registry import BrandConfig
 
 logger = structlog.get_logger(__name__)
 
@@ -34,9 +37,9 @@ def _download_if_missing(client: Any, bucket_name: str, local_path: str) -> bool
     return True
 
 
-def _collect_brand_paths(brands_dir: str) -> list[str]:
+def brand_asset_paths(cfg: BrandConfig) -> list[str]:
     """
-    Return all data file paths referenced by brand YAML configs.
+    Return all data file paths a single validated BrandConfig requires.
 
     Paths are derived from the VALIDATED BrandConfig — not the raw YAML dict — so
     pydantic DEFAULTS are honoured. This matters for `checkpoint_path`: brands that
@@ -48,6 +51,41 @@ def _collect_brand_paths(brands_dir: str) -> list[str]:
     For `index_path` (a directory), expands to the two constituent files that
     FaissRetriever.load() expects: `{index_path}/faiss.index` and
     `{index_path}/article_ids.pkl`. `transactions_dir` expands to the three split parquets.
+
+    This is also the single source of truth reused by `scripts/brand_preflight.py`, so a
+    new brand's pre-flight local/GCS check and the runtime GCS sync can never diverge —
+    this exact divergence class caused the Phase 7 "5th boot blocker" incident.
+    """
+    paths: list[str] = []
+    for val in (cfg.catalog_path, cfg.checkpoint_path, cfg.embeddings_path):
+        if val:
+            paths.append(val)
+    base = cfg.index_path.rstrip("/")
+    paths.append(f"{base}/faiss.index")
+    paths.append(f"{base}/article_ids.pkl")
+    # Sync the per-brand CLIP-512 visual index when configured.
+    if cfg.visual_index_path:
+        vbase = cfg.visual_index_path.rstrip("/")
+        paths.append(f"{vbase}/faiss.index")
+        paths.append(f"{vbase}/article_ids.pkl")
+    if cfg.color_index_path:
+        paths.append(cfg.color_index_path)
+    if cfg.attributes_path:
+        paths.append(cfg.attributes_path)
+    if cfg.transactions_dir:
+        tbase = cfg.transactions_dir.rstrip("/")
+        for split in cfg.transaction_splits:
+            paths.append(f"{tbase}/{split}.parquet")
+    return paths
+
+
+def _collect_brand_paths(brands_dir: str) -> list[str]:
+    """
+    Return all data file paths referenced by brand YAML configs.
+
+    Thin wrapper: loads + validates each enabled brand's YAML into a BrandConfig, then
+    delegates per-brand path derivation to `brand_asset_paths` so this function and any
+    other caller (e.g. the CLI pre-flight tool) can never diverge.
 
     Respects the BRANDS_ENABLED env var: when set, only paths for listed brand slugs
     are returned (matched on the yaml `brand:` field, not filename).
@@ -65,25 +103,7 @@ def _collect_brand_paths(brands_dir: str) -> list[str]:
         if enabled is not None and str(data.get("brand", "")).lower() not in enabled:
             continue
         cfg = BrandConfig.model_validate(data)
-        for val in (cfg.catalog_path, cfg.checkpoint_path, cfg.embeddings_path):
-            if val:
-                paths.append(val)
-        base = cfg.index_path.rstrip("/")
-        paths.append(f"{base}/faiss.index")
-        paths.append(f"{base}/article_ids.pkl")
-        # Sync the per-brand CLIP-512 visual index when configured.
-        if cfg.visual_index_path:
-            vbase = cfg.visual_index_path.rstrip("/")
-            paths.append(f"{vbase}/faiss.index")
-            paths.append(f"{vbase}/article_ids.pkl")
-        if cfg.color_index_path:
-            paths.append(cfg.color_index_path)
-        if cfg.attributes_path:
-            paths.append(cfg.attributes_path)
-        if cfg.transactions_dir:
-            tbase = cfg.transactions_dir.rstrip("/")
-            for split in cfg.transaction_splits:
-                paths.append(f"{tbase}/{split}.parquet")
+        paths.extend(brand_asset_paths(cfg))
     return paths
 
 
