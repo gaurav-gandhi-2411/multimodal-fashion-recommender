@@ -556,7 +556,7 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | **Phase 10 (Round 3 hardening)** | **7 audit-finding PRs merged + LIVE on both platforms (Cloud Run rev 00041-ghc, Vercel prod)** | 🟢 Complete | 2026-07-07 |
 | **Phase 11 (catalog attributes)** | **Zero-shot FashionCLIP color+pattern tagging LIVE (rev 00042-rbt); fabric/occasion evaluated + withheld (negative result)** | 🟢 Complete | 2026-07-07 |
 | **Phase 12 (integration friction, Tier 1+2)** | **Public H&M sandbox brand + honest docs LIVE (rev 00043-grt)** | 🟢 Complete | 2026-07-08 |
-| **Phase 13 (Tier 3 onboarding runbook)** | **`scripts/onboard_brand.ps1` MERGED (#44); real Virgio catalog onboarded through it, DRAFT PR #45 (not yet merged/deployed)** | 🟡 Tooling live, brand pending deploy | 2026-07-11 |
+| **Phase 13 (Tier 3 onboarding runbook)** | **`scripts/onboard_brand.ps1` MERGED (#44); Virgio (5th brand) LIVE on Cloud Run rev `fashion-recommender-staging-00044-qvf`** | 🟢 Complete | 2026-07-11 |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
 - [x] Popularity baseline numbers confirmed on temporal test split, active pool AND full pool
@@ -1682,9 +1682,116 @@ withheld as designed:**
   the actual Cloud Run redeploy adding Virgio as a 5th live brand is a separate, later,
   human-approved action.
 
+### Content-quality fix, before deploy approval (2026-07-11)
+
+The user held the deploy gate on one finding: the 22 Fragrance + 1 Gift-Card items had to
+be excluded from the index before Virgio could go live, or `/similar` could surface a
+perfume as "similar" to a dress. Built a general (not Virgio-specific) fix:
+
+- **`app/ingestion/filters.py`** (new) — `filter_excluded_categories(rows, excluded) ->
+  (kept, excluded)`, case-insensitive exact category match, pure function.
+- **`scripts/ingest_catalog.py`** — new `--exclude-categories` CLI flag, applied post-fetch
+  before image download/CLIP/SBERT (excluded items cost zero pipeline work). PR #47,
+  merged.
+- Re-ingested Virgio with `--exclude-categories "Fragrance,Gift-Card"`: 2,086 fetched → 23
+  excluded → **2,063 in the index**.
+- **Content-level proof, not just a count**: queried `/v1/virgio/item/2/similar` (a real
+  Dress) against the rebuilt index — 10/10 results Dresses, zero contamination, verified
+  by cross-checking each returned `article_id`'s category directly in the catalog. Repeated
+  after the actual Cloud Run deploy (see below) with identical results.
+
+### `/health` contract correction (found while preparing the live-verify plan)
+
+Was asked to verify "`/health` lists virgio" as part of the live-deploy proof. Found this
+is not just missing — it's **deliberately absent**: P0 hardening H5
+(`tests/test_hardening_p0.py::test_health_has_no_brand_inventory`) intentionally strips
+brand inventory from the unauthenticated `/health` response as a tested security decision,
+not an oversight. This project's own API contract table (this doc, "Phase 1 — API
+Contract") was stale on this point — corrected in PR #48 (merged). Substituted proof:
+`load_registry()` loads every enabled brand eagerly at startup, so `/health` returning 200
+at all already implies every configured brand booted; the real brand-specific proof is an
+authenticated `/similar`/`/recommend` call, which is what was actually used for both the
+container-verify and live-verify steps throughout this phase.
+
+### Two onboarding-tooling friction fixes (PR #49, merged)
+
+- **`scripts/ingest_catalog.py`**: the final success print used a Unicode check mark
+  (`✓`), crashing with `UnicodeEncodeError` on Windows' cp1252 console — the pipeline had
+  already fully succeeded, but the traceback looked like a failure. Fixed with a
+  plain-ASCII message; verified with a real end-to-end ingestion run (exit 0, no
+  traceback).
+- **`infra/Dockerfile.cpu`**: `RUN adduser ... && chown -R appuser /app` was taking ~324s
+  on every container-verify build touching the `brands/` layer (i.e. every onboarding
+  run). Root cause, confirmed by direct measurement inside the built image (`du -sh
+  /app/.venv` → 1.7 GB / 39,208 files), was **not** the interactive-looking `adduser`
+  prompt (<1s on its own) but `chown -R` recursing over the entire ML dependency tree that
+  `appuser` only ever reads, never writes. Narrowed the chown to just `.cache/` (baked
+  FashionCLIP weights) and `data/`/`indices/`/`checkpoints/` (the only runtime-write
+  paths, per the Dockerfile's own pre-existing comment) — **324s → 2.6s**, verified
+  functionally (not just timed): rebuilt image confirms `appuser` can still read/execute
+  the root-owned `.venv` (imports torch/transformers/faiss fine), can write to the
+  intended dirs, cannot write to `app/` (unchanged least-privilege), and a full container
+  run serves `/health`, `/v1/virgio/similar`, `/v1/snitch/similar`, and
+  `/v1/snitch/visual-search` (the highest-risk path — exercises the separately-chowned
+  `.cache`) all 200.
+
+### LIVE deploy (2026-07-11) — Virgio is the 5th live brand
+
+Merge sequence, `main` confirmed green (test suite, not just a single check) after each:
+PR #47 (exclusion filter) → PR #45 (Virgio onboarding: `deploy.yml` + `brands/virgio.yaml`)
+→ PR #48 (`/health` doc fix) → PR #49 (tooling fixes). `main` HEAD before deploy:
+`9aec812358081406d2ced50ecd9150122a5da5db`.
+
+**Deploy**: `scripts/onboard_brand.ps1 -Brand virgio -TriggerDeploy` — pre-flight,
+Secret Manager (idempotent no-op, key already existed), GCS upload (idempotent overwrite,
+now the filtered 2,063-item catalog), container-verify (rebuilt from `main` HEAD with the
+merged chown fix already in effect — 2.6s for that step, confirming PR #49 as tested, not
+just claimed), correctly detected virgio already in `deploy.yml` (no duplicate patch),
+triggered `Deploy to Cloud Run` (`gh workflow run`). GitHub Actions run `29156731037`
+completed in 4m23s, all steps green. New revision: **`fashion-recommender-staging-00044-qvf`**,
+100% traffic.
+
+**merged==live, not assumed**: `gh run view 29156731037 --json headSha` →
+`9aec812358081406d2ced50ecd9150122a5da5db` — the exact same commit as `main` HEAD at
+trigger time. `git diff` between them is empty by construction (zero commits landed on
+`main` in between); no gap existed to even measure, unlike the Phase 9 incident.
+
+**Content proof on the LIVE revision (not the container)**: `curl` against
+`https://fashion-recommender-staging-rm7rz66wza-el.a.run.app/v1/virgio/item/2/similar?k=10`
+— 10/10 results are Dresses (cross-checked each `article_id`'s category directly against
+the catalog parquet, same as the pre-deploy check), zero Fragrance/Gift-Card, all 10
+`pdp_url`s are real `virgio.com` links, 3 independently curled — 200 on every one.
+
+**Regression check — the 3 existing brands + sandbox, on the new revision**: `/similar`
+(snitch, fashor, powerlook) and `/similar` (h_and_m, using a real H&M article ID — the
+first attempt used a small sequential ID like the Indian brands and correctly 404'd, since
+H&M's catalog uses real product codes; not a regression, a test-input mistake) — **all
+200**.
+
+**Two-tower byte-identical proof, tagged-revision technique (same method as Phase 9)**:
+tagged the pre-deploy revision (`fashion-recommender-staging-00043-grt`) with
+`--set-tags premigration` (0% traffic, no live impact), called `/v1/snitch/item/2/similar`,
+`/v1/fashor/recommend` (`item_id=5`), and `/v1/powerlook/item/10/complete` against both the
+tagged old revision and the live new revision:
+
+| Brand | Endpoint | Result |
+|---|---|---|
+| snitch (item 2) | `/similar` | byte-identical (excl. `request_id`/`latency_ms`) |
+| fashor (item 5) | `/recommend` | byte-identical (excl. `request_id`/`latency_ms`) |
+| powerlook (item 10) | `/complete` | byte-identical (excl. `request_id`/`latency_ms`) |
+
+3/3 comparisons matched exactly. Tag removed after the check (`--remove-tags premigration`)
+— traffic config back to clean 100%-to-latest, no residual state left behind.
+
+**Verdict**: `/recommend`, `/similar`, `/complete` for every pre-existing brand are provably
+unaffected by this deploy — by commit-identity (merged==live with zero gap) and by runtime
+diff (byte-identical outputs). Virgio is live, content-verified clean of non-apparel
+contamination, on the actual production revision.
+
 ### Status
-Tier 3 tooling merged and now proven against BOTH synthetic and real Shopify data.
-**PR #45 (real Virgio onboarding) open, not merged, not deployed** — Virgio is not yet a
-live brand. Two minor pre-existing friction points found (cp1252 print crash, Dockerfile
-`adduser` prompt) — cosmetic/non-blocking, not fixed in this pass, candidates for a future
-small hardening PR.
+**Tier 3 complete.** Onboarding runbook merged and live-tested against both synthetic and
+real Shopify data; the real run found and fixed 5 issues total across this phase (3 script
+bugs from the first real run, 1 content-quality gap — non-apparel SKUs — and 2 tooling
+frictions), each verified with evidence, not assumed fixed. **Virgio is the 5th live brand**
+on Cloud Run revision `fashion-recommender-staging-00044-qvf`. Tier 4 (true client
+self-serve) remains explicitly out of scope, unstarted.
