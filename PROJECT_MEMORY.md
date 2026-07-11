@@ -123,7 +123,7 @@ multimodal-fashion-recommender/
 |--------|------|------|-------------|
 | POST | `/v1/{brand}/recommend` | X-Api-Key | User/item → ranked items + explanations |
 | GET | `/v1/{brand}/item/{item_id}/similar` | X-Api-Key | Item-to-item (cold-start path) |
-| GET | `/health` | none | Liveness + loaded brands |
+| GET | `/health` | none | Liveness only — `{"status": "ok"}`. **Does NOT list loaded brands** — deliberately stripped by P0 hardening H5 (`tests/test_hardening_p0.py::test_health_has_no_brand_inventory`, "Health endpoint must not expose brand inventory unauthenticated"). This row previously said "Liveness + loaded brands" — that was stale docs describing a Phase 1 intent that a later security hardening pass deliberately reversed; the code and its test have been correct since H5 shipped. To confirm a specific brand is loaded, use an authenticated `/similar` or `/recommend` call instead — `load_registry()` loads every enabled brand eagerly at startup, so a 200 there (or even just `/health` returning 200 at all) implies every configured brand booted successfully. |
 | GET | `/metrics` | none | Prometheus metrics (ASGI sub-app) |
 
 ### Request: POST /v1/{brand}/recommend
