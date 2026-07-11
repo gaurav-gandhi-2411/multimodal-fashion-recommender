@@ -4,7 +4,7 @@
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
-A two-tower retrieval system for personalised fashion recommendations, combining CLIP image embeddings, SBERT text embeddings, and a Transformer-based user sequence model. The system now supports multiple Indian D2C brands (Snitch, Fashor, Powerlook) with catalog-agnostic content-based retrieval — enabling any brand to go live with "more like this" recommendations from a catalog CSV, with no interaction history required. Deployed as an interactive HuggingFace Space with per-recommendation modality breakdowns and one-sentence LLM explanations via Groq.
+A two-tower retrieval system for personalised fashion recommendations, combining CLIP image embeddings, SBERT text embeddings, and a Transformer-based user sequence model. The system now supports multiple Indian D2C brands (Snitch, Fashor, Powerlook, Virgio) plus a public H&M sandbox with catalog-agnostic content-based retrieval — enabling any brand to go live with "more like this" recommendations from a catalog CSV, with no interaction history required. Deployed as an interactive HuggingFace Space with per-recommendation modality breakdowns and one-sentence LLM explanations via Groq.
 
 **[Live Demo](https://huggingface.co/spaces/gauravgandhi2411/multimodal-fashion-recommender)**
 
