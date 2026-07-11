@@ -1361,11 +1361,15 @@ trust filter.
 **Manual visual spot-check** (I directly viewed 20 real catalog images — 8 snitch, 6 fashor, 6
 powerlook — via the Read tool and judged each of the 4 predicted tags against a fixed rubric,
 not delegated): confirms the same ranking.
-- **Color** strongest (~90% in-sample). One real, diagnostically useful failure mode: accessory
-  items shot as part of a full outfit (a "Black Dress Belt" photographed on a model in a beige
-  sweater) get tagged with the *outfit's* dominant color, not the product's — the global image
-  embedding gets swamped by the larger garment in frame. Worth a caveat for accessory categories
-  specifically if this ships broadly.
+- **Color** strongest of the 4 in this n=20 manual spot-check (~90% in-sample) — **but
+  superseded: Phase 14's synonym-corrected pooled text-eval (n≈4,700, far larger sample)
+  measured 64.3%, essentially unchanged from the original 64.6%, not the ~90% this tiny
+  sample suggested. Cite 64% for color, never 90% — see Phase 14 for the full correction.**
+  One real, diagnostically useful failure mode remains valid regardless of the headline
+  number: accessory items shot as part of a full outfit (a "Black Dress Belt" photographed
+  on a model in a beige sweater) get tagged with the *outfit's* dominant color, not the
+  product's — the global image embedding gets swamped by the larger garment in frame.
+  Worth a caveat for accessory categories specifically if this ships broadly.
 - **Pattern** moderate, brand-variable (Powerlook ~92% in-sample vs. Snitch/Fashor ~58-62%) —
   model over-predicts "fancier" labels (embroidered, geometric) on what are actually plain
   textures or flat prints.
@@ -1827,7 +1831,7 @@ weight-tuning-sample vs. pitch-eval-sample overlap) and one new taxonomy-hygiene
 | Recommendation, stratified by cold-start bucket (NEW this phase) | Bucket 0 (44.2% of real test cases, item has 0 train interactions): Tower 0.0213 vs **CF 0.0000** (structurally impossible for CF) · 1-5 (3.3%): 0.0154 vs 0.0047 (3.29×) · 6-20 (2.9%): 0.0165 vs 0.0092 (1.79×) · 20+ (49.6%, CF's home turf): 0.0393 vs 0.0200 (1.97×) | Same split/seed | N/A — a coverage question, not a ceiling question | ✅ |
 | Visual-search category-match | snitch 87.1%, powerlook 89.4%, fashor 76.6% (raw FAISS, FashionCLIP) | n=100/brand, seed=42, Phase 9 A/B | Below 100% by design — cross-category visual matches are correct results the metric penalizes | ✅ |
 | Style-search category recall@5 | 92.5% (snitch) | n=40, seed=42; **re-run fresh this phase**: 37/40 local, 37/40 HTTP, 0% gap, on live revision `00044-qvf` | ~90-95% band (rank-1-cascade dependency + non-disjoint taxonomy) — 92.5% sits at the top | ⚠️ Reproducible; 2 caveats below |
-| Attribute: color | 64.6% pooled text-eval (70% coverage) / ~90% manual visual spot-check (n=20) | Phase 11 | ~90% for whole-image zero-shot embeddings | ⚠️ 64.6% is a measurement-methodology artifact, not the true model quality — see below |
+| Attribute: color | **64.3%** pooled text-eval, synonym-corrected (77.9% coverage) | Phase 11; **re-measured with a synonym-mapping fix this phase** (see "Fixes #1-3 — results" below) | **~64%, not ~90%** — the synonym fix tested and ruled out the "it's just a measurement artifact" hypothesis; the small (n=20) manual spot-check that suggested ~90% was not reproduced on a ~230x larger sample. **Cite 64% for color; never cite 90%.** | ✅ Corrected and reproducible — the 90% figure is retired |
 | Attribute: pattern | 49.5% pooled (16.9% coverage), brand-variable (Powerlook ~92%, Snitch/Fashor ~58-62%) | Phase 11 | Brand variance is a real model bias (over-predicts "fancy" labels on plain items) | ⚠️ Directionally right, wide uncertainty from thin coverage |
 | Attribute: fabric | 19.7% pooled vs ~7.7% random floor (13-label) | Phase 11 | Already near the honest ceiling for image-only zero-shot | ✅ Correctly withheld, negative result confirmed |
 | Attribute: occasion | Worse than majority-class baseline for 2/3 brands (snitch -3.3pp, powerlook -3.5pp; fashor +2.4pp) | Phase 11; **re-verified live this phase** (snitch -3.3pp exact match) | N/A — fails the bar that matters | ✅ Confirmed negative result, reproducible |
@@ -1913,6 +1917,10 @@ exactly, powerlook +1.3pp). **Conclusion, corrected from the original hypothesis
 estimate of color-attribute accuracy — Phase 11's tiny (n=20) manual spot-check was likely
 small-sample noise, not the true ceiling. Reporting the negative result on the hypothesis,
 not defending it.
+
+**PITCH RULE, locked 2026-07-11: cite color-attribute accuracy as ~64%. Never cite ~90% —
+that figure is retired.** The negative result IS the valuable part of this fix: it
+prevented a future pitch from citing an unreproducible small-sample number.
 
 **#3 Honest free-text style-search eval** (PR #55): built 30 human-written, realistic
 style queries per brand (90 total, `evals/fixtures/style_search_queries/`), reusing
