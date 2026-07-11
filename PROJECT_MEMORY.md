@@ -556,7 +556,7 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | **Phase 10 (Round 3 hardening)** | **7 audit-finding PRs merged + LIVE on both platforms (Cloud Run rev 00041-ghc, Vercel prod)** | 🟢 Complete | 2026-07-07 |
 | **Phase 11 (catalog attributes)** | **Zero-shot FashionCLIP color+pattern tagging LIVE (rev 00042-rbt); fabric/occasion evaluated + withheld (negative result)** | 🟢 Complete | 2026-07-07 |
 | **Phase 12 (integration friction, Tier 1+2)** | **Public H&M sandbox brand + honest docs LIVE (rev 00043-grt)** | 🟢 Complete | 2026-07-08 |
-| **Phase 13 (Tier 3 onboarding runbook)** | **`scripts/onboard_brand.ps1` — one-command brand onboarding, DRAFT PR #44 (not yet merged)** | 🟡 Built + live-tested | 2026-07-11 |
+| **Phase 13 (Tier 3 onboarding runbook)** | **`scripts/onboard_brand.ps1` MERGED (#44); real Virgio catalog onboarded through it, DRAFT PR #45 (not yet merged/deployed)** | 🟡 Tooling live, brand pending deploy | 2026-07-11 |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
 - [x] Popularity baseline numbers confirmed on temporal test split, active pool AND full pool
@@ -1613,9 +1613,78 @@ local `fashion-rec-onboard-test` Docker image.
 Built, ruff-clean, full-suite-clean, and **live-tested end-to-end against real GCP/GitHub
 resources** (not just unit tests) — pre-flight failure mode, dry-run zero-mutation
 guarantee, and the full real pipeline (secret → GCS → container-verify → draft PR) all
-independently confirmed. **DRAFT PR #44 open, not yet merged** (per standing "merges are
-human-only" rule) — scoped to exactly the intended 5 files (`app/storage.py`,
-`scripts/brand_preflight.py`, `scripts/onboard_brand.ps1`,
-`tests/test_brand_preflight.py`, the ADR). No brand has been onboarded through this
-script into the live product yet — the first real use (`-TriggerDeploy` against an actual
-new paying-tenant brand) is a separate, later, human-gated action after this PR merges.
+independently confirmed. **PR #44 reviewed and MERGED to `main`** (squash commit
+`243dd0a`) — `main` confirmed green (306 passed, 5 skipped, 1 pre-existing unrelated
+failure). Standing reminder recorded: an executor drifted onto local `main` mid-build
+(caught before push, branched off, `main` restored) — future executor kickoffs must name
+the branch explicitly.
+
+### Real-brand test (Virgio, 2026-07-11) — proves Tier 3 against real data, not synthetic
+
+Per explicit follow-up instruction: a throwaway synthetic catalog proves the plumbing but
+not real-world robustness. Picked **Virgio** (Indian women's contemporary/ethnic wear,
+`https://virgio.com`) — already known-live in this project's Indian-brand catalog table
+(Phase 3), verified reachable, and not yet onboarded (unlike Snitch/Fashor/Powerlook).
+
+**Ingested via `ingest_catalog.py --source shopify --url https://virgio.com`** — the REAL
+live `/products.json` endpoint, not the sibling project's pre-cleaned CSV. **2,086 items**
+fetched (vs. 1,811 in the sibling project's stale scrape — real catalog growth, +15%,
+exactly the kind of drift a live-endpoint pull surfaces that a static CSV can't). 100%
+image download success (0 failed), real CLIP+SBERT+ItemTower fusion, real FAISS index.
+
+**What real data surfaced that the synthetic `zzdemo_brand` test never could:**
+- **Non-apparel SKUs mixed into the catalog**: 22 "Fragrance" + 1 "Gift-Card" items sit
+  alongside Dresses/Tops/Shirts. A CLIP visual embedding of a perfume bottle or a gift-card
+  graphic has no meaningful similarity relationship to garments — a real content-scope
+  decision a future onboarding should make explicitly (category-based exclusion filter),
+  not something the current pipeline decides for you.
+- **100% of titles (2086/2086) embed a `Style|Description` pipe-character format**
+  (e.g. `"Ronis|100% Cotton Sweetheart Tiered Mini Dress"`) — the brand's own naming
+  convention. Not a bug, but a real display consideration any future demo UI surfacing
+  Virgio results would need to handle (strip/reformat before showing to a user).
+- **Thin/singleton categories** (Gift-Card: 1, Blazer: 1, Skort: 1, Kaftan: 2, Cardigan: 2)
+  — the same class of issue Phase 6 hit with Snitch's original 50-item categories.
+  Relevant only if a category-affinity rerank stanza is later hand-tuned for this brand
+  (none configured yet — the auto-written yaml stub has rerank at pydantic defaults, no
+  `category_groups`).
+- **Clean surprises, reported honestly rather than assumed**: PDP URLs all resolve (a
+  301 redirect then 200 — normal Shopify locale routing, NOT the Snitch co.in→com dead-link
+  bug from Phase 10), zero HTML leftover in descriptions after stripping, zero non-ASCII
+  title artifacts, zero duplicate titles. Real data was messier in *content* (off-catalog
+  SKUs, naming convention) but not in *encoding/structure* for this particular store.
+- **Two real infra/tooling friction points reproduced on this run** (both pre-existing,
+  neither introduced by Tier 3, both now documented for a future fix):
+  1. `ingest_catalog.py`'s final `print("\n✓ Ingestion complete.")` crashes with
+     `UnicodeEncodeError` on Windows' cp1252 console — the *pipeline itself completes
+     successfully* (yaml/parquet/index all written correctly) but the traceback looks like
+     a failure to an operator. Reproduced on both the throwaway and the real run.
+  2. `infra/Dockerfile.cpu`'s `adduser --disabled-password --no-create-home --uid 1001`
+     is missing `--gecos ""`, so under BuildKit (no TTY) it churns through ~5 minutes of
+     Perl "Is the information correct? [Y/n]" interactive-fallback warnings before
+     completing on its own. Not an actual hang (confirmed twice — same behavior on both
+     the throwaway and the real run, always completes), but costs real wall-clock on
+     **every** onboarding run's mandatory container-verify step, since the `brands/`
+     `COPY` layer (and everything after it, including this `RUN`) invalidates whenever a
+     new brand's yaml changes.
+
+**Real onboarding run (secret → GCS → container-verify → draft PR), deploy trigger
+withheld as designed:**
+- Real Secret Manager secret `fashion-rec-virgio-key` created (fresh random key).
+- Real GCS upload: `data/virgio/items.parquet`, `indices/virgio/item_emb.npy`,
+  `indices/virgio/active.faiss/{faiss.index,article_ids.pkl}` (4 new) +
+  `checkpoints/best.pt` (already present, re-verified).
+- Container-verify PASSED on the real 2,086-item catalog: `/health` → 200 (virgio listed
+  among loaded brands), `/v1/virgio/item/1/similar` → 200 inside the real built container.
+- **DRAFT PR #45 opened**, clean 2-file diff (`.github/workflows/deploy.yml` +
+  `brands/virgio.yaml`) — https://github.com/gaurav-gandhi-2411/multimodal-fashion-recommender/pull/45.
+- **`-TriggerDeploy` and `-VerifyLive` deliberately NOT run** — per the standing
+  human-merge-gate design and this task's explicit instruction. PR #45 awaits review;
+  the actual Cloud Run redeploy adding Virgio as a 5th live brand is a separate, later,
+  human-approved action.
+
+### Status
+Tier 3 tooling merged and now proven against BOTH synthetic and real Shopify data.
+**PR #45 (real Virgio onboarding) open, not merged, not deployed** — Virgio is not yet a
+live brand. Two minor pre-existing friction points found (cp1252 print crash, Dockerfile
+`adduser` prompt) — cosmetic/non-blocking, not fixed in this pass, candidates for a future
+small hardening PR.
