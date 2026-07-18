@@ -557,7 +557,7 @@ Source: `C:\Users\gaura\ml-projects\agentic-shopping-assistant\data\raw\`
 | **Phase 11 (catalog attributes)** | **Zero-shot FashionCLIP color+pattern tagging LIVE (rev 00042-rbt); fabric/occasion evaluated + withheld (negative result)** | 🟢 Complete | 2026-07-07 |
 | **Phase 12 (integration friction, Tier 1+2)** | **Public H&M sandbox brand + honest docs LIVE (rev 00043-grt)** | 🟢 Complete | 2026-07-08 |
 | **Phase 13 (Tier 3 onboarding runbook)** | **`scripts/onboard_brand.ps1` MERGED (#44); Virgio (5th brand) LIVE on Cloud Run rev `fashion-recommender-staging-00044-qvf`** | 🟢 Complete | 2026-07-11 |
-| **Phase 14 (full-system accuracy audit)** | **Honest ceiling analysis + 3 defensibility fixes merged+deployed; color ~90% retired (cite ~64%); Fashor free-text 43% diagnosed (catalog imbalance, not vocab); Powerlook affinity-groups follow-up identified** | 🟢 Complete | 2026-07-11 |
+| **Phase 14 (full-system accuracy audit)** | **CLOSED. Taxonomy normalization + Powerlook affinity groups LIVE (revs 00045-whx, 00046-rb6); color ~90% retired (cite ~64%); Fashor free-text 43% diagnosed as catalog imbalance (not vocab), not closable by query expansion/prompting; locked 3-methodology style-search pitch table** | 🟢 Complete | 2026-07-11 |
 
 ### Phase 0.5 — Exit Criteria (ALL MET ✅)
 - [x] Popularity baseline numbers confirmed on temporal test split, active pool AND full pool
@@ -2016,8 +2016,33 @@ a strict-metric artifact once affinity is credited, with a small remaining genui
 thin categories). Held #4 (tower+CF blending) remains unbuilt per explicit decision.
 
 **Merged + deployed**: #52 (audit doc), #53 (taxonomy normalization — LIVE on revision
-`fashion-recommender-staging-00045-whx`, merged==live confirmed, all 5 brands + two-tower
-regression-checked), #54 (color negative result), #55 (Fashor diagnosis), #56 (color-number
-doc correction). **One real follow-up identified, not yet built**: configure Powerlook
-category-affinity groups (it's the only brand with none) and re-measure — proposed as a
-separate, human-reviewed, before/after-A/B'd DRAFT PR.
+`fashion-recommender-staging-00045-whx`), #54 (color negative result), #55 (Fashor
+diagnosis), #56 (color-number doc correction), #57 (locked style-search pitch table), #58
+(Powerlook category-affinity groups — **LIVE on revision
+`fashion-recommender-staging-00046-rb6`**). Both deploys followed the full Deploy
+Verification Standard: container-verify before touching Cloud Run, merged==live confirmed
+by exact commit-SHA match (no diff needed — zero gap both times), all 5 brands
+regression-checked 200 on the live revision, and the two-tower endpoints
+(`/similar`/`/recommend`) proven byte-identical pre/post deploy via the tagged-revision
+technique (exact match on the #58 deploy; the #53 deploy showed item-IDs-and-ranking
+identical with float noise at the ~7th significant digit, diagnosed as inherent
+build-to-build non-determinism, not a functional change — same conclusion, slightly
+different floating-point evidence).
+
+**Powerlook's affinity fix, measured**: `Accessories`↔`Belts` and `Co-ord`↔`Track-Suit`
+added as human-reviewed related-tier (0.4) groups — deliberately NOT re-attempting the
+Shirt/T-Shirt merge Phase 10 (PR #30) already found to be a negative result. Affinity
+reranked 94%→95% (+1pp, real, small — those 4 categories are only 2% of the catalog),
+strict unchanged (correct), snitch/fashor untouched controls byte-identical, guardrail
+held.
+
+### Phase 14 — CLOSED
+
+Every metric measured on the serve path, checked for leakage, and reasoned about against
+its realistic ceiling. Two genuine model/config gains shipped and deployed (taxonomy
+normalization, Powerlook affinity groups); one hypothesis tested and found false (color
+~90% retired); one real gap diagnosed to its root cause and found NOT closable by query
+expansion or prompting (Fashor's free-text strict number — a catalog category-imbalance
+effect, not a vocabulary weakness); one held-back speculative change with a stated
+revisit condition (tower+CF blending, needs real pilot traffic). Nothing shipped without
+a serve-path A/B; nothing chased past its honest ceiling.
