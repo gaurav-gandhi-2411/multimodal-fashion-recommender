@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "project": "multimodal-fashion-recommender",
+  "docs": "https://github.com/gaurav-gandhi-2411/gg-portfolio#autonomous-metric-refresh",
+  "metrics": [
+    {
+      "id": "mmfr:recall10",
+      "label": "Recall@10 lift vs. popularity baseline",
+      "value": "3.06× (0.0328 vs. 0.0107)",
+      "source_file": "README.md",
+      "source_line": 124,
+      "commit_sha": "7b5d84b0cc2eb497b98e84c63bb6436858e9e48d",
+      "measured_at": "2026-07-12"
+    }
+  ]
+}
