@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import sys
 import time
 import uuid
@@ -146,7 +147,7 @@ def _maybe_explain(
             explainer = GroqExplainer()
             explanation = explainer.explain(user_hist_meta, rec_meta)
             llm_duration = time.perf_counter() - t_llm
-            in_toks  = explainer.last_input_tokens  or GROQ_EST_INPUT_TOKENS
+            in_toks = explainer.last_input_tokens or GROQ_EST_INPUT_TOKENS
             out_toks = explainer.last_output_tokens or GROQ_EST_OUTPUT_TOKENS
             usd = groq_call_cost_usd(in_toks, out_toks)
             LLM_CALLS.labels(brand=brand, provider=provider, status="success").inc()
@@ -227,10 +228,8 @@ async def recommend(
 
     rerank_cfg = state.config.rerank
     # Fetch an oversized pool so self-exclusion + optional reranking leave enough results.
-    if rerank_cfg.enabled and req.item_id:
-        pool_k = rerank_cfg.candidate_pool_size
-    else:
-        pool_k = req.k + 1  # +1 absorbs the seed item that gets excluded below
+    # +1 (else branch) absorbs the seed item that gets excluded below.
+    pool_k = rerank_cfg.candidate_pool_size if rerank_cfg.enabled and req.item_id else req.k + 1
 
     try:
         raw_results = state.retriever.search(query_emb, k=pool_k)
@@ -270,7 +269,12 @@ async def recommend(
                     embeddings[aid] = state.retriever.index.reconstruct(row)
 
         candidates = _rerank(
-            candidates, query_price, query_cat, state.art_map, rerank_cfg, req.k,
+            candidates,
+            query_price,
+            query_cat,
+            state.art_map,
+            rerank_cfg,
+            req.k,
             embeddings=embeddings,
             query_meta=query_meta,
         )
@@ -294,8 +298,12 @@ async def recommend(
             cache_key = _cache.make_key(brand, user_hist_ids, str(art_id), cold_start)
             explanation, cost, was_cached = await asyncio.to_thread(
                 _maybe_explain,
-                user_hist_meta, meta, brand, state,
-                cache=_cache, cache_key=cache_key,
+                user_hist_meta,
+                meta,
+                brand,
+                state,
+                cache=_cache,
+                cache_key=cache_key,
             )
             total_usd += cost
             if was_cached is True:
@@ -306,7 +314,9 @@ async def recommend(
                 EXPLANATION_CACHE_MISSES.labels(brand=brand).inc()
         pdp_url: str | None = meta.get("pdp_url") or None
         results.append(
-            RecommendedItem(item_id=str(art_id), score=score, explanation=explanation, pdp_url=pdp_url)
+            RecommendedItem(
+                item_id=str(art_id), score=score, explanation=explanation, pdp_url=pdp_url
+            )
         )
 
     latency_ms = (time.perf_counter() - t0) * 1000
@@ -395,7 +405,12 @@ async def similar(
                     embeddings[aid] = state.retriever.index.reconstruct(row)
 
         candidates = _rerank(
-            candidates, query_price, query_cat, state.art_map, rerank_cfg, k_eff,
+            candidates,
+            query_price,
+            query_cat,
+            state.art_map,
+            rerank_cfg,
+            k_eff,
             embeddings=embeddings,
             query_meta=query_meta,
         )
@@ -487,8 +502,7 @@ async def item_attributes(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"Item '{item_id}' has no attribute tags "
-                "(no catalogue image at extraction time)"
+                f"Item '{item_id}' has no attribute tags (no catalogue image at extraction time)"
             ),
         )
 
@@ -763,10 +777,8 @@ async def visual_search(
     # results.  This lets a buyer upload a shirt photo and get shirts back, not overshirts.
     if not query_cat and raw_results and rerank_cfg.enabled:
         top_aid = raw_results[0][0]
-        try:
+        with contextlib.suppress(ValueError, TypeError):
             top_aid = int(top_aid)
-        except (ValueError, TypeError):
-            pass
         top_meta = state.art_map.get(top_aid, {})
         query_cat = str(top_meta.get("category", ""))
         query_price = float(top_meta.get("price_inr") or 0.0)
@@ -777,10 +789,16 @@ async def visual_search(
     if use_rerank:
         # embeddings=None disables MMR diversity (visual FAISS stores 512-d CLIP vectors,
         # not the 256-d tower vectors the MMR path expects).  Category + price still apply.
-        vis_candidates = [(int(aid) if str(aid).isdigit() else aid, score)
-                          for aid, score in raw_results]
+        vis_candidates = [
+            (int(aid) if str(aid).isdigit() else aid, score) for aid, score in raw_results
+        ]
         vis_candidates = _rerank(
-            vis_candidates, query_price, query_cat, state.art_map, rerank_cfg, k,
+            vis_candidates,
+            query_price,
+            query_cat,
+            state.art_map,
+            rerank_cfg,
+            k,
             embeddings=None,
             query_meta=query_meta,
         )
@@ -815,9 +833,7 @@ async def visual_search(
             aid = art_id  # type: ignore[assignment]
         meta = state.art_map.get(aid, {})
         pdp_url: str | None = meta.get("pdp_url") or None
-        results.append(
-            RecommendedItem(item_id=str(art_id), score=score, pdp_url=pdp_url)
-        )
+        results.append(RecommendedItem(item_id=str(art_id), score=score, pdp_url=pdp_url))
 
     latency_ms = (time.perf_counter() - t0) * 1000
     log.info(
@@ -903,10 +919,8 @@ async def style_search(
     query_meta: dict = {}
     if raw_results and rerank_cfg.enabled:
         top_aid = raw_results[0][0]
-        try:
+        with contextlib.suppress(ValueError, TypeError):
             top_aid = int(top_aid)
-        except (ValueError, TypeError):
-            pass
         top_meta = state.art_map.get(top_aid, {})
         query_cat = str(top_meta.get("category", ""))
         query_price = float(top_meta.get("price_inr") or 0.0)
@@ -915,10 +929,16 @@ async def style_search(
     use_rerank = rerank_cfg.enabled and bool(query_cat)
 
     if use_rerank:
-        vis_candidates = [(int(aid) if str(aid).isdigit() else aid, score)
-                          for aid, score in raw_results]
+        vis_candidates = [
+            (int(aid) if str(aid).isdigit() else aid, score) for aid, score in raw_results
+        ]
         vis_candidates = _rerank(
-            vis_candidates, query_price, query_cat, state.art_map, rerank_cfg, k,
+            vis_candidates,
+            query_price,
+            query_cat,
+            state.art_map,
+            rerank_cfg,
+            k,
             embeddings=None,
             query_meta=query_meta,
         )

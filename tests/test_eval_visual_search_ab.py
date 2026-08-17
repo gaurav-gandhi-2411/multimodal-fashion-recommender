@@ -46,10 +46,9 @@ def test_overall_rate_mean_of_boolean_attribute() -> None:
 
 
 def test_per_category_rates_filters_small_buckets() -> None:
-    results = [
-        _hit("Shirts", ["Shirts"] * 5) for _ in range(3)
-    ] + [
-        _hit("Jeans", ["Jeans"] * 5) for _ in range(2)  # below MIN_CATEGORY_QUERIES=3
+    results = [_hit("Shirts", ["Shirts"] * 5) for _ in range(3)] + [
+        _hit("Jeans", ["Jeans"] * 5)
+        for _ in range(2)  # below MIN_CATEGORY_QUERIES=3
     ]
     rates = per_category_rates(results, "cat_match_fraction", min_n=3)
     assert "Shirts" in rates

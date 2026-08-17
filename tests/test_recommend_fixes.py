@@ -17,13 +17,11 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from app.rerank import RerankConfig  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -83,9 +81,7 @@ def _make_state_with_rerank(rerank_enabled: bool = True) -> MagicMock:
     state.retriever.search.return_value = _FAISS_RESULTS
 
     # Embeddings: dummy 256-d zero vectors (MMR diversity disabled via w_diversity=0)
-    state.retriever.index.reconstruct.side_effect = (
-        lambda row: np.zeros(256, dtype=np.float32)
-    )
+    state.retriever.index.reconstruct.side_effect = lambda row: np.zeros(256, dtype=np.float32)
 
     rerank_cfg = RerankConfig(
         enabled=rerank_enabled,
@@ -107,8 +103,8 @@ def _make_state_with_rerank(rerank_enabled: bool = True) -> MagicMock:
     }
 
     # item_embedding path for _get_item_embedding
-    state.retriever.index.reconstruct.side_effect = (
-        lambda row: np.ones(256, dtype=np.float32) / np.sqrt(256)
+    state.retriever.index.reconstruct.side_effect = lambda row: (
+        np.ones(256, dtype=np.float32) / np.sqrt(256)
     )
 
     # model / device (needed by _get_user_embedding, not called here)
@@ -135,8 +131,9 @@ def test_recommend_seed_item_excluded_from_results() -> None:
     registry = _make_registry(state)
 
     with patch("app.api.main.load_registry", return_value=registry):
-        from app.api.main import app
         from fastapi.testclient import TestClient
+
+        from app.api.main import app
 
         with TestClient(app, raise_server_exceptions=True) as client:
             resp = client.post(
@@ -158,8 +155,9 @@ def test_recommend_results_not_empty_after_exclusion() -> None:
     registry = _make_registry(state)
 
     with patch("app.api.main.load_registry", return_value=registry):
-        from app.api.main import app
         from fastapi.testclient import TestClient
+
+        from app.api.main import app
 
         with TestClient(app, raise_server_exceptions=True) as client:
             resp = client.post(
@@ -192,8 +190,9 @@ def test_recommend_reranker_filters_overshirt() -> None:
     registry = _make_registry(state)
 
     with patch("app.api.main.load_registry", return_value=registry):
-        from app.api.main import app
         from fastapi.testclient import TestClient
+
+        from app.api.main import app
 
         with TestClient(app, raise_server_exceptions=True) as client:
             resp = client.post(
@@ -207,8 +206,7 @@ def test_recommend_reranker_filters_overshirt() -> None:
 
     # Overshirt should be downranked below the two shirts, so not in top-2.
     assert str(_OVERSHIRT_AID) not in returned_ids, (
-        f"Overshirt ({_OVERSHIRT_AID}) leaked into top-2 despite reranker. "
-        f"Results: {returned_ids}"
+        f"Overshirt ({_OVERSHIRT_AID}) leaked into top-2 despite reranker. Results: {returned_ids}"
     )
 
 
@@ -218,8 +216,9 @@ def test_recommend_reranker_keeps_same_category_items() -> None:
     registry = _make_registry(state)
 
     with patch("app.api.main.load_registry", return_value=registry):
-        from app.api.main import app
         from fastapi.testclient import TestClient
+
+        from app.api.main import app
 
         with TestClient(app, raise_server_exceptions=True) as client:
             resp = client.post(

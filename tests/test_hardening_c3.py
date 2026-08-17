@@ -17,7 +17,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
@@ -46,12 +45,11 @@ def _make_state(scores: list[float]) -> MagicMock:
     state.api_key = "c3-test-key"
     state.config.brand = "c3brand"
     state.art_map = {
-        aid: {"title": f"Item {aid}", "category": "Shirts", "price_inr": 999.0}
-        for aid in ids
+        aid: {"title": f"Item {aid}", "category": "Shirts", "price_inr": 999.0} for aid in ids
     }
     state.config.rerank = RerankConfig(enabled=False)
     state.visual_retriever = MagicMock()
-    state.visual_retriever.search.return_value = list(zip(ids, scores))
+    state.visual_retriever.search.return_value = list(zip(ids, scores, strict=True))
     state.color_index = {}
     return state
 
@@ -70,6 +68,7 @@ def _call_visual_search(state: MagicMock, k: int = 5) -> dict:
         patch("app.visual.encode_query_image", return_value=_vec()),
     ):
         from app.api.main import app
+
         with TestClient(app, raise_server_exceptions=True) as client:
             resp = client.post(
                 f"/v1/{state.config.brand}/visual-search?k={k}",

@@ -13,6 +13,7 @@ BASELINE B -- Text-only two-tower
 
 Outputs: prints per-split metrics for both baselines.
 """
+
 import logging
 import sys
 from pathlib import Path
@@ -52,17 +53,17 @@ def main() -> None:
 
     processed = Path(config["data"]["processed_path"])
 
-    img_emb  = np.load(processed / "item_image_embeddings.npy")
-    txt_emb  = np.load(processed / "item_text_embeddings.npy")
+    img_emb = np.load(processed / "item_image_embeddings.npy")
+    txt_emb = np.load(processed / "item_text_embeddings.npy")
     item_ids = np.load(processed / "item_ids_image.npy", allow_pickle=True)
     article_id_to_idx = {int(aid): i for i, aid in enumerate(item_ids)}
 
     train_df = pd.read_parquet(processed / "train.parquet")
-    val_df   = pd.read_parquet(processed / "val.parquet")
-    test_df  = pd.read_parquet(processed / "test.parquet")
+    val_df = pd.read_parquet(processed / "val.parquet")
+    test_df = pd.read_parquet(processed / "test.parquet")
 
     seq_len = config["model"]["user_seq_len"]
-    bs      = config["training"]["batch_size"]
+    bs = config["training"]["batch_size"]
 
     # ------------------------------------------------------------------ #
     # BASELINE A: Item popularity                                          #
@@ -73,11 +74,9 @@ def main() -> None:
 
     # Rank articles by frequency in train_df
     counts = train_df["article_id"].value_counts()
-    popular_article_ids = counts.index.tolist()   # sorted descending by count
+    popular_article_ids = counts.index.tolist()  # sorted descending by count
     popular_item_indices = [
-        article_id_to_idx[aid]
-        for aid in popular_article_ids
-        if aid in article_id_to_idx
+        article_id_to_idx[aid] for aid in popular_article_ids if aid in article_id_to_idx
     ]
     print(f"  Unique articles in train: {len(popular_item_indices):,}")
     print(f"  Top-3 popular item indices: {popular_item_indices[:3]}")
@@ -85,18 +84,15 @@ def main() -> None:
     # Collect true item indices for val and test
     def get_true_indices(targets_df: pd.DataFrame) -> np.ndarray:
         mask = targets_df["article_id"].isin(article_id_to_idx)
-        return np.array([
-            article_id_to_idx[aid]
-            for aid in targets_df.loc[mask, "article_id"]
-        ])
+        return np.array([article_id_to_idx[aid] for aid in targets_df.loc[mask, "article_id"]])
 
-    val_true_idx  = get_true_indices(val_df)
+    val_true_idx = get_true_indices(val_df)
     test_true_idx = get_true_indices(test_df)
 
-    pop_val_recall  = popularity_recall_at_k(val_true_idx,  popular_item_indices, k=10)
-    pop_val_ndcg    = popularity_ndcg_at_k(val_true_idx,    popular_item_indices, k=10)
+    pop_val_recall = popularity_recall_at_k(val_true_idx, popular_item_indices, k=10)
+    pop_val_ndcg = popularity_ndcg_at_k(val_true_idx, popular_item_indices, k=10)
     pop_test_recall = popularity_recall_at_k(test_true_idx, popular_item_indices, k=10)
-    pop_test_ndcg   = popularity_ndcg_at_k(test_true_idx,   popular_item_indices, k=10)
+    pop_test_ndcg = popularity_ndcg_at_k(test_true_idx, popular_item_indices, k=10)
 
     print(f"  Val  | Recall@10={pop_val_recall:.4f} | NDCG@10={pop_val_ndcg:.4f}")
     print(f"  Test | Recall@10={pop_test_recall:.4f} | NDCG@10={pop_test_ndcg:.4f}")
@@ -112,8 +108,8 @@ def main() -> None:
     zero_img_emb = np.zeros_like(img_emb)
 
     # Datasets
-    full_hist_val  = pd.concat([train_df, val_df],           ignore_index=True)
-    full_hist_test = pd.concat([train_df, val_df, test_df],  ignore_index=True)
+    full_hist_val = pd.concat([train_df, val_df], ignore_index=True)
+    full_hist_test = pd.concat([train_df, val_df, test_df], ignore_index=True)
 
     print("\nBuilding train dataset (text-only)...")
     train_dataset = FashionInteractionDataset(
@@ -176,14 +172,18 @@ def main() -> None:
     print("\n" + "=" * 60)
     print("SUMMARY -- full catalogue (20k items)")
     print("=" * 60)
-    print(f"  Popularity  | val Recall@10={pop_val_recall:.4f} NDCG@10={pop_val_ndcg:.4f}"
-          f"  | test Recall@10={pop_test_recall:.4f} NDCG@10={pop_test_ndcg:.4f}")
-    txt_vr = best_metrics.get("val_recall_at_10",  "N/A")
-    txt_vn = best_metrics.get("val_ndcg_at_10",    "N/A")
+    print(
+        f"  Popularity  | val Recall@10={pop_val_recall:.4f} NDCG@10={pop_val_ndcg:.4f}"
+        f"  | test Recall@10={pop_test_recall:.4f} NDCG@10={pop_test_ndcg:.4f}"
+    )
+    txt_vr = best_metrics.get("val_recall_at_10", "N/A")
+    txt_vn = best_metrics.get("val_ndcg_at_10", "N/A")
     txt_tr = best_metrics.get("test_recall_at_10", "N/A")
-    txt_tn = best_metrics.get("test_ndcg_at_10",   "N/A")
-    print(f"  Text-only   | val Recall@10={txt_vr:.4f} NDCG@10={txt_vn:.4f}"
-          f"  | test Recall@10={txt_tr:.4f} NDCG@10={txt_tn:.4f}")
+    txt_tn = best_metrics.get("test_ndcg_at_10", "N/A")
+    print(
+        f"  Text-only   | val Recall@10={txt_vr:.4f} NDCG@10={txt_vn:.4f}"
+        f"  | test Recall@10={txt_tr:.4f} NDCG@10={txt_tn:.4f}"
+    )
 
     # Save popularity metrics for comparison script to load
     np.save(

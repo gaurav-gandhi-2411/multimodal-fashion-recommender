@@ -3,6 +3,7 @@ Tests for ImageEncoder and TextEncoder.
 Uses a real H&M image (article 698328004) to ensure the pipeline is exercised end-to-end,
 not just on synthetic tensors.
 """
+
 import sys
 from pathlib import Path
 
@@ -23,22 +24,33 @@ with open("config.yaml") as f:
 @pytest.fixture(scope="module")
 def img_encoder():
     from src.encoders.image_encoder import ImageEncoder
+
     return ImageEncoder(CFG)
 
 
 @pytest.fixture(scope="module")
 def txt_encoder():
     from src.encoders.text_encoder import TextEncoder
+
     return TextEncoder(CFG)
 
 
 # --- Image encoder tests ---
 
+
+# Both tests below need REAL_IMAGE_PATH's actual image file, gitignored (data/h-and-m-.../
+# images/), not present in a fresh checkout or CI. Without it, encode_batch silently
+# returns a zero vector rather than raising -- test_image_encoder_shape's assertion
+# happens not to notice (a zero vector still has shape (1, 512)), so only the norm test
+# catches the missing-file case; marking both for honesty rather than leaving the shape
+# test looking like coverage it doesn't currently provide.
+@pytest.mark.requires_data
 def test_image_encoder_shape(img_encoder):
     emb = img_encoder.encode_batch([REAL_IMAGE_PATH])
     assert emb.shape == (1, 512), f"Expected (1, 512), got {emb.shape}"
 
 
+@pytest.mark.requires_data
 def test_image_encoder_norm(img_encoder):
     emb = img_encoder.encode_batch([REAL_IMAGE_PATH])
     norm = np.linalg.norm(emb[0])

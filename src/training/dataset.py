@@ -53,23 +53,23 @@ class FashionInteractionDataset(Dataset):
         self._user_ts: dict = {}
         self._user_aids: dict = {}
         for user_id, group in hist_df.groupby("customer_id", sort=False):
-            self._user_ts[user_id]  = group["t_dat"].tolist()
+            self._user_ts[user_id] = group["t_dat"].tolist()
             self._user_aids[user_id] = group["article_id"].tolist()
 
         # Build sample list from targets_df (defaults to interactions_df).
         src = targets_df if targets_df is not None else interactions_df
         tgt_mask = src["article_id"].isin(article_id_to_idx)
-        tgt_df   = src[tgt_mask]
+        tgt_df = src[tgt_mask]
 
         skipped = 0
         self._samples: list[tuple] = []
         for row in tgt_df.itertuples(index=False):
-            user_id    = row.customer_id
-            target_ts  = row.t_dat
+            user_id = row.customer_id
+            target_ts = row.t_dat
             target_aid = row.article_id
 
             ts_list = self._user_ts.get(user_id, [])
-            cutoff  = bisect.bisect_left(ts_list, target_ts)
+            cutoff = bisect.bisect_left(ts_list, target_ts)
             if cutoff == 0:
                 skipped += 1
                 continue
@@ -78,7 +78,8 @@ class FashionInteractionDataset(Dataset):
 
         logger.info(
             "Dataset built: %s samples, %s skipped (no prior history)",
-            f"{len(self._samples):,}", f"{skipped:,}",
+            f"{len(self._samples):,}",
+            f"{skipped:,}",
         )
         print(
             f"Dataset: {len(self._samples):,} samples, "
@@ -97,21 +98,21 @@ class FashionInteractionDataset(Dataset):
         target_txt = torch.from_numpy(self.txt_emb[target_idx].copy())
 
         # User history: all items in _user_ts strictly before target_ts
-        ts_list  = self._user_ts[user_id]
+        ts_list = self._user_ts[user_id]
         aid_list = self._user_aids[user_id]
-        cutoff   = bisect.bisect_left(ts_list, target_ts)
+        cutoff = bisect.bisect_left(ts_list, target_ts)
         history_aids = aid_list[max(0, cutoff - self.seq_len) : cutoff]
 
         # Build padded sequence tensors (left-pad: real items in rightmost slots)
         seq_img = np.zeros((self.seq_len, self.img_emb.shape[1]), dtype=np.float32)
         seq_txt = np.zeros((self.seq_len, self.txt_emb.shape[1]), dtype=np.float32)
-        mask    = np.zeros(self.seq_len, dtype=bool)
+        mask = np.zeros(self.seq_len, dtype=bool)
 
         n_real = len(history_aids)
         for i, aid in enumerate(history_aids):
             slot = self.seq_len - n_real + i
             if aid in self.article_id_to_idx:
-                emb_idx       = self.article_id_to_idx[aid]
+                emb_idx = self.article_id_to_idx[aid]
                 seq_img[slot] = self.img_emb[emb_idx]
                 seq_txt[slot] = self.txt_emb[emb_idx]
             mask[slot] = True
@@ -119,8 +120,8 @@ class FashionInteractionDataset(Dataset):
         return {
             "user_seq_img": torch.from_numpy(seq_img),
             "user_seq_txt": torch.from_numpy(seq_txt),
-            "user_mask":    torch.from_numpy(mask),
-            "target_img":   target_img,
-            "target_txt":   target_txt,
-            "target_idx":   self.article_id_to_idx[target_aid],
+            "user_mask": torch.from_numpy(mask),
+            "target_img": target_img,
+            "target_txt": target_txt,
+            "target_idx": self.article_id_to_idx[target_aid],
         }

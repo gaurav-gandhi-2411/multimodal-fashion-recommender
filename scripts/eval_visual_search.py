@@ -118,7 +118,7 @@ class VisualQueryResult:
     top_k_aids: list[int]
     top_k_cats: list[str]
     category_match_rate_at5: float  # fraction of top-5 whose category == query category
-    self_retrieved: bool             # source item appears in top-k
+    self_retrieved: bool  # source item appears in top-k
 
 
 # ---------------------------------------------------------------------------
@@ -197,15 +197,17 @@ def eval_brand(
 
         self_ret = q_aid in top_aids_k
 
-        results.append(VisualQueryResult(
-            brand=brand,
-            article_id=q_aid,
-            category=q_cat,
-            top_k_aids=top_aids_k,
-            top_k_cats=top_k_cats,
-            category_match_rate_at5=cat_match_at5,
-            self_retrieved=self_ret,
-        ))
+        results.append(
+            VisualQueryResult(
+                brand=brand,
+                article_id=q_aid,
+                category=q_cat,
+                top_k_aids=top_aids_k,
+                top_k_cats=top_k_cats,
+                category_match_rate_at5=cat_match_at5,
+                self_retrieved=self_ret,
+            )
+        )
 
     n_usable = n_sampled - n_skipped
     return results, n_sampled, n_usable
@@ -280,10 +282,14 @@ def _parse_args() -> argparse.Namespace:
         description="Visual-search quality eval -- pure CLIP-512 path.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--n-queries", type=int, default=50, metavar="N",
-                   help="Items sampled per brand (after image filter)")
-    p.add_argument("--k", type=int, default=10, metavar="K",
-                   help="FAISS top-k")
+    p.add_argument(
+        "--n-queries",
+        type=int,
+        default=50,
+        metavar="N",
+        help="Items sampled per brand (after image filter)",
+    )
+    p.add_argument("--k", type=int, default=10, metavar="K", help="FAISS top-k")
     p.add_argument("--seed", type=int, default=42, help="Random seed")
     p.add_argument(
         "--brands",

@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        # --extra ml: several tests import Pillow/torchvision (image fixtures for visual
+        # search), which live in the `ml` extras group, not `dev`.
+        run: uv sync --frozen --extra dev --extra ml
+
+      - name: Lint (ruff check)
+        run: uv run ruff check .
+
+      - name: Format check (ruff format --check)
+        run: uv run ruff format --check .
+
+      # mypy intentionally NOT gated here yet: `uv run mypy app` currently reports 76
+      # pre-existing errors, all in app/api/ (routes.py, main.py) -- genuine type-safety
+      # debt (item-id int/str confusion across several call sites), not something safe to
+      # bulk-fix as part of adding this CI gate. Tracked as a separate, deliberate
+      # follow-up rather than silently ignored or force-passed.
+
+      - name: Test (pytest)
+        # -m "not integration and not requires_data": both markers (see pyproject.toml)
+        # need local data/index files that are gitignored and not present in CI.
+        run: uv run pytest -m "not integration and not requires_data"

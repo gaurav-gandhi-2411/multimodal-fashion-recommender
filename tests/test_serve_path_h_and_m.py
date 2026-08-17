@@ -9,6 +9,7 @@ Run with:
 
 Skipped unless RUN_SERVE_PATH_TESTS=1 to avoid blocking offline CI.
 """
+
 from __future__ import annotations
 
 import os

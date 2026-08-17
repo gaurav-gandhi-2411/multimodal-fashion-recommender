@@ -390,9 +390,7 @@ def _resolve_image_path(images_dir: Path, product_id: str, article_id: str) -> P
     return None
 
 
-def _stratified_category_sample(
-    catalog: pd.DataFrame, n: int, seed: int
-) -> pd.DataFrame:
+def _stratified_category_sample(catalog: pd.DataFrame, n: int, seed: int) -> pd.DataFrame:
     """Sample n rows spread proportionally across catalog['category'] (min-1 per category)."""
     rng = np.random.default_rng(seed)
     cat_counts = catalog["category"].value_counts()
@@ -687,8 +685,7 @@ def main() -> None:
         samples = build_spotcheck_sample(brand, brand_items[brand], brand_attrs[brand], images_dir)
         verified = [s for s in samples if Path(s["image_path"]).exists()]
         print(
-            f"  {brand}: {len(verified)}/{SPOTCHECK_N_PER_BRAND} sampled "
-            "(all image paths verified)"
+            f"  {brand}: {len(verified)}/{SPOTCHECK_N_PER_BRAND} sampled (all image paths verified)"
         )
         all_samples.extend(verified)
 

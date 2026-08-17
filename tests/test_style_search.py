@@ -15,7 +15,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -34,12 +33,11 @@ def _make_state(scores: list[float], color_index: dict | None = None) -> MagicMo
     state.api_key = "style-test-key"
     state.config.brand = "stylebrand"
     state.art_map = {
-        aid: {"title": f"Item {aid}", "category": "Shirts", "price_inr": 999.0}
-        for aid in ids
+        aid: {"title": f"Item {aid}", "category": "Shirts", "price_inr": 999.0} for aid in ids
     }
     state.config.rerank = RerankConfig(enabled=False)
     state.visual_retriever = MagicMock()
-    state.visual_retriever.search.return_value = list(zip(ids, scores))
+    state.visual_retriever.search.return_value = list(zip(ids, scores, strict=True))
     state.color_index = color_index or {}
     return state
 
@@ -65,8 +63,9 @@ def _call_style_search(
         patch("app.api.main.load_registry", return_value=registry),
         patch("app.visual.encode_query_text", return_value=_vec()),
     ):
-        from app.api.main import app
         from fastapi.testclient import TestClient
+
+        from app.api.main import app
 
         with TestClient(app, raise_server_exceptions=True) as client:
             resp = client.post(url, headers={"X-Api-Key": "style-test-key"})
@@ -145,8 +144,9 @@ def test_style_search_color_rerank_called_when_color_param_given() -> None:
         patch("app.visual.encode_query_text", return_value=_vec()),
         patch("app.api.routes.color_rerank", return_value=[(1, 0.9), (2, 0.8)]) as mock_cr,
     ):
-        from app.api.main import app
         from fastapi.testclient import TestClient
+
+        from app.api.main import app
 
         with TestClient(app, raise_server_exceptions=True) as client:
             resp = client.post(

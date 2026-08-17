@@ -16,7 +16,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -25,10 +24,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.rerank import RerankConfig  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _tiny_png_bytes() -> bytes:
     buf = io.BytesIO()
@@ -54,8 +53,7 @@ def _make_vs_state(known_ids: list[int]) -> MagicMock:
     state.api_key = "p0-test-key"
     state.config.brand = "testbrand"
     state.art_map = {
-        aid: {"title": f"Item {aid}", "category": "Shirts", "price_inr": 999.0}
-        for aid in known_ids
+        aid: {"title": f"Item {aid}", "category": "Shirts", "price_inr": 999.0} for aid in known_ids
     }
     state.config.rerank = RerankConfig(enabled=False)
     state.visual_retriever = MagicMock()
@@ -75,6 +73,7 @@ def _make_registry(state: MagicMock) -> MagicMock:
 # ---------------------------------------------------------------------------
 # H1: k bounds on /similar
 # ---------------------------------------------------------------------------
+
 
 def test_similar_k_zero_returns_422(api_client) -> None:
     resp = api_client.get(
@@ -112,6 +111,7 @@ def test_similar_k_100_is_valid(api_client) -> None:
 # H1: k bounds on /visual-search
 # ---------------------------------------------------------------------------
 
+
 def test_visual_search_k_zero_returns_422() -> None:
     state = _make_vs_state([1, 2, 3])
     registry = _make_registry(state)
@@ -120,6 +120,7 @@ def test_visual_search_k_zero_returns_422() -> None:
         patch("app.visual.encode_query_image", return_value=_fixed_vec()),
     ):
         from app.api.main import app
+
         with TestClient(app, raise_server_exceptions=False) as client:
             resp = client.post(
                 f"/v1/{state.config.brand}/visual-search?k=0",
@@ -137,6 +138,7 @@ def test_visual_search_k_101_returns_422() -> None:
         patch("app.visual.encode_query_image", return_value=_fixed_vec()),
     ):
         from app.api.main import app
+
         with TestClient(app, raise_server_exceptions=False) as client:
             resp = client.post(
                 f"/v1/{state.config.brand}/visual-search?k=101",
@@ -150,11 +152,13 @@ def test_visual_search_k_101_returns_422() -> None:
 # H2: image size cap
 # ---------------------------------------------------------------------------
 
+
 def test_visual_search_oversized_image_returns_413() -> None:
     state = _make_vs_state([1])
     registry = _make_registry(state)
     with patch("app.api.main.load_registry", return_value=registry):
         from app.api.main import app
+
         with TestClient(app, raise_server_exceptions=False) as client:
             resp = client.post(
                 f"/v1/{state.config.brand}/visual-search",
@@ -172,13 +176,14 @@ def test_visual_search_10mb_exactly_is_accepted() -> None:
     exactly_10mb = b"X" * (10 * 1024 * 1024)
     with patch("app.api.main.load_registry", return_value=registry):
         from app.api.main import app
+
         with TestClient(app, raise_server_exceptions=False) as client:
             resp = client.post(
                 f"/v1/{state.config.brand}/visual-search",
                 files={"image": ("ten.bin", exactly_10mb, "application/octet-stream")},
                 headers={"X-Api-Key": "p0-test-key"},
             )
-    # 10 MB exactly: not rejected for size. Will get 400 (invalid image) because it's not a real image.
+    # 10 MB exactly: not rejected for size. Gets 400 (invalid image) since it's not a real image.
     assert resp.status_code == 400, f"Expected 400 (invalid image), got {resp.status_code}"
 
 
@@ -186,21 +191,20 @@ def test_visual_search_10mb_exactly_is_accepted() -> None:
 # H3: FAISS error handling
 # ---------------------------------------------------------------------------
 
+
 def _make_similar_state(known_ids: list[int]) -> MagicMock:
     """Minimal BrandState mock for /similar tests."""
     state = MagicMock()
     state.api_key = "p0-test-key"
     state.config.brand = "testbrand"
     state.art_map = {
-        aid: {"title": f"Item {aid}", "category": "Shirts", "price_inr": 999.0}
-        for aid in known_ids
+        aid: {"title": f"Item {aid}", "category": "Shirts", "price_inr": 999.0} for aid in known_ids
     }
     from app.rerank import RerankConfig
+
     state.config.rerank = RerankConfig(enabled=False)
     state.retriever = MagicMock()
-    state.retriever.search.return_value = [
-        (aid, 0.9 - 0.01 * i) for i, aid in enumerate(known_ids)
-    ]
+    state.retriever.search.return_value = [(aid, 0.9 - 0.01 * i) for i, aid in enumerate(known_ids)]
     state.retriever.index.reconstruct.side_effect = lambda row: np.zeros(256, dtype=np.float32)
     state.faiss_aid_to_row = {aid: i for i, aid in enumerate(known_ids)}
     state.user_history = None
@@ -215,6 +219,7 @@ def test_similar_faiss_error_returns_503() -> None:
     registry = _make_registry(state)
     with patch("app.api.main.load_registry", return_value=registry):
         from app.api.main import app
+
         with TestClient(app, raise_server_exceptions=False) as client:
             resp = client.get(
                 f"/v1/{state.config.brand}/item/1/similar",
@@ -236,6 +241,7 @@ def test_visual_search_faiss_error_returns_503() -> None:
         patch("app.visual.encode_query_image", return_value=_fixed_vec()),
     ):
         from app.api.main import app
+
         with TestClient(app, raise_server_exceptions=False) as client:
             resp = client.post(
                 f"/v1/{state.config.brand}/visual-search",
@@ -249,6 +255,7 @@ def test_visual_search_faiss_error_returns_503() -> None:
 # H5: /health strips brand inventory
 # ---------------------------------------------------------------------------
 
+
 def test_health_has_no_brand_inventory(api_client) -> None:
     resp = api_client.get("/health")
     assert resp.status_code == 200
@@ -260,6 +267,7 @@ def test_health_has_no_brand_inventory(api_client) -> None:
 # ---------------------------------------------------------------------------
 # C2: rate limiter -- isolated test app with 1/minute limit
 # ---------------------------------------------------------------------------
+
 
 def test_rate_limit_returns_429_after_limit_exceeded() -> None:
     """A 1/minute limit must return 429 on the second request from the same IP."""

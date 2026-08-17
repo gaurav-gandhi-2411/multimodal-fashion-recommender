@@ -27,7 +27,9 @@ BRANDS = ["snitch", "fashor", "powerlook"]
 
 def _occ(meta, cfg) -> frozenset:
     lex = cfg.occasion_lexicon or None
-    return tag_occasions(meta.get("title", ""), meta.get("description", ""), lex, cfg.parse_explicit_occasion)
+    return tag_occasions(
+        meta.get("title", ""), meta.get("description", ""), lex, cfg.parse_explicit_occasion
+    )
 
 
 def main() -> None:
@@ -47,27 +49,34 @@ def main() -> None:
         pool_k = cfg.candidate_pool_size
         current_w = cfg.w_occasion
 
-        print(f"\n=== {brand}  (n={len(queries)}, diversity={cfg.w_diversity}, "
-              f"current w_occasion={current_w}) ===")
+        print(
+            f"\n=== {brand}  (n={len(queries)}, diversity={cfg.w_diversity}, "
+            f"current w_occasion={current_w}) ==="
+        )
         print(f"  {'w_occasion':>10} | {'strict':>7} | {'occ_match(tagged)':>18} | {'|dPrice|':>9}")
 
         for w_occ in (0.0, 0.08, 0.10, 0.15):
             strict_all, occ_all, dprice_all = [], [], []
             for _, q in queries.iterrows():
-                q_aid = int(q["article_id"]); q_cat = str(q["category"])
+                q_aid = int(q["article_id"])
+                q_cat = str(q["category"])
                 q_price = float(q["price_inr"]) if q["price_inr"] == q["price_inr"] else 0.0
                 row = aid_to_row.get(q_aid)
                 if row is None:
                     continue
                 qvec = faiss_index.reconstruct(row).reshape(1, -1).astype(np.float32)
                 scores, idxs = faiss_index.search(qvec, pool_k + 1)
-                cands = [(article_ids[i], float(scores[0][j])) for j, i in enumerate(idxs[0])
-                         if i != -1 and article_ids[i] != q_aid]
+                cands = [
+                    (article_ids[i], float(scores[0][j]))
+                    for j, i in enumerate(idxs[0])
+                    if i != -1 and article_ids[i] != q_aid
+                ]
                 q_meta = art_map.get(q_aid, {})
                 embs = {a: emb[aid_to_row[a]] for a, _ in cands if a in aid_to_row}
                 cfg.w_occasion = w_occ
-                ranked = _rerank(cands, q_price, q_cat, art_map, cfg, args.k,
-                                 embeddings=embs, query_meta=q_meta)
+                ranked = _rerank(
+                    cands, q_price, q_cat, art_map, cfg, args.k, embeddings=embs, query_meta=q_meta
+                )
                 metas = [art_map.get(int(a), {}) for a, _ in ranked]
                 cats = [str(m.get("category", "")) for m in metas]
                 strict_all.append(np.mean([c == q_cat for c in cats]) if cats else 0.0)
@@ -83,8 +92,10 @@ def main() -> None:
             strict = 100 * np.mean(strict_all)
             occ = 100 * np.mean(occ_all) if occ_all else float("nan")
             dprice = np.mean(dprice_all) if dprice_all else float("nan")
-            print(f"  {w_occ:>10.2f} | {strict:6.0f}% | "
-                  f"{occ:6.0f}% (n={len(occ_all):>3}) | ₹{dprice:>7.0f}")
+            print(
+                f"  {w_occ:>10.2f} | {strict:6.0f}% | "
+                f"{occ:6.0f}% (n={len(occ_all):>3}) | ₹{dprice:>7.0f}"
+            )
 
 
 if __name__ == "__main__":

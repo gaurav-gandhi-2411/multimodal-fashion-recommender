@@ -102,8 +102,9 @@ def test_visual_search_tshirt_query_not_confused_with_shirt() -> None:
     registry.brand_names.return_value = [BRAND]
 
     with patch("app.api.main.load_registry", return_value=registry):
-        from app.api.main import app
         from fastapi.testclient import TestClient
+
+        from app.api.main import app
 
         with TestClient(app, raise_server_exceptions=True) as client:
             resp = client.post(

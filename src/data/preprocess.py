@@ -7,9 +7,12 @@ import pandas as pd
 def build_item_text(articles_df: pd.DataFrame) -> pd.DataFrame:
     df = articles_df.copy()
     df["full_text"] = (
-        df["prod_name"].fillna("") + ". "
-        + df["product_type_name"].fillna("") + ". "
-        + df["colour_group_name"].fillna("") + ". "
+        df["prod_name"].fillna("")
+        + ". "
+        + df["product_type_name"].fillna("")
+        + ". "
+        + df["colour_group_name"].fillna("")
+        + ". "
         + df["detail_desc"].fillna("")
     )
     return df

@@ -91,9 +91,7 @@ def test_find_canonical_labels_with_synonyms_matches_synonym() -> None:
 def test_find_canonical_labels_with_synonyms_dedupes_direct_and_synonym_match() -> None:
     # "black" (direct) and "ebony" (synonym for black) both present -- must count as ONE
     # canonical label, not become spuriously ambiguous.
-    result = find_canonical_labels_with_synonyms(
-        "a black ebony jacket", _COLOR_LABELS, _SYNONYMS
-    )
+    result = find_canonical_labels_with_synonyms("a black ebony jacket", _COLOR_LABELS, _SYNONYMS)
     assert result == ["black"]
 
 
@@ -104,8 +102,7 @@ def test_find_canonical_labels_with_synonyms_no_match() -> None:
 
 def test_unambiguous_text_label_with_synonyms_single_synonym_match() -> None:
     assert (
-        unambiguous_text_label_with_synonyms("an ivory dress", _COLOR_LABELS, _SYNONYMS)
-        == "white"
+        unambiguous_text_label_with_synonyms("an ivory dress", _COLOR_LABELS, _SYNONYMS) == "white"
     )
 
 

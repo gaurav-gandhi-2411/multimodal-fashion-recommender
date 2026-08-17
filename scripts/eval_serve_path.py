@@ -58,6 +58,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Category-recall metric
 # ---------------------------------------------------------------------------
 
+
 def category_recall_at_k(
     results: list[dict],  # list of {"item_id": str, "category": str}
     query_category: str,
@@ -74,22 +75,26 @@ def category_recall_at_k(
 # Local (direct FAISS) evaluation
 # ---------------------------------------------------------------------------
 
+
 def run_local_style(
     catalog,  # pandas DataFrame — full indexed catalog (for aid→category lookup)
     retriever,
     k: int,
     eval_rows: list,  # pre-sampled rows to evaluate
-    art_map: dict,    # article_id (int) → metadata dict (same structure as API's state.art_map)
-    rerank_cfg,       # RerankConfig — loaded from brand YAML
+    art_map: dict,  # article_id (int) → metadata dict (same structure as API's state.art_map)
+    rerank_cfg,  # RerankConfig — loaded from brand YAML
 ) -> dict:
     """Mirror the API serve path: FAISS(pool_k) → rank-1 category inference → _rerank() → top-k."""
+    from tqdm import tqdm
+
     from app.rerank import rerank as _rerank
     from app.visual import encode_query_text, get_image_encoder
-    from tqdm import tqdm
 
     get_image_encoder()
 
-    aid_to_cat = {int(r.article_id): str(getattr(r, "category", "") or "") for r in catalog.itertuples()}
+    aid_to_cat = {
+        int(r.article_id): str(getattr(r, "category", "") or "") for r in catalog.itertuples()
+    }
 
     pool_k = rerank_cfg.candidate_pool_size if rerank_cfg.enabled else k
 
@@ -120,9 +125,19 @@ def run_local_style(
 
         use_rerank = rerank_cfg.enabled and bool(inferred_cat)
         if use_rerank:
-            candidates = [(int(aid) if str(aid).isdigit() else aid, score) for aid, score in raw_results]
-            final_results = _rerank(candidates, query_price, inferred_cat, art_map, rerank_cfg, k,
-                                    embeddings=None, query_meta=query_meta)
+            candidates = [
+                (int(aid) if str(aid).isdigit() else aid, score) for aid, score in raw_results
+            ]
+            final_results = _rerank(
+                candidates,
+                query_price,
+                inferred_cat,
+                art_map,
+                rerank_cfg,
+                k,
+                embeddings=None,
+                query_meta=query_meta,
+            )
         else:
             final_results = list(raw_results[:k])
 
@@ -145,10 +160,11 @@ def run_local_visual(
     image_cache_dir: Path,
 ) -> dict:
     import requests
+    import yaml
+    from tqdm import tqdm
+
     from app.visual import get_image_encoder
     from src.encoders.image_encoder import ImageEncoder
-    from tqdm import tqdm
-    import yaml
 
     get_image_encoder()
     cfg_path = Path("config.yaml")
@@ -157,7 +173,9 @@ def run_local_visual(
     cfg = {**cfg, "encoders": {**cfg["encoders"], "device": "cpu"}}
     enc = ImageEncoder(cfg)
 
-    aid_to_cat = {int(r.article_id): str(getattr(r, "category", "") or "") for r in catalog.itertuples()}
+    aid_to_cat = {
+        int(r.article_id): str(getattr(r, "category", "") or "") for r in catalog.itertuples()
+    }
     rows = eval_rows
 
     hits = 0
@@ -199,6 +217,7 @@ def run_local_visual(
 # HTTP evaluation
 # ---------------------------------------------------------------------------
 
+
 def run_http_style(
     eval_rows: list,
     aid_to_cat: dict,
@@ -231,7 +250,7 @@ def run_http_style(
                     timeout=15,
                 )
                 if resp.status_code == 429 and attempt < 2:
-                    time.sleep(delay * 2 ** attempt)
+                    time.sleep(delay * 2**attempt)
                     continue
                 resp.raise_for_status()
                 break
@@ -258,7 +277,12 @@ def run_http_style(
         total += 1
         time.sleep(delay)
 
-    return {"hits": hits, "total": total, "recall": hits / total if total else 0.0, "errors": errors}
+    return {
+        "hits": hits,
+        "total": total,
+        "recall": hits / total if total else 0.0,
+        "errors": errors,
+    }
 
 
 def run_http_visual(
@@ -328,29 +352,54 @@ def run_http_visual(
         total += 1
         time.sleep(delay)
 
-    return {"hits": hits, "total": total, "recall": hits / total if total else 0.0, "errors": errors}
+    return {
+        "hits": hits,
+        "total": total,
+        "recall": hits / total if total else 0.0,
+        "errors": errors,
+    }
 
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawTextHelpFormatter
+    )
     parser.add_argument("--mode", choices=["style", "visual"], default="style")
     parser.add_argument("--local", action="store_true", help="Run local FAISS evaluation")
-    parser.add_argument("--http-mode", action="store_true", dest="http_mode",
-                        help="Run HTTP API evaluation")
+    parser.add_argument(
+        "--http-mode", action="store_true", dest="http_mode", help="Run HTTP API evaluation"
+    )
     parser.add_argument("--brand", default="snitch")
     parser.add_argument("--k", type=int, default=5, help="Recall@k (default 5)")
-    parser.add_argument("--sample", type=int, default=None,
-                        help="Limit to N items (default: all for style, 200 for visual)")
-    parser.add_argument("--api-base", default="https://fashion-recommender-staging-657468372797.asia-south1.run.app")
+    parser.add_argument(
+        "--sample",
+        type=int,
+        default=None,
+        help="Limit to N items (default: all for style, 200 for visual)",
+    )
+    parser.add_argument(
+        "--api-base", default="https://fashion-recommender-staging-657468372797.asia-south1.run.app"
+    )
     parser.add_argument("--api-key", default="snitch-staging-key")
-    parser.add_argument("--catalog", default=None, help="Catalog parquet (default: data/{brand}/items.parquet)")
-    parser.add_argument("--index-dir", default=None, help="Visual index dir (default: brand YAML's visual_index_path)")
-    parser.add_argument("--delay", type=float, default=1.1,
-                        help="Seconds between HTTP requests (default 1.1 — respects 60/min rate limit)")
+    parser.add_argument(
+        "--catalog", default=None, help="Catalog parquet (default: data/{brand}/items.parquet)"
+    )
+    parser.add_argument(
+        "--index-dir",
+        default=None,
+        help="Visual index dir (default: brand YAML's visual_index_path)",
+    )
+    parser.add_argument(
+        "--delay",
+        type=float,
+        default=1.1,
+        help="Seconds between HTTP requests (default 1.1 — respects 60/min rate limit)",
+    )
     args = parser.parse_args()
 
     # Default sample sizes
@@ -365,12 +414,13 @@ def main() -> None:
         run_http = True
 
     import pandas as pd
-    from src.retrieval.faiss_index import FaissRetriever
+    import yaml as _yaml
 
     # Load brand_cfg first so --index-dir's default reflects whatever the brand YAML
     # actually points at (avoids eval/serve divergence if visual_index_path changes).
     from app.brands.registry import BrandConfig
-    import yaml as _yaml
+    from src.retrieval.faiss_index import FaissRetriever
+
     brand_yaml_path = Path(f"brands/{args.brand}.yaml")
     with brand_yaml_path.open() as _fh:
         brand_cfg = BrandConfig.model_validate(_yaml.safe_load(_fh))
@@ -403,6 +453,7 @@ def main() -> None:
 
     # Sample once so local and HTTP eval compare identical items.
     import random
+
     rows_all = list(catalog_indexed.itertuples())
     if args.sample:
         random.seed(42)
@@ -420,17 +471,35 @@ def main() -> None:
         pool_k = rerank_cfg.candidate_pool_size if rerank_cfg.enabled else args.k
         print(f"Local:  FAISS(pool_k={pool_k}) → _rerank → top-{args.k}  (mirrors API serve path)")
         if args.mode == "style":
-            local_result = run_local_style(catalog_indexed, visual_retriever, args.k, eval_rows, art_map, rerank_cfg)
+            local_result = run_local_style(
+                catalog_indexed, visual_retriever, args.k, eval_rows, art_map, rerank_cfg
+            )
         else:
-            local_result = run_local_visual(catalog_indexed, visual_retriever, args.k, eval_rows, image_cache_dir)
+            local_result = run_local_visual(
+                catalog_indexed, visual_retriever, args.k, eval_rows, image_cache_dir
+            )
 
     if run_http:
         print(f"HTTP:   {args.api_base}")
-        aid_to_cat = {int(r.article_id): str(getattr(r, "category", "") or "") for r in catalog_indexed.itertuples()}
+        aid_to_cat = {
+            int(r.article_id): str(getattr(r, "category", "") or "")
+            for r in catalog_indexed.itertuples()
+        }
         if args.mode == "style":
-            http_result = run_http_style(eval_rows, aid_to_cat, args.api_base, args.api_key, args.brand, args.k, args.delay)
+            http_result = run_http_style(
+                eval_rows, aid_to_cat, args.api_base, args.api_key, args.brand, args.k, args.delay
+            )
         else:
-            http_result = run_http_visual(eval_rows, aid_to_cat, args.api_base, args.api_key, args.brand, args.k, image_cache_dir, args.delay)
+            http_result = run_http_visual(
+                eval_rows,
+                aid_to_cat,
+                args.api_base,
+                args.api_key,
+                args.brand,
+                args.k,
+                image_cache_dir,
+                args.delay,
+            )
 
     # ------------------------------------------------------------------
     # Results
@@ -444,7 +513,9 @@ def main() -> None:
     if local_result:
         r = local_result
         pool_k = rerank_cfg.candidate_pool_size if rerank_cfg.enabled else args.k
-        print(f"  Local  (FAISS-{pool_k} + reranker): {r['recall']:.4f}  ({r['hits']}/{r['total']})")
+        print(
+            f"  Local  (FAISS-{pool_k} + reranker): {r['recall']:.4f}  ({r['hits']}/{r['total']})"
+        )
 
     if http_result:
         r = http_result

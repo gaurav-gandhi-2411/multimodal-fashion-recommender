@@ -1,6 +1,7 @@
 """
 Tests for ItemTower, UserTower, TwoTowerModel, and FashionInteractionDataset.
 """
+
 import sys
 from pathlib import Path
 
@@ -36,30 +37,34 @@ TEST_USER_ID = "00009d946eec3ea54add5ba56d5210ea898def4b46c68570cf0096d962cacc75
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
 def item_tower():
     from src.models.item_tower import ItemTower
+
     return ItemTower(
-        image_dim=IMG_DIM, text_dim=TXT_DIM,
-        hidden=512, output_dim=OUT_DIM, dropout=0.0
+        image_dim=IMG_DIM, text_dim=TXT_DIM, hidden=512, output_dim=OUT_DIM, dropout=0.0
     ).eval()
 
 
 @pytest.fixture(scope="module")
 def user_tower():
     from src.models.user_tower import UserTower
+
     return UserTower(item_dim=OUT_DIM, max_seq=SEQ_LEN, dropout=0.0).eval()
 
 
 @pytest.fixture(scope="module")
 def two_tower():
     from src.models.two_tower import TwoTowerModel
+
     return TwoTowerModel(MINI_CFG).eval()
 
 
 @pytest.fixture(scope="module")
 def dataset():
     from src.training.dataset import FashionInteractionDataset
+
     img_emb = np.load("data/processed/item_image_embeddings.npy")
     txt_emb = np.load("data/processed/item_text_embeddings.npy")
     img_ids = np.load("data/processed/item_ids_image.npy")
@@ -77,6 +82,7 @@ def dataset():
 # ---------------------------------------------------------------------------
 # ItemTower tests
 # ---------------------------------------------------------------------------
+
 
 def test_item_tower_output_shape(item_tower):
     img = torch.randn(BATCH, IMG_DIM)
@@ -96,6 +102,7 @@ def test_item_tower_unit_norm(item_tower):
 # ---------------------------------------------------------------------------
 # UserTower tests
 # ---------------------------------------------------------------------------
+
 
 def test_user_tower_output_shape_no_mask(user_tower):
     seq = torch.randn(BATCH, SEQ_LEN, OUT_DIM)
@@ -132,6 +139,7 @@ def test_user_tower_unit_norm_with_mask(user_tower):
 # TwoTowerModel tests
 # ---------------------------------------------------------------------------
 
+
 def test_two_tower_logits_shape(two_tower):
     user_seq_img = torch.randn(BATCH, SEQ_LEN, IMG_DIM)
     user_seq_txt = torch.randn(BATCH, SEQ_LEN, TXT_DIM)
@@ -147,14 +155,23 @@ def test_two_tower_logits_shape(two_tower):
 # FashionInteractionDataset tests
 # ---------------------------------------------------------------------------
 
+
+# The `dataset` fixture reads data/processed/item_image_embeddings.npy, gitignored, not
+# present in a fresh checkout or CI.
+@pytest.mark.requires_data
 def test_dataset_nonempty(dataset):
     assert len(dataset) > 0, "Dataset has no samples"
 
 
+@pytest.mark.requires_data
 def test_dataset_getitem_keys_and_shapes(dataset):
     sample = dataset[0]
     assert set(sample.keys()) == {
-        "user_seq_img", "user_seq_txt", "user_mask", "target_img", "target_txt"
+        "user_seq_img",
+        "user_seq_txt",
+        "user_mask",
+        "target_img",
+        "target_txt",
     }, f"Unexpected keys: {set(sample.keys())}"
     assert sample["user_seq_img"].shape == (SEQ_LEN, IMG_DIM)
     assert sample["user_seq_txt"].shape == (SEQ_LEN, TXT_DIM)
@@ -163,6 +180,7 @@ def test_dataset_getitem_keys_and_shapes(dataset):
     assert sample["target_txt"].shape == (TXT_DIM,)
 
 
+@pytest.mark.requires_data
 def test_dataset_getitem_dtypes(dataset):
     sample = dataset[0]
     assert sample["user_seq_img"].dtype == torch.float32
@@ -172,6 +190,7 @@ def test_dataset_getitem_dtypes(dataset):
     assert sample["target_txt"].dtype == torch.float32
 
 
+@pytest.mark.requires_data
 def test_dataset_getitem_mask_has_real_items(dataset):
     # Find a sample for our known test user that has prior history
     # Look for any sample index belonging to the test user

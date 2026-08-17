@@ -11,6 +11,7 @@ confirmed distinct real categories (e.g. Fashor's "Kurta Set", a multi-piece set
 "Kurta"/"Kurtas", a single garment) are deliberately NOT merged even though they share a
 root word.
 """
+
 from __future__ import annotations
 
 # Human-reviewed, one-time-verified mappings. Canonical label chosen as the majority

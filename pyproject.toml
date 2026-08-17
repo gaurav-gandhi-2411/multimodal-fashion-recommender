@@ -87,20 +87,31 @@ packages = ["app", "src"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-markers = ["integration: requires H&M data files and HM_API_KEY env var"]
+markers = [
+    "integration: requires H&M data files and HM_API_KEY env var",
+    "requires_data: requires locally-generated data/indices files (gitignored, not present in a fresh checkout or CI)",
+]
 
 [tool.ruff]
 line-length = 100
-exclude = ["notebooks", "spaces"]
+# scripts/ is operational/exploratory tooling (CLAUDE.md rule 17/24: no coverage/lint
+# threshold for scripts/, notebooks/), same reasoning already applied to `notebooks`/
+# `spaces` below and to the scripts/0*.py per-file-ignores -- broadened here to the whole
+# directory rather than adding more one-off per-file entries.
+exclude = ["notebooks", "spaces", "scripts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.ruff.lint.per-file-ignores]
-"scripts/0*.py" = ["E501", "F401", "F841", "B905", "I001"]
-"scripts/04_baselines.py" = ["E501", "F401", "F841", "I001"]
-"scripts/05_eval_comparison.py" = ["E501", "F401", "F841"]
-"scripts/06_baseline_quality_gate.py" = ["E501", "F541"]
+# CLAUDE.md rule 1 mandates `from __future__ import annotations` as the literal first
+# non-comment line, ahead of the module docstring -- that ordering is intentional
+# repo-wide convention, not a mistake, but it makes ruff's E402 misfire on the docstring
+# string-expression statement that follows. Ignored here rather than reordered.
+"app/color.py" = ["E402"]
+# sys.path.insert must run before this test's own package import can resolve -- a
+# genuine ordering requirement, not an accidental late import.
+"tests/test_indian_demo.py" = ["E402"]
 
 [tool.mypy]
 python_version = "3.11"

@@ -533,14 +533,18 @@ def print_brand_report(brand: str, passes: BrandPasses) -> None:
         "category_match@5 (overall)", passes.img_current, passes.img_fclip, "cat_match_fraction"
     )
     img_cat_table = print_per_category_table(
-        passes.img_current, passes.img_fclip, "cat_match_fraction",
+        passes.img_current,
+        passes.img_fclip,
+        "cat_match_fraction",
         title="Per-category category_match@5 (image query):",
     )
 
     print("\n  [TEXT QUERY PASS]")
     print_overall("category_recall@5 (overall)", passes.txt_current, passes.txt_fclip, "cat_hit")
     txt_cat_table = print_per_category_table(
-        passes.txt_current, passes.txt_fclip, "cat_hit",
+        passes.txt_current,
+        passes.txt_fclip,
+        "cat_hit",
         title="Per-category category_recall@5 (text query):",
     )
 
@@ -549,22 +553,32 @@ def print_brand_report(brand: str, passes: BrandPasses) -> None:
         print(f"\n  [T-SHIRT / SHIRT CONFUSION -- {tshirt_cat} vs {shirt_cat}]")
         print_confusion(
             "Image query (top-5 slot composition for T-Shirt-category queries):",
-            passes.img_current, passes.img_fclip, tshirt_cat, shirt_cat,
+            passes.img_current,
+            passes.img_fclip,
+            tshirt_cat,
+            shirt_cat,
         )
         print_confusion(
             "Text query (top-5 slot composition for T-Shirt-category queries):",
-            passes.txt_current, passes.txt_fclip, tshirt_cat, shirt_cat,
+            passes.txt_current,
+            passes.txt_fclip,
+            tshirt_cat,
+            shirt_cat,
         )
 
     if brand == "fashor":
         print("\n  [FASHOR ETHNIC-WEAR REGRESSION CHECK]")
         print_per_category_table(
-            passes.img_current, passes.img_fclip, "cat_match_fraction",
+            passes.img_current,
+            passes.img_fclip,
+            "cat_match_fraction",
             title="Ethnic-wear category_match@5 (image query):",
             only_cats=FASHOR_ETHNIC_CATS,
         )
         print_per_category_table(
-            passes.txt_current, passes.txt_fclip, "cat_hit",
+            passes.txt_current,
+            passes.txt_fclip,
+            "cat_hit",
             title="Ethnic-wear category_recall@5 (text query):",
             only_cats=FASHOR_ETHNIC_CATS,
         )
@@ -602,8 +616,13 @@ def _parse_args() -> argparse.Namespace:
         description="A/B eval: current CLIP-512 vs FashionCLIP-512 visual/style search.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--n-queries", type=int, default=N_QUERIES_DEFAULT, metavar="N",
-                   help="Items sampled per brand (stratified, before image-availability filter)")
+    p.add_argument(
+        "--n-queries",
+        type=int,
+        default=N_QUERIES_DEFAULT,
+        metavar="N",
+        help="Items sampled per brand (stratified, before image-availability filter)",
+    )
     p.add_argument("--seed", type=int, default=SEED_DEFAULT, help="Random seed")
     p.add_argument(
         "--brands",

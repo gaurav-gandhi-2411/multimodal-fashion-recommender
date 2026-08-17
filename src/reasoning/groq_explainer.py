@@ -23,7 +23,7 @@ class GroqExplainer:
     """
 
     API_URL = "https://api.groq.com/openai/v1/chat/completions"
-    MODEL   = "llama-3.1-8b-instant"
+    MODEL = "llama-3.1-8b-instant"
 
     # One retry with 1 s backoff; total budget is capped by TOTAL_BUDGET_SECONDS.
     RETRY_BACKOFF_SECONDS = (1,)
@@ -32,13 +32,13 @@ class GroqExplainer:
     TOTAL_BUDGET_SECONDS: float = 3.0
 
     def __init__(self, config=None):
-        self.api_key           = os.environ.get("GROQ_API_KEY", "")
-        self.temperature       = (config or {}).get("llm", {}).get("temperature", 0.3)
-        self.max_tokens        = (config or {}).get("llm", {}).get("max_tokens", 80)
+        self.api_key = os.environ.get("GROQ_API_KEY", "")
+        self.temperature = (config or {}).get("llm", {}).get("temperature", 0.3)
+        self.max_tokens = (config or {}).get("llm", {}).get("max_tokens", 80)
         # Per-call HTTP timeout, updated in explain() based on remaining budget.
-        self._timeout: float   = self.TOTAL_BUDGET_SECONDS
+        self._timeout: float = self.TOTAL_BUDGET_SECONDS
         # Real token counts from the last successful API call; 0 when fallback used.
-        self.last_input_tokens: int  = 0
+        self.last_input_tokens: int = 0
         self.last_output_tokens: int = 0
 
     def explain(self, user_history: list[dict], recommended_item: dict) -> str:
@@ -87,8 +87,7 @@ class GroqExplainer:
                     )
             except Exception as e:
                 print(
-                    f"[GroqExplainer] unexpected error ({type(e).__name__}: {e}); "
-                    f"using fallback",
+                    f"[GroqExplainer] unexpected error ({type(e).__name__}: {e}); using fallback",
                     file=sys.stderr,
                     flush=True,
                 )
@@ -114,7 +113,7 @@ class GroqExplainer:
         resp.raise_for_status()
         data = resp.json()
         usage = data.get("usage", {})
-        self.last_input_tokens  = usage.get("prompt_tokens", 0)
+        self.last_input_tokens = usage.get("prompt_tokens", 0)
         self.last_output_tokens = usage.get("completion_tokens", 0)
         return data["choices"][0]["message"]["content"].strip()
 
@@ -127,9 +126,7 @@ class GroqExplainer:
         detail = " ".join(p for p in (colour, cat) if p)
         return f"{name} ({detail})" if detail else name
 
-    def _fallback_template(
-        self, user_history: list[dict], rec_item: dict
-    ) -> str:
+    def _fallback_template(self, user_history: list[dict], rec_item: dict) -> str:
         try:
             recent = (user_history or [])[-5:]
             colours = [
@@ -143,7 +140,7 @@ class GroqExplainer:
                 if (h.get("product_type_name") or h.get("category") or "").strip()
             ]
             top_colour = Counter(colours).most_common(1)[0][0] if colours else ""
-            top_type   = Counter(types).most_common(1)[0][0] if types else ""
+            top_type = Counter(types).most_common(1)[0][0] if types else ""
 
             if top_colour and top_type:
                 style_signal = f"{top_colour.lower()} {top_type.lower()}"
@@ -155,9 +152,11 @@ class GroqExplainer:
                 style_signal = ""
 
             rec_colour = (rec_item.get("colour_group_name") or "").strip().lower()
-            rec_type   = (
-                rec_item.get("product_type_name") or rec_item.get("category") or ""
-            ).strip().lower()
+            rec_type = (
+                (rec_item.get("product_type_name") or rec_item.get("category") or "")
+                .strip()
+                .lower()
+            )
             descriptor = " ".join(p for p in (rec_colour, rec_type) if p) or "item"
 
             if style_signal:
@@ -175,9 +174,7 @@ class GroqExplainer:
             return "This item matches your style based on your recent browsing."
 
     def _build_prompt(self, user_history: list[dict], rec_item: dict) -> str:
-        history_str = "\n".join(
-            f"- {self._item_label(h)}" for h in user_history[-5:]
-        )
+        history_str = "\n".join(f"- {self._item_label(h)}" for h in user_history[-5:])
         rec_label = self._item_label(rec_item)
         # Extract the raw product name so we can lock the model to it.
         rec_name = rec_item.get("prod_name") or rec_item.get("title") or "this item"

@@ -15,7 +15,6 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 import requests
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -30,6 +29,7 @@ _REC_ITEM = {"title": "Slim Fit Jeans", "category": "Jeans", "article_id": 1}
 # ---------------------------------------------------------------------------
 # H4 — real token counts from response.usage
 # ---------------------------------------------------------------------------
+
 
 class TestRealTokenCounts:
     def _make_api_response(self, content: str, prompt_tokens: int, completion_tokens: int):
@@ -80,6 +80,7 @@ class TestRealTokenCounts:
 # H6 — 3-second wall-clock cap
 # ---------------------------------------------------------------------------
 
+
 class TestGroqTimeoutCap:
     def test_timeout_kwarg_reduced_from_30(self):
         """Each _call_api invocation uses self._timeout, not 30 s."""
@@ -96,9 +97,7 @@ class TestGroqTimeoutCap:
         assert len(GroqExplainer.RETRY_BACKOFF_SECONDS) == 1, (
             "Exactly one retry is allowed (RETRY_BACKOFF_SECONDS should have 1 element)"
         )
-        assert GroqExplainer.RETRY_BACKOFF_SECONDS[0] <= 2, (
-            "Retry backoff must be ≤ 2 s"
-        )
+        assert GroqExplainer.RETRY_BACKOFF_SECONDS[0] <= 2, "Retry backoff must be ≤ 2 s"
 
     def test_explain_returns_fallback_when_request_times_out(self):
         """When requests.post raises Timeout, explain() returns the fallback."""
@@ -112,6 +111,7 @@ class TestGroqTimeoutCap:
     def test_fallback_returned_promptly_on_network_timeout(self):
         """Wall-clock time for explain() should be well under 5 s even if the
         first call times out (so the overall handler latency stays bounded)."""
+
         def slow_post(*args, **kwargs):
             time.sleep(0.05)  # simulate a fast timeout, not a real 3-second hang
             raise requests.exceptions.Timeout
@@ -135,9 +135,11 @@ class TestGroqTimeoutCap:
         # Exhaust the budget so the sleep would overshoot the deadline.
         explainer._timeout = 0.01
 
-        with patch("requests.post", side_effect=http_err):
-            with patch.object(explainer, "TOTAL_BUDGET_SECONDS", 0.01):
-                result = explainer.explain(_USER_HISTORY, _REC_ITEM)
+        with (
+            patch("requests.post", side_effect=http_err),
+            patch.object(explainer, "TOTAL_BUDGET_SECONDS", 0.01),
+        ):
+            result = explainer.explain(_USER_HISTORY, _REC_ITEM)
 
         assert isinstance(result, str) and len(result) > 0, (
             "explain() must return fallback when budget is exhausted after 429"

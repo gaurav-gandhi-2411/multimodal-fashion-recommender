@@ -6,6 +6,7 @@ bare-domain -> www at the root; /products/<slug> without www returns 404. Verifi
 on 2026-07-07: 5/5 sampled bare-domain PDP URLs 404, 5/5 www URLs 200 (1803/1803 rows
 affected). See scripts/prepare_indian_catalogs.py PDP_BASES for the source-of-truth fix.
 """
+
 from __future__ import annotations
 
 import json

@@ -13,7 +13,7 @@ def popularity_recall_at_k(
     popular_item_indices: list of item indices sorted by popularity descending.
     """
     top_k = set(popular_item_indices[:k])
-    hits  = sum(1 for ti in true_item_indices if ti in top_k)
+    hits = sum(1 for ti in true_item_indices if ti in top_k)
     return hits / max(len(true_item_indices), 1)
 
 
@@ -23,12 +23,8 @@ def popularity_ndcg_at_k(
     k: int = 10,
 ) -> float:
     """NDCG@K for the popularity baseline (single relevant item, ideal DCG=1)."""
-    pop_rank  = {idx: i for i, idx in enumerate(popular_item_indices[:k])}
-    ndcg_sum  = sum(
-        1.0 / np.log2(pop_rank[ti] + 2)
-        for ti in true_item_indices
-        if ti in pop_rank
-    )
+    pop_rank = {idx: i for i, idx in enumerate(popular_item_indices[:k])}
+    ndcg_sum = sum(1.0 / np.log2(pop_rank[ti] + 2) for ti in true_item_indices if ti in pop_rank)
     return ndcg_sum / max(len(true_item_indices), 1)
 
 
@@ -51,21 +47,21 @@ def recall_at_k(
     chunk = 512
 
     if device is not None and device.type == "cuda":
-        item_t = torch.from_numpy(item_embs).to(device)          # (M, D)
+        item_t = torch.from_numpy(item_embs).to(device)  # (M, D)
         for start in range(0, N, chunk):
             u = torch.from_numpy(user_embs[start : start + chunk]).to(device)  # (C, D)
-            scores = u @ item_t.T                                  # (C, M)
-            top_k  = torch.topk(scores, k, dim=1).indices.cpu().numpy()        # (C, K)
-            true   = true_item_indices[start : start + chunk]
+            scores = u @ item_t.T  # (C, M)
+            top_k = torch.topk(scores, k, dim=1).indices.cpu().numpy()  # (C, K)
+            true = true_item_indices[start : start + chunk]
             for i, ti in enumerate(true):
                 if ti in top_k[i]:
                     hits += 1
     else:
         for start in range(0, N, chunk):
-            u = user_embs[start : start + chunk]                   # (C, D)
-            scores = u @ item_embs.T                               # (C, M)
-            top_k  = np.argpartition(scores, -k, axis=1)[:, -k:]  # (C, K)
-            true   = true_item_indices[start : start + chunk]
+            u = user_embs[start : start + chunk]  # (C, D)
+            scores = u @ item_embs.T  # (C, M)
+            top_k = np.argpartition(scores, -k, axis=1)[:, -k:]  # (C, K)
+            true = true_item_indices[start : start + chunk]
             for i, ti in enumerate(true):
                 if ti in top_k[i]:
                     hits += 1
@@ -92,9 +88,9 @@ def ndcg_at_k(
         item_t = torch.from_numpy(item_embs).to(device)
         for start in range(0, N, chunk):
             u = torch.from_numpy(user_embs[start : start + chunk]).to(device)
-            scores = u @ item_t.T                                   # (C, M)
+            scores = u @ item_t.T  # (C, M)
             topk_res = torch.topk(scores, k, dim=1)
-            top_k_sorted = topk_res.indices.cpu().numpy()           # (C, K) descending
+            top_k_sorted = topk_res.indices.cpu().numpy()  # (C, K) descending
             true = true_item_indices[start : start + chunk]
             for i, ti in enumerate(true):
                 rank = np.where(top_k_sorted[i] == ti)[0]
@@ -103,8 +99,8 @@ def ndcg_at_k(
     else:
         for start in range(0, N, chunk):
             u = user_embs[start : start + chunk]
-            scores = u @ item_embs.T                                        # (C, M)
-            top_k_sorted = np.argsort(scores, axis=1)[:, -k:][:, ::-1]    # (C, K) desc
+            scores = u @ item_embs.T  # (C, M)
+            top_k_sorted = np.argsort(scores, axis=1)[:, -k:][:, ::-1]  # (C, K) desc
             true = true_item_indices[start : start + chunk]
             for i, ti in enumerate(true):
                 rank = np.where(top_k_sorted[i] == ti)[0]

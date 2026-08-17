@@ -267,7 +267,7 @@ def _mmr_select(
             if vec is not None and selected_vecs:
                 # max cosine similarity to already-selected items (dot product of normed vecs)
                 stacked = np.stack(selected_vecs)  # (n_selected, dim)
-                cosines = stacked @ vec            # (n_selected,)
+                cosines = stacked @ vec  # (n_selected,)
                 max_cos = float(np.max(cosines))
             else:
                 max_cos = 0.0

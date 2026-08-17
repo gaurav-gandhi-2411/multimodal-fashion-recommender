@@ -95,15 +95,17 @@ def main() -> None:
 
         variants = {
             "base (div0 band0)": _variant_config(base_cfg, w_diversity=0.0, dupe=0.97, w_band=0.0),
-            "band only":         _variant_config(base_cfg, w_diversity=0.0, dupe=0.97, w_band=0.05),
-            "div .15@0.97":      _variant_config(base_cfg, w_diversity=0.15, dupe=0.97, w_band=0.0),
-            "div .15@0.92":      _variant_config(base_cfg, w_diversity=0.15, dupe=0.92, w_band=0.0),
-            "div .25@0.90":      _variant_config(base_cfg, w_diversity=0.25, dupe=0.90, w_band=0.0),
+            "band only": _variant_config(base_cfg, w_diversity=0.0, dupe=0.97, w_band=0.05),
+            "div .15@0.97": _variant_config(base_cfg, w_diversity=0.15, dupe=0.97, w_band=0.0),
+            "div .15@0.92": _variant_config(base_cfg, w_diversity=0.15, dupe=0.92, w_band=0.0),
+            "div .25@0.90": _variant_config(base_cfg, w_diversity=0.25, dupe=0.90, w_band=0.0),
         }
 
         # accumulators
-        agg = {name: {"strict": [], "dprice": [], "dupe": [], "distinct": [], "band": []}
-               for name in variants}
+        agg = {
+            name: {"strict": [], "dprice": [], "dupe": [], "distinct": [], "band": []}
+            for name in variants
+        }
         raw_twin_share = {t: 0 for t in DUPE_THRESHOLDS}
         n_used = 0
 
@@ -131,8 +133,11 @@ def main() -> None:
                 cats = [str(m.get("category", "")) for m in metas]
                 prices = [float(m.get("price_inr") or 0.0) for m in metas]
                 strict = np.mean([c == q_cat for c in cats]) if cats else 0.0
-                dprice = np.mean([abs(q_price - p) for p in prices if p > 0 and q_price > 0]) \
-                    if any(p > 0 for p in prices) else np.nan
+                dprice = (
+                    np.mean([abs(q_price - p) for p in prices if p > 0 and q_price > 0])
+                    if any(p > 0 for p in prices)
+                    else np.nan
+                )
                 dupe = _inter_dupe_pairs(ids, embs, 0.92)
                 distinct = len(set(cats))
                 if bands:
@@ -149,10 +154,14 @@ def main() -> None:
         print(f"\n=== {brand}  (n={n_used}, k={args.k}, pool={pool_k}, bands={bands}) ===")
         print("  RAW top-k near-twin share (>=1 pair at threshold):")
         for t in DUPE_THRESHOLDS:
-            print(f"    cos>={t}: {raw_twin_share[t]}/{n_used} "
-                  f"({100*raw_twin_share[t]/max(n_used,1):.0f}%)")
-        print(f"  {'variant':<18} | {'strict':>7} | {'|dPrice|':>9} | "
-              f"{'dupe@.92':>9} | {'distinct':>8} | {'band%':>6}")
+            print(
+                f"    cos>={t}: {raw_twin_share[t]}/{n_used} "
+                f"({100 * raw_twin_share[t] / max(n_used, 1):.0f}%)"
+            )
+        print(
+            f"  {'variant':<18} | {'strict':>7} | {'|dPrice|':>9} | "
+            f"{'dupe@.92':>9} | {'distinct':>8} | {'band%':>6}"
+        )
         for name in variants:
             a = agg[name]
             strict = 100 * np.nanmean(a["strict"])
@@ -160,8 +169,10 @@ def main() -> None:
             dupe = np.nanmean(a["dupe"])
             distinct = np.nanmean(a["distinct"])
             band = 100 * np.nanmean(a["band"]) if not np.all(np.isnan(a["band"])) else float("nan")
-            print(f"  {name:<18} | {strict:6.0f}% | {dprice:8.0f} | "
-                  f"{dupe:9.2f} | {distinct:8.2f} | {band:5.0f}%")
+            print(
+                f"  {name:<18} | {strict:6.0f}% | {dprice:8.0f} | "
+                f"{dupe:9.2f} | {distinct:8.2f} | {band:5.0f}%"
+            )
 
 
 if __name__ == "__main__":

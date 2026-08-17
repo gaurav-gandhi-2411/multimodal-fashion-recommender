@@ -1,8 +1,8 @@
 """Update all snitch.co.in URLs to snitch.com in catalog files."""
+
 from __future__ import annotations
 
 import json
-import re
 
 import pandas as pd
 
@@ -19,7 +19,9 @@ df["pdp_url"] = df["pdp_url"].str.replace(OLD, NEW, regex=False)
 after_co_in = df["pdp_url"].str.contains(OLD, na=False).sum()
 after_com = df["pdp_url"].str.contains(NEW, na=False).sum()
 df.to_parquet(parquet_path, index=False)
-print(f"parquet: {before} co.in URLs -> {after_com} snitch.com URLs (remaining co.in: {after_co_in})")
+print(
+    f"parquet: {before} co.in URLs -> {after_com} snitch.com URLs (remaining co.in: {after_co_in})"
+)
 
 # 2. Update catalog.csv
 csv_path = f"{BASE}/data/snitch/catalog.csv"

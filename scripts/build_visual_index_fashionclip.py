@@ -137,8 +137,9 @@ def build_brand_index(
         all_embs.append(batch_embs)
         if (batch_start // batch_size) % 10 == 0:
             pct = min(100, 100 * (batch_start + len(batch_paths)) / n_usable)
-            print(f"    encoded {batch_start + len(batch_paths)}/{n_usable} ({pct:.0f}%)",
-                  flush=True)
+            print(
+                f"    encoded {batch_start + len(batch_paths)}/{n_usable} ({pct:.0f}%)", flush=True
+            )
 
     embs = np.concatenate(all_embs, axis=0).astype(np.float32)  # (N, 512)
 

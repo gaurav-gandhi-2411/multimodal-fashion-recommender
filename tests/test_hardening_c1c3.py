@@ -12,7 +12,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
@@ -38,6 +37,7 @@ def _vec(dim: int = 512, seed: int = 0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Unit tests for app.color (no HTTP)
 # ---------------------------------------------------------------------------
+
 
 class TestHexToHsv:
     def test_pure_red(self) -> None:
@@ -90,6 +90,7 @@ class TestColorSimilarity:
 # C1 serve-path test: color rerank applied in backend
 # ---------------------------------------------------------------------------
 
+
 def _make_color_state(
     known_ids: list[int],
     color_index: ColorIndex,
@@ -98,8 +99,7 @@ def _make_color_state(
     state.api_key = "c1c3-test-key"
     state.config.brand = "colorbrand"
     state.art_map = {
-        aid: {"title": f"Item {aid}", "category": "Shirts", "price_inr": 999.0}
-        for aid in known_ids
+        aid: {"title": f"Item {aid}", "category": "Shirts", "price_inr": 999.0} for aid in known_ids
     }
     state.config.rerank = RerankConfig(enabled=False)
     state.visual_retriever = MagicMock()
@@ -119,7 +119,7 @@ def _make_registry(state: MagicMock) -> MagicMock:
 
 
 def test_visual_search_color_param_accepted_and_changes_order() -> None:
-    """When ?color=<hex> is passed and color index has data, results are reordered by blended score."""
+    """?color=<hex> with a populated color index reorders results by blended score."""
     # Set up: item 1 is red (will match red query), item 2 is blue (won't match)
     # FAISS returns them in CLIP order: 1 (0.90), 2 (0.85) — both near top
     red_hsv = {"h": 0.0, "s": 1.0, "v": 1.0}
@@ -134,6 +134,7 @@ def test_visual_search_color_param_accepted_and_changes_order() -> None:
         patch("app.visual.encode_query_image", return_value=_vec()),
     ):
         from app.api.main import app
+
         with TestClient(app, raise_server_exceptions=True) as client:
             resp = client.post(
                 f"/v1/{state.config.brand}/visual-search?k=2&color=ff0000",
@@ -161,6 +162,7 @@ def test_visual_search_no_color_param_returns_unmodified_order() -> None:
         patch("app.visual.encode_query_image", return_value=_vec()),
     ):
         from app.api.main import app
+
         with TestClient(app, raise_server_exceptions=True) as client:
             resp = client.post(
                 f"/v1/{state.config.brand}/visual-search?k=3",
@@ -182,6 +184,7 @@ def test_visual_search_invalid_color_param_ignored() -> None:
         patch("app.visual.encode_query_image", return_value=_vec()),
     ):
         from app.api.main import app
+
         with TestClient(app, raise_server_exceptions=True) as client:
             resp = client.post(
                 f"/v1/{state.config.brand}/visual-search?k=1&color=NOTAHEX",

@@ -47,15 +47,16 @@ from src.training.evaluate import (
 from src.training.train import _collect_user_embs, encode_all_items
 
 K = 10
-COPURCHASE_WINDOW = 5       # consecutive-pair co-occurrence window
-COPURCHASE_TOP_N = 50       # top-N co-purchase partners per history item
-HISTORY_LOOKBACK = 20       # last-N history items used at inference
-GATE_LIFT_THRESHOLD = 1.5   # multimodal must beat co-purchase by ≥1.5×
+COPURCHASE_WINDOW = 5  # consecutive-pair co-occurrence window
+COPURCHASE_TOP_N = 50  # top-N co-purchase partners per history item
+HISTORY_LOOKBACK = 20  # last-N history items used at inference
+GATE_LIFT_THRESHOLD = 1.5  # multimodal must beat co-purchase by ≥1.5×
 
 
 # ---------------------------------------------------------------------------
 # Utility: MRR computation
 # ---------------------------------------------------------------------------
+
 
 def mrr_from_scores(
     user_scores: np.ndarray,
@@ -78,7 +79,7 @@ def mrr_from_scores(
     chunk = 512
     for start in range(0, n, chunk):
         scores_chunk = user_scores[start : start + chunk]  # (C, M)
-        true_chunk = true_indices[start : start + chunk]   # (C,)
+        true_chunk = true_indices[start : start + chunk]  # (C,)
         # Rank each item: argsort descending
         ranked = np.argsort(scores_chunk, axis=1)[:, ::-1]  # (C, M) desc
         for i, ti in enumerate(true_chunk):
@@ -97,17 +98,14 @@ def popularity_mrr_at_k(
 ) -> float:
     """MRR@K for the popularity baseline (same ranked list for every user)."""
     pop_rank = {idx: i for i, idx in enumerate(popular_item_indices[:k])}
-    mrr_sum = sum(
-        1.0 / (pop_rank[ti] + 1)
-        for ti in true_item_indices
-        if ti in pop_rank
-    )
+    mrr_sum = sum(1.0 / (pop_rank[ti] + 1) for ti in true_item_indices if ti in pop_rank)
     return mrr_sum / max(len(true_item_indices), 1)
 
 
 # ---------------------------------------------------------------------------
 # Two-tower helpers
 # ---------------------------------------------------------------------------
+
 
 def load_model(ckpt_path: str, device: torch.device) -> tuple:
     """Load a TwoTowerModel from a checkpoint file."""
@@ -155,16 +153,9 @@ def two_tower_metrics(
     user_embs, _ = _collect_user_embs(model, loader, device)
 
     # Derive true indices aligned with dataset sample order
-    true_idx_full = np.array(
-        [article_id_to_idx.get(ds._samples[i][1], -1) for i in range(len(ds))]
-    )
-    active_remap = {
-        int(aid): active_id_to_idx[int(aid)]
-        for aid in active_id_to_idx
-    }
-    true_idx_active = np.array(
-        [active_remap.get(ds._samples[i][1], -1) for i in range(len(ds))]
-    )
+    true_idx_full = np.array([article_id_to_idx.get(ds._samples[i][1], -1) for i in range(len(ds))])
+    active_remap = {int(aid): active_id_to_idx[int(aid)] for aid in active_id_to_idx}
+    true_idx_active = np.array([active_remap.get(ds._samples[i][1], -1) for i in range(len(ds))])
 
     def masked_eval(
         u_embs: np.ndarray,
@@ -179,7 +170,7 @@ def two_tower_metrics(
         r = recall_at_k(u_m, i_embs, t_m, k=K, device=device)
         n = ndcg_at_k(u_m, i_embs, t_m, k=K, device=device)
         # MRR: compute score matrix in chunks
-        scores = u_m @ i_embs.T   # (N_masked, M)
+        scores = u_m @ i_embs.T  # (N_masked, M)
         mrr = mrr_from_scores(scores, t_m, k=K)
         return r, n, mrr
 
@@ -200,6 +191,7 @@ def two_tower_metrics(
 # ---------------------------------------------------------------------------
 # Co-purchase CF
 # ---------------------------------------------------------------------------
+
 
 def build_copurchase_index(
     train_df: pd.DataFrame,
@@ -285,7 +277,9 @@ def copurchase_eval(
                 # Top-N co-purchased partners
                 partners = co_purchase[h_aid]
                 # Sort by score to get top-N efficiently
-                top_partners = sorted(partners.items(), key=lambda x: x[1], reverse=True)[:COPURCHASE_TOP_N]
+                top_partners = sorted(partners.items(), key=lambda x: x[1], reverse=True)[
+                    :COPURCHASE_TOP_N
+                ]
                 for partner_aid, cnt in top_partners:
                     if partner_aid not in history_set:
                         scores[partner_aid] += cnt
@@ -300,28 +294,24 @@ def copurchase_eval(
             ranked_all = sorted(scores.items(), key=lambda x: x[1], reverse=True)
             # Full pool: items in article_id_to_idx
             recs_full_aids = [
-                aid for aid, _ in ranked_all
-                if aid in article_id_to_idx and aid not in history_set
+                aid for aid, _ in ranked_all if aid in article_id_to_idx and aid not in history_set
             ][:k]
             recs_full = [article_id_to_idx[aid] for aid in recs_full_aids]
             # Pad with popularity if needed
             if len(recs_full) < k:
                 pop_pad = [idx for idx in popular_full_indices if idx not in set(recs_full)]
-                recs_full = (recs_full + pop_pad)[: k]
+                recs_full = (recs_full + pop_pad)[:k]
 
             # Active pool: items in active_set
             recs_active_aids = [
-                aid for aid, _ in ranked_all
-                if aid in active_set and aid not in history_set
+                aid for aid, _ in ranked_all if aid in active_set and aid not in history_set
             ][:k]
             # Map active aids to their active-pool indices
             active_id_to_idx_local = {int(a): j for j, a in enumerate(active_article_ids)}
             recs_active = [active_id_to_idx_local[aid] for aid in recs_active_aids]
             if len(recs_active) < k:
-                pop_pad_act = [
-                    idx for idx in popular_active_indices if idx not in set(recs_active)
-                ]
-                recs_active = (recs_active + pop_pad_act)[: k]
+                pop_pad_act = [idx for idx in popular_active_indices if idx not in set(recs_active)]
+                recs_active = (recs_active + pop_pad_act)[:k]
 
         # Evaluate FULL pool
         target_idx_full = article_id_to_idx.get(target_aid, -1)
@@ -366,6 +356,7 @@ def copurchase_eval(
 # ---------------------------------------------------------------------------
 # Sanity checks
 # ---------------------------------------------------------------------------
+
 
 def run_sanity_checks(
     train_df: pd.DataFrame,
@@ -429,6 +420,7 @@ def run_sanity_checks(
 # Table printing
 # ---------------------------------------------------------------------------
 
+
 def lift_str(model_val: float, baseline_val: float) -> str:
     """Return formatted lift multiplier string."""
     if baseline_val == 0:
@@ -440,20 +432,20 @@ def print_results_table(results: dict[str, dict[str, float]]) -> None:
     """Print the comparison table to stdout."""
     # Column widths
     models_order = [
-        ("Popularity",           "full"),
-        ("Co-purchase CF",       "full"),
-        ("Text-only two-tower",  "full"),
+        ("Popularity", "full"),
+        ("Co-purchase CF", "full"),
+        ("Text-only two-tower", "full"),
         ("Multimodal two-tower", "full"),
-        ("Popularity",           "active"),
-        ("Co-purchase CF",       "active"),
-        ("Text-only two-tower",  "active"),
+        ("Popularity", "active"),
+        ("Co-purchase CF", "active"),
+        ("Text-only two-tower", "active"),
         ("Multimodal two-tower", "active"),
     ]
 
-    pop_r_full   = results["popularity"]["r_full"]
+    pop_r_full = results["popularity"]["r_full"]
     pop_r_active = results["popularity"]["r_active"]
-    cp_r_full    = results["copurchase"]["r_full"]
-    cp_r_active  = results["copurchase"]["r_active"]
+    cp_r_full = results["copurchase"]["r_full"]
+    cp_r_active = results["copurchase"]["r_active"]
 
     header = (
         f"{'Model':<24} | {'Pool':<6} | {'Recall@10':>9} | {'NDCG@10':>9} | "
@@ -467,9 +459,9 @@ def print_results_table(results: dict[str, dict[str, float]]) -> None:
     print(sep)
 
     model_key_map = {
-        "Popularity":           "popularity",
-        "Co-purchase CF":       "copurchase",
-        "Text-only two-tower":  "text_only",
+        "Popularity": "popularity",
+        "Co-purchase CF": "copurchase",
+        "Text-only two-tower": "text_only",
         "Multimodal two-tower": "multimodal",
     }
 
@@ -480,11 +472,13 @@ def print_results_table(results: dict[str, dict[str, float]]) -> None:
         mrr = results[key][f"mrr_{pool}"]
 
         pop_r = pop_r_full if pool == "full" else pop_r_active
-        cp_r  = cp_r_full  if pool == "full" else cp_r_active
+        cp_r = cp_r_full if pool == "full" else cp_r_active
 
         vs_pop = "  1.00×" if model_name == "Popularity" else lift_str(r, pop_r)
-        vs_cp  = "      —" if model_name in ("Popularity",) else (
-            "  1.00×" if model_name == "Co-purchase CF" else lift_str(r, cp_r)
+        vs_cp = (
+            "      —"
+            if model_name in ("Popularity",)
+            else ("  1.00×" if model_name == "Co-purchase CF" else lift_str(r, cp_r))
         )
 
         print(
@@ -498,6 +492,7 @@ def print_results_table(results: dict[str, dict[str, float]]) -> None:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     np.random.seed(42)
@@ -514,26 +509,26 @@ def main() -> None:
         print(f"GPU: {torch.cuda.get_device_name(0)}")
 
     processed = Path(config["data"]["processed_path"])
-    seq_len   = config["model"]["user_seq_len"]
+    seq_len = config["model"]["user_seq_len"]
     batch_size = config["training"]["batch_size"]
 
     # ------------------------------------------------------------------ #
     # Load embeddings and splits                                           #
     # ------------------------------------------------------------------ #
     print("\nLoading embeddings and splits...")
-    img_emb  = np.load(processed / "item_image_embeddings.npy")        # (20000, 512)
-    txt_emb  = np.load(processed / "item_text_embeddings.npy")         # (20000, 384)
+    img_emb = np.load(processed / "item_image_embeddings.npy")  # (20000, 512)
+    txt_emb = np.load(processed / "item_text_embeddings.npy")  # (20000, 384)
     item_ids = np.load(processed / "item_ids_image.npy", allow_pickle=True)  # (20000,)
-    active_article_ids = np.load(processed / "index_article_ids_active.npy") # (~10556,)
+    active_article_ids = np.load(processed / "index_article_ids_active.npy")  # (~10556,)
 
     article_id_to_idx: dict[int, int] = {int(aid): i for i, aid in enumerate(item_ids)}
-    active_id_to_idx: dict[int, int]  = {int(aid): i for i, aid in enumerate(active_article_ids)}
+    active_id_to_idx: dict[int, int] = {int(aid): i for i, aid in enumerate(active_article_ids)}
     # Row indices into full embedding arrays for active items
     active_rows = np.array([article_id_to_idx[int(aid)] for aid in active_article_ids])
 
     train_df = pd.read_parquet(processed / "train.parquet")
-    val_df   = pd.read_parquet(processed / "val.parquet")
-    test_df  = pd.read_parquet(processed / "test.parquet")
+    val_df = pd.read_parquet(processed / "val.parquet")
+    test_df = pd.read_parquet(processed / "test.parquet")
 
     print(f"Active pool: {len(active_article_ids):,} items (of {len(item_ids):,})")
 
@@ -563,10 +558,14 @@ def main() -> None:
     print(f"Test dataset: {n_test_samples:,} samples")
 
     # True item indices for popularity (flat — not aligned to dataset order)
-    mask_full   = test_df["article_id"].isin(article_id_to_idx)
+    mask_full = test_df["article_id"].isin(article_id_to_idx)
     mask_active = test_df["article_id"].isin(active_id_to_idx)
-    pop_true_full   = np.array([article_id_to_idx[aid]       for aid in test_df.loc[mask_full,   "article_id"]])
-    pop_true_active = np.array([active_id_to_idx[int(aid)]   for aid in test_df.loc[mask_active, "article_id"]])
+    pop_true_full = np.array(
+        [article_id_to_idx[aid] for aid in test_df.loc[mask_full, "article_id"]]
+    )
+    pop_true_active = np.array(
+        [active_id_to_idx[int(aid)] for aid in test_df.loc[mask_active, "article_id"]]
+    )
 
     results: dict[str, dict] = {}
 
@@ -582,29 +581,25 @@ def main() -> None:
         active_id_to_idx[int(aid)] for aid in counts.index if int(aid) in active_id_to_idx
     ]
 
-    pop_r_full   = popularity_recall_at_k(pop_true_full,   popular_full_indices,   k=K)
-    pop_n_full   = popularity_ndcg_at_k(pop_true_full,     popular_full_indices,   k=K)
-    pop_mrr_full = popularity_mrr_at_k(pop_true_full,      popular_full_indices,   k=K)
+    pop_r_full = popularity_recall_at_k(pop_true_full, popular_full_indices, k=K)
+    pop_n_full = popularity_ndcg_at_k(pop_true_full, popular_full_indices, k=K)
+    pop_mrr_full = popularity_mrr_at_k(pop_true_full, popular_full_indices, k=K)
 
-    pop_r_act    = popularity_recall_at_k(pop_true_active, popular_active_indices, k=K)
-    pop_n_act    = popularity_ndcg_at_k(pop_true_active,   popular_active_indices, k=K)
-    pop_mrr_act  = popularity_mrr_at_k(pop_true_active,    popular_active_indices, k=K)
+    pop_r_act = popularity_recall_at_k(pop_true_active, popular_active_indices, k=K)
+    pop_n_act = popularity_ndcg_at_k(pop_true_active, popular_active_indices, k=K)
+    pop_mrr_act = popularity_mrr_at_k(pop_true_active, popular_active_indices, k=K)
 
     results["popularity"] = {
-        "r_full":    pop_r_full,
-        "n_full":    pop_n_full,
-        "mrr_full":  pop_mrr_full,
-        "r_active":  pop_r_act,
-        "n_active":  pop_n_act,
+        "r_full": pop_r_full,
+        "n_full": pop_n_full,
+        "mrr_full": pop_mrr_full,
+        "r_active": pop_r_act,
+        "n_active": pop_n_act,
         "mrr_active": pop_mrr_act,
-        "n_users":   len(pop_true_full),
+        "n_users": len(pop_true_full),
     }
-    print(
-        f"  Full:   Recall@10={pop_r_full:.4f}  NDCG@10={pop_n_full:.4f}  MRR={pop_mrr_full:.4f}"
-    )
-    print(
-        f"  Active: Recall@10={pop_r_act:.4f}  NDCG@10={pop_n_act:.4f}  MRR={pop_mrr_act:.4f}"
-    )
+    print(f"  Full:   Recall@10={pop_r_full:.4f}  NDCG@10={pop_n_full:.4f}  MRR={pop_mrr_full:.4f}")
+    print(f"  Active: Recall@10={pop_r_act:.4f}  NDCG@10={pop_n_act:.4f}  MRR={pop_mrr_act:.4f}")
 
     # ------------------------------------------------------------------ #
     # 2. Co-purchase CF                                                    #
@@ -641,13 +636,15 @@ def main() -> None:
     txt_ckpt = Path("checkpoints/text_only.pt")
     if not txt_ckpt.exists():
         print("  WARNING: checkpoints/text_only.pt not found — skipping")
-        results["text_only"] = {k: 0.0 for k in ["r_full", "n_full", "mrr_full", "r_active", "n_active", "mrr_active"]}
+        results["text_only"] = {
+            k: 0.0 for k in ["r_full", "n_full", "mrr_full", "r_active", "n_active", "mrr_active"]
+        }
         results["text_only"]["n_users"] = 0
     else:
         txt_model, _ = load_model(str(txt_ckpt), device)
         results["text_only"] = two_tower_metrics(
             model=txt_model,
-            img_emb=zero_img,     # text-only: zero image embeddings
+            img_emb=zero_img,  # text-only: zero image embeddings
             txt_emb=txt_emb,
             interactions_df=full_hist_test,
             targets_df=test_df,
@@ -659,8 +656,12 @@ def main() -> None:
             device=device,
         )
     m = results["text_only"]
-    print(f"  Full:   Recall@10={m['r_full']:.4f}  NDCG@10={m['n_full']:.4f}  MRR={m['mrr_full']:.4f}")
-    print(f"  Active: Recall@10={m['r_active']:.4f}  NDCG@10={m['n_active']:.4f}  MRR={m['mrr_active']:.4f}")
+    print(
+        f"  Full:   Recall@10={m['r_full']:.4f}  NDCG@10={m['n_full']:.4f}  MRR={m['mrr_full']:.4f}"
+    )
+    print(
+        f"  Active: Recall@10={m['r_active']:.4f}  NDCG@10={m['n_active']:.4f}  MRR={m['mrr_active']:.4f}"
+    )
 
     # ------------------------------------------------------------------ #
     # 4. Multimodal two-tower                                              #
@@ -669,13 +670,15 @@ def main() -> None:
     mm_ckpt = Path("checkpoints/best.pt")
     if not mm_ckpt.exists():
         print("  WARNING: checkpoints/best.pt not found — skipping")
-        results["multimodal"] = {k: 0.0 for k in ["r_full", "n_full", "mrr_full", "r_active", "n_active", "mrr_active"]}
+        results["multimodal"] = {
+            k: 0.0 for k in ["r_full", "n_full", "mrr_full", "r_active", "n_active", "mrr_active"]
+        }
         results["multimodal"]["n_users"] = 0
     else:
         mm_model, _ = load_model(str(mm_ckpt), device)
         results["multimodal"] = two_tower_metrics(
             model=mm_model,
-            img_emb=img_emb,      # full multimodal: real image embeddings
+            img_emb=img_emb,  # full multimodal: real image embeddings
             txt_emb=txt_emb,
             interactions_df=full_hist_test,
             targets_df=test_df,
@@ -687,8 +690,12 @@ def main() -> None:
             device=device,
         )
     m = results["multimodal"]
-    print(f"  Full:   Recall@10={m['r_full']:.4f}  NDCG@10={m['n_full']:.4f}  MRR={m['mrr_full']:.4f}")
-    print(f"  Active: Recall@10={m['r_active']:.4f}  NDCG@10={m['n_active']:.4f}  MRR={m['mrr_active']:.4f}")
+    print(
+        f"  Full:   Recall@10={m['r_full']:.4f}  NDCG@10={m['n_full']:.4f}  MRR={m['mrr_full']:.4f}"
+    )
+    print(
+        f"  Active: Recall@10={m['r_active']:.4f}  NDCG@10={m['n_active']:.4f}  MRR={m['mrr_active']:.4f}"
+    )
 
     # ------------------------------------------------------------------ #
     # Print comparison table                                               #
@@ -737,10 +744,7 @@ def main() -> None:
         "copurchase_coverage_pct": float(cp_metrics["coverage_pct"]),
         "copurchase_fallback_pct": float(cp_metrics["fallback_pct"]),
         "models": {
-            model_name: {
-                metric: float(val)
-                for metric, val in model_results.items()
-            }
+            model_name: {metric: float(val) for metric, val in model_results.items()}
             for model_name, model_results in results.items()
         },
     }

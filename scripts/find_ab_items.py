@@ -3,14 +3,18 @@ Find items per brand where rerank ON vs OFF produces a different top-5.
 Outputs: top 5 items per brand with the clearest before/after difference,
          with ON vs OFF result tables side by side.
 """
+
 from __future__ import annotations
 
-import os, sys
+import os
+import sys
 from pathlib import Path
 
 import numpy as np
 
-os.environ.update(SNITCH_API_KEY="demo", FASHOR_API_KEY="demo", POWERLOOK_API_KEY="demo", HM_API_KEY="demo")
+os.environ.update(
+    SNITCH_API_KEY="demo", FASHOR_API_KEY="demo", POWERLOOK_API_KEY="demo", HM_API_KEY="demo"
+)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.brands.registry import load_registry
@@ -43,13 +47,15 @@ def top5(state, aid_int: int, rerank_on: bool) -> list[dict]:
     for a, sc in candidates:
         key = int(a) if str(a).isdigit() else a
         m = state.art_map.get(key, {})
-        out.append(dict(
-            item_id=str(a),
-            score=round(float(sc), 4),
-            title=str(m.get("title", f"item {a}"))[:55],
-            category=str(m.get("category", "?")),
-            price=int(m["price_inr"]) if m.get("price_inr") is not None else None,
-        ))
+        out.append(
+            dict(
+                item_id=str(a),
+                score=round(float(sc), 4),
+                title=str(m.get("title", f"item {a}"))[:55],
+                category=str(m.get("category", "?")),
+                price=int(m["price_inr"]) if m.get("price_inr") is not None else None,
+            )
+        )
     return out
 
 
@@ -97,9 +103,11 @@ for brand in ["snitch", "fashor", "powerlook"]:
     diffs.sort(key=lambda x: x[0], reverse=True)
     top_items = diffs[:5]
 
-    print(f"{'='*80}")
-    print(f"BRAND: {brand.upper()}  -- {len(diffs)} items with non-trivial ON!=OFF (of {len(all_aids)} total)")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
+    print(
+        f"BRAND: {brand.upper()}  -- {len(diffs)} items with non-trivial ON!=OFF (of {len(all_aids)} total)"
+    )
+    print(f"{'=' * 80}")
 
     for diff_score, aid, on_res, off_res in top_items:
         meta_q = state.art_map.get(aid, {})
@@ -109,12 +117,20 @@ for brand in ["snitch", "fashor", "powerlook"]:
         print(f"\n  Query aid={aid} [{q_cat}] Rs.{q_price}  diff_score={diff_score}")
         print(f"  Title: {q_title}")
         print(f"  {'OFF (raw FAISS)':<42}  {'ON (rerank)'}")
-        print(f"  {'-'*42}  {'-'*42}")
+        print(f"  {'-' * 42}  {'-' * 42}")
         for i in range(5):
             off_r = off_res[i] if i < len(off_res) else {}
             on_r = on_res[i] if i < len(on_res) else {}
-            off_str = f"{i+1}. [{off_r.get('category','?')[:12]:12}] Rs.{off_r.get('price','?'):5} {off_r.get('title','')[:25]}" if off_r else ""
-            on_str  = f"{i+1}. [{on_r.get('category','?')[:12]:12}] Rs.{on_r.get('price','?'):5} {on_r.get('title','')[:25]}" if on_r else ""
+            off_str = (
+                f"{i + 1}. [{off_r.get('category', '?')[:12]:12}] Rs.{off_r.get('price', '?'):5} {off_r.get('title', '')[:25]}"
+                if off_r
+                else ""
+            )
+            on_str = (
+                f"{i + 1}. [{on_r.get('category', '?')[:12]:12}] Rs.{on_r.get('price', '?'):5} {on_r.get('title', '')[:25]}"
+                if on_r
+                else ""
+            )
             arrow = " <==" if on_r and off_r and on_r["item_id"] != off_r["item_id"] else "    "
             print(f"  {off_str:<42}{arrow}  {on_str}")
     print()

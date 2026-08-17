@@ -45,11 +45,9 @@ def _raw_faiss_topk(query_aid, faiss_index, article_ids, aid_to_row, k):
         return []
     emb = faiss_index.reconstruct(row).reshape(1, -1).astype(np.float32)
     _, indices = faiss_index.search(emb, k + 1)
-    return [
-        article_ids[idx]
-        for idx in indices[0]
-        if idx != -1 and article_ids[idx] != query_aid
-    ][:k]
+    return [article_ids[idx] for idx in indices[0] if idx != -1 and article_ids[idx] != query_aid][
+        :k
+    ]
 
 
 def eval_brand(brand: str, n_queries: int, seed: int) -> dict | None:
@@ -86,9 +84,7 @@ def eval_brand(brand: str, n_queries: int, seed: int) -> dict | None:
         q_emb = emb_matrix[aid_to_row[q_aid]]
 
         target_slots = set(cfg.complements.get(q_slot, []))
-        complement_cats = {
-            c for s in cfg.slots if s.name in target_slots for c in s.categories
-        }
+        complement_cats = {c for s in cfg.slots if s.name in target_slots for c in s.categories}
 
         candidates = []
         for cand_aid, meta in art_map.items():
@@ -163,15 +159,19 @@ def main() -> None:
         return
 
     print("\n" + "=" * 100)
-    print(f"{'Brand':<10} | {'queries':>7} | {'same-cat raw→cmpl':>20} | "
-          f"{'compl-cat raw→cmpl':>20} | {'slot cov':>8} | {'|dPrice|':>9}")
+    print(
+        f"{'Brand':<10} | {'queries':>7} | {'same-cat raw→cmpl':>20} | "
+        f"{'compl-cat raw→cmpl':>20} | {'slot cov':>8} | {'|dPrice|':>9}"
+    )
     print("-" * 100)
     for s in rows:
-        same = f"{s['base_same_cat']*100:.0f}% → {s['comp_same_cat']*100:.0f}%"
-        comp = f"{s['base_complementary']*100:.0f}% → {s['comp_complementary']*100:.0f}%"
-        print(f"{s['brand']:<10} | {s['n_with_results']:>7} | {same:>20} | "
-              f"{comp:>20} | {s['comp_slot_cov']:>6.2f}/{s['n_slots']} | "
-              f"₹{s['comp_dprice']:>7.0f}")
+        same = f"{s['base_same_cat'] * 100:.0f}% → {s['comp_same_cat'] * 100:.0f}%"
+        comp = f"{s['base_complementary'] * 100:.0f}% → {s['comp_complementary'] * 100:.0f}%"
+        print(
+            f"{s['brand']:<10} | {s['n_with_results']:>7} | {same:>20} | "
+            f"{comp:>20} | {s['comp_slot_cov']:>6.2f}/{s['n_slots']} | "
+            f"₹{s['comp_dprice']:>7.0f}"
+        )
     print("=" * 100)
     print("\nHeadline: same-category rate collapses (similar→complementary) while complementary")
     print("rate jumps to ~100% — Complete-the-Look returns a different, outfit-oriented result")

@@ -18,14 +18,13 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 # ---------------------------------------------------------------------------
 # M1 — 404 when item_id is not in catalogue
 # ---------------------------------------------------------------------------
+
 
 class TestItemNotFound404:
     """All three handlers raise HTTP 404 when item_id is not in the catalogue."""
@@ -37,8 +36,7 @@ class TestItemNotFound404:
             headers={"X-Api-Key": "test-api-key-123"},
         )
         assert resp.status_code == 404, (
-            f"Expected 404 for unknown item_id=99999, got {resp.status_code}. "
-            f"Body: {resp.text}"
+            f"Expected 404 for unknown item_id=99999, got {resp.status_code}. Body: {resp.text}"
         )
 
     def test_similar_unknown_item_id_returns_404(self, api_client) -> None:
@@ -47,8 +45,7 @@ class TestItemNotFound404:
             headers={"X-Api-Key": "test-api-key-123"},
         )
         assert resp.status_code == 404, (
-            f"Expected 404 for unknown item_id=99999, got {resp.status_code}. "
-            f"Body: {resp.text}"
+            f"Expected 404 for unknown item_id=99999, got {resp.status_code}. Body: {resp.text}"
         )
 
     def test_complete_unknown_item_id_returns_404(self, api_client) -> None:
@@ -57,8 +54,7 @@ class TestItemNotFound404:
             headers={"X-Api-Key": "test-api-key-123"},
         )
         assert resp.status_code == 404, (
-            f"Expected 404 for unknown item_id=99999, got {resp.status_code}. "
-            f"Body: {resp.text}"
+            f"Expected 404 for unknown item_id=99999, got {resp.status_code}. Body: {resp.text}"
         )
 
     def test_known_item_id_similar_returns_200(self, api_client) -> None:
@@ -88,6 +84,7 @@ class TestItemNotFound404:
 # ---------------------------------------------------------------------------
 # M3 — request_id present in response and unique per call
 # ---------------------------------------------------------------------------
+
 
 class TestRequestIdPropagation:
     def test_recommend_response_has_request_id(self, api_client) -> None:
@@ -123,14 +120,13 @@ class TestRequestIdPropagation:
             )
             assert resp.status_code == 200
             ids.add(resp.json()["request_id"])
-        assert len(ids) == 5, (
-            f"Expected 5 unique request_ids across 5 calls, got {len(ids)}: {ids}"
-        )
+        assert len(ids) == 5, f"Expected 5 unique request_ids across 5 calls, got {len(ids)}: {ids}"
 
 
 # ---------------------------------------------------------------------------
 # M4 — top_k alias on /similar
 # ---------------------------------------------------------------------------
+
 
 class TestTopKAlias:
     def test_top_k_param_accepted_returns_200(self, api_client) -> None:
@@ -139,8 +135,7 @@ class TestTopKAlias:
             headers={"X-Api-Key": "test-api-key-123"},
         )
         assert resp.status_code == 200, (
-            f"Expected 200 when ?top_k=3 is passed, got {resp.status_code}. "
-            f"Body: {resp.text}"
+            f"Expected 200 when ?top_k=3 is passed, got {resp.status_code}. Body: {resp.text}"
         )
 
     def test_top_k_limits_result_count(self, api_client) -> None:
@@ -180,6 +175,7 @@ class TestTopKAlias:
 # M5 — X-Api-Key header casing
 # ---------------------------------------------------------------------------
 
+
 class TestApiKeyCasing:
     def test_x_api_key_lowercase_alias_works(self, api_client) -> None:
         """x-api-key (all lowercase) should authenticate the same as X-Api-Key."""
@@ -203,15 +199,11 @@ class TestApiKeyCasing:
 
     def test_missing_api_key_returns_401(self, api_client) -> None:
         resp = api_client.get("/v1/test_brand/item/111/similar")
-        assert resp.status_code == 401, (
-            f"Missing API key should return 401, got {resp.status_code}"
-        )
+        assert resp.status_code == 401, f"Missing API key should return 401, got {resp.status_code}"
 
     def test_wrong_api_key_returns_401(self, api_client) -> None:
         resp = api_client.get(
             "/v1/test_brand/item/111/similar",
             headers={"X-Api-Key": "wrong-key"},
         )
-        assert resp.status_code == 401, (
-            f"Wrong API key should return 401, got {resp.status_code}"
-        )
+        assert resp.status_code == 401, f"Wrong API key should return 401, got {resp.status_code}"

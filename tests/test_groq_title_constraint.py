@@ -19,9 +19,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO_ROOT))
@@ -67,8 +65,7 @@ class TestBuildPromptTitleConstraint:
         prompt = self.explainer._build_prompt(_USER_HISTORY, _REC_ITEM)
         # The name should appear in quotes inside the rule instruction.
         assert f'"{_REAL_TITLE}"' in prompt, (
-            f"Expected the product name to be quoted in the RULE line. "
-            f"Prompt:\n{prompt}"
+            f"Expected the product name to be quoted in the RULE line. Prompt:\n{prompt}"
         )
 
     def test_prompt_still_asks_for_single_sentence(self):
@@ -99,7 +96,7 @@ class TestExplainCallPassesTitleToApi:
             return f"Recommended {_REAL_TITLE} for its linen-inspired texture."
 
         with patch.object(explainer, "_call_api", side_effect=_fake_call_api):
-            result = explainer.explain(_USER_HISTORY, _REC_ITEM)
+            explainer.explain(_USER_HISTORY, _REC_ITEM)
 
         assert len(captured_prompts) == 1
         sent_prompt = captured_prompts[0]
@@ -117,8 +114,7 @@ class TestExplainCallPassesTitleToApi:
             result = explainer.explain(_USER_HISTORY, _REC_ITEM)
 
         assert result == expected, (
-            f"explain() should return the API response unchanged. "
-            f"Got: {result!r}"
+            f"explain() should return the API response unchanged. Got: {result!r}"
         )
 
 

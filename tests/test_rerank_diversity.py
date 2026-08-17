@@ -4,6 +4,7 @@ Design principle: every test PROVES the feature changes output — i.e. the rera
 with the feature ON differs from the order with the feature OFF.  No FAISS/torch/data
 fixtures needed; all inputs are small numpy arrays constructed by hand.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -13,6 +14,7 @@ from app.rerank import RerankConfig, rerank
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
 
 def _normed(v: list[float]) -> np.ndarray:
     """Return a float32 numpy array normalised to unit length."""
@@ -27,7 +29,7 @@ def _base_config(**overrides: object) -> RerankConfig:
         enabled=True,
         candidate_pool_size=10,
         w_similarity=0.70,
-        w_price_penalty=0.0,   # disable price penalty to isolate signal under test
+        w_price_penalty=0.0,  # disable price penalty to isolate signal under test
         w_category_affinity=0.0,
         price_norm_inr=800.0,
         w_diversity=0.0,
@@ -55,6 +57,7 @@ _ART_MAP: dict[int, dict] = {
 # Test 1 — MMR demotes a near-duplicate
 # ---------------------------------------------------------------------------
 
+
 def test_diversity_demotes_near_duplicate() -> None:
     """With w_diversity=0.5 the second near-dup is pushed out of top-3.
 
@@ -81,7 +84,7 @@ def test_diversity_demotes_near_duplicate() -> None:
     """
     # id=2 is near-identical to id=1
     v1 = _normed([1.0, 0.0, 0.0])
-    v2 = _normed([0.9999, 0.0141, 0.0])   # cosine to v1 ≈ 0.9999
+    v2 = _normed([0.9999, 0.0141, 0.0])  # cosine to v1 ≈ 0.9999
     v3 = _normed([0.0, 1.0, 0.0])
     v4 = _normed([0.0, 0.0, 1.0])
 
@@ -89,17 +92,15 @@ def test_diversity_demotes_near_duplicate() -> None:
     embeddings = {1: v1, 2: v2, 3: v3, 4: v4}
 
     config_off = _base_config(w_diversity=0.0)
-    config_on  = _base_config(w_diversity=0.5, dupe_sim_threshold=0.97)
+    config_on = _base_config(w_diversity=0.5, dupe_sim_threshold=0.97)
 
     result_off = rerank(
         candidates, 1000.0, "Tops", _ART_MAP, config_off, k=3, embeddings=embeddings
     )
-    result_on = rerank(
-        candidates, 1000.0, "Tops", _ART_MAP, config_on, k=3, embeddings=embeddings
-    )
+    result_on = rerank(candidates, 1000.0, "Tops", _ART_MAP, config_on, k=3, embeddings=embeddings)
 
     ids_off = [aid for aid, _ in result_off]
-    ids_on  = [aid for aid, _ in result_on]
+    ids_on = [aid for aid, _ in result_on]
 
     # Sanity: diversity OFF keeps FAISS-sim order → id=2 is rank-2
     assert ids_off == [1, 2, 3], f"diversity OFF unexpected order: {ids_off}"
@@ -126,6 +127,7 @@ def test_diversity_demotes_near_duplicate() -> None:
 # Test 2 — w_diversity=0 (or embeddings=None) is backward-compatible
 # ---------------------------------------------------------------------------
 
+
 def test_diversity_off_is_backward_compatible() -> None:
     """w_diversity=0 must produce the same output whether embeddings are given or not."""
     v1 = _normed([1.0, 0.0, 0.0])
@@ -140,14 +142,12 @@ def test_diversity_off_is_backward_compatible() -> None:
     result_with_emb = rerank(
         candidates, 1000.0, "Tops", _ART_MAP, config, k=3, embeddings=embeddings
     )
-    result_without_emb = rerank(
-        candidates, 1000.0, "Tops", _ART_MAP, config, k=3, embeddings=None
-    )
+    result_without_emb = rerank(candidates, 1000.0, "Tops", _ART_MAP, config, k=3, embeddings=None)
     result_no_kwarg = rerank(candidates, 1000.0, "Tops", _ART_MAP, config, k=3)
 
-    ids_with    = [aid for aid, _ in result_with_emb]
+    ids_with = [aid for aid, _ in result_with_emb]
     ids_without = [aid for aid, _ in result_without_emb]
-    ids_no_kw   = [aid for aid, _ in result_no_kwarg]
+    ids_no_kw = [aid for aid, _ in result_no_kwarg]
 
     assert ids_with == ids_without == ids_no_kw, (
         f"w_diversity=0 produced different results depending on embeddings kwarg: "
@@ -158,6 +158,7 @@ def test_diversity_off_is_backward_compatible() -> None:
 # ---------------------------------------------------------------------------
 # Test 3 — price-band bonus changes ranking order
 # ---------------------------------------------------------------------------
+
 
 def test_price_band_bonus_changes_order() -> None:
     """A same-band candidate beats an out-of-band candidate when w_price_band is high enough.
@@ -183,21 +184,20 @@ def test_price_band_bonus_changes_order() -> None:
     candidates = [(10, 0.90), (11, 0.92)]
 
     config_off = _base_config(price_bands_inr=[], w_price_band=0.0)
-    config_on  = _base_config(
+    config_on = _base_config(
         price_bands_inr=[600.0, 1200.0, 2000.0],
-        w_price_band=0.20,   # deliberately large to guarantee order flip
+        w_price_band=0.20,  # deliberately large to guarantee order flip
     )
 
     result_off = rerank(candidates, 800.0, "Tops", art_map_local, config_off, k=2)
-    result_on  = rerank(candidates, 800.0, "Tops", art_map_local, config_on,  k=2)
+    result_on = rerank(candidates, 800.0, "Tops", art_map_local, config_on, k=2)
 
     ids_off = [aid for aid, _ in result_off]
-    ids_on  = [aid for aid, _ in result_on]
+    ids_on = [aid for aid, _ in result_on]
 
     # Without bonus: higher sim wins → id=11 is rank-1
     assert ids_off[0] == 11, (
-        f"Expected id=11 at rank-1 with band bonus OFF, got {ids_off[0]}. "
-        f"Full order: {ids_off}"
+        f"Expected id=11 at rank-1 with band bonus OFF, got {ids_off[0]}. Full order: {ids_off}"
     )
 
     # With bonus: same-band id=10 must be promoted to rank-1
@@ -231,21 +231,29 @@ def test_similar_route_applies_diversity_end_to_end() -> None:
 
     # Embedding rows: query(0); A(1) and A2(2) are near-duplicates (cos≈0.999);
     # B(3) is diverse. Raw FAISS sim order: A(0.80) > A2(0.79) > B(0.70).
-    emb = np.stack([
-        _normed([1.0, 0.0, 0.0, 0.0]),   # row 0 — query item (aid 1)
-        _normed([0.80, 0.60, 0.0, 0.0]),  # row 1 — A   (aid 10)
-        _normed([0.79, 0.61, 0.05, 0.0]),  # row 2 — A2  (aid 11) near-dup of A
-        _normed([0.70, 0.0, 0.714, 0.0]),  # row 3 — B   (aid 20) diverse
-    ])
+    emb = np.stack(
+        [
+            _normed([1.0, 0.0, 0.0, 0.0]),  # row 0 — query item (aid 1)
+            _normed([0.80, 0.60, 0.0, 0.0]),  # row 1 — A   (aid 10)
+            _normed([0.79, 0.61, 0.05, 0.0]),  # row 2 — A2  (aid 11) near-dup of A
+            _normed([0.70, 0.0, 0.714, 0.0]),  # row 3 — B   (aid 20) diverse
+        ]
+    )
 
     state = MagicMock()
     state.api_key = "test-key"
     state.config.brand = "tb"
     # Diversity ON; price/category disabled so only sim + MMR drive the order.
     state.config.rerank = RerankConfig(
-        enabled=True, candidate_pool_size=10,
-        w_similarity=0.70, w_price_penalty=0.0, w_category_affinity=0.0,
-        w_diversity=0.5, dupe_sim_threshold=0.92, price_bands_inr=[], w_price_band=0.0,
+        enabled=True,
+        candidate_pool_size=10,
+        w_similarity=0.70,
+        w_price_penalty=0.0,
+        w_category_affinity=0.0,
+        w_diversity=0.5,
+        dupe_sim_threshold=0.92,
+        price_bands_inr=[],
+        w_price_band=0.0,
     )
     state.art_map = {
         10: {"category": "X", "price_inr": 1000.0},

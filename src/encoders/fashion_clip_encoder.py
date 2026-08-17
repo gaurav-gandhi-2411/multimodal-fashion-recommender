@@ -112,9 +112,9 @@ class FashionCLIPEncoder:
         limit applies; longer inputs are truncated by the processor (same behaviour as the
         upstream model).
         """
-        inputs = self.processor(
-            text=texts, return_tensors="pt", padding=True, truncation=True
-        ).to(self.device)
+        inputs = self.processor(text=texts, return_tensors="pt", padding=True, truncation=True).to(
+            self.device
+        )
         embs = self.model.get_text_features(**inputs)
         embs = embs / embs.norm(dim=-1, keepdim=True)
         return embs.cpu().float().numpy()

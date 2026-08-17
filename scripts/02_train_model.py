@@ -5,6 +5,7 @@ Loads precomputed embeddings, builds datasets, runs sanity check, then full trai
 Val and test datasets use combined history (train+val / train+val+test) so that
 the UserTower sees a user's full chronological context, not just the target split.
 """
+
 import logging
 import sys
 from pathlib import Path
@@ -40,8 +41,8 @@ def main() -> None:
     processed = Path(config["data"]["processed_path"])
 
     # Load precomputed embeddings — canonical source: item_ids_image.npy
-    img_emb  = np.load(processed / "item_image_embeddings.npy")
-    txt_emb  = np.load(processed / "item_text_embeddings.npy")
+    img_emb = np.load(processed / "item_image_embeddings.npy")
+    txt_emb = np.load(processed / "item_text_embeddings.npy")
     item_ids = np.load(processed / "item_ids_image.npy", allow_pickle=True)
 
     assert img_emb.shape[0] == txt_emb.shape[0] == len(item_ids), (
@@ -55,12 +56,9 @@ def main() -> None:
 
     # Load interaction splits
     train_df = pd.read_parquet(processed / "train.parquet")
-    val_df   = pd.read_parquet(processed / "val.parquet")
-    test_df  = pd.read_parquet(processed / "test.parquet")
-    print(
-        f"Interactions -- train: {len(train_df):,}, "
-        f"val: {len(val_df):,}, test: {len(test_df):,}"
-    )
+    val_df = pd.read_parquet(processed / "val.parquet")
+    test_df = pd.read_parquet(processed / "test.parquet")
+    print(f"Interactions -- train: {len(train_df):,}, val: {len(val_df):,}, test: {len(test_df):,}")
 
     seq_len = config["model"]["user_seq_len"]
 

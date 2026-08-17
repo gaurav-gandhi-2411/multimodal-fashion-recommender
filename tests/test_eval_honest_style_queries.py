@@ -1,5 +1,6 @@
 """tests/test_eval_honest_style_queries.py -- unit tests for the honest free-text
 style-search eval fixture loader (no model, no FAISS, no network I/O)."""
+
 from __future__ import annotations
 
 import json

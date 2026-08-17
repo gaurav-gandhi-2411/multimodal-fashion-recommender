@@ -44,9 +44,7 @@ def mock_brand_state(mock_art_map: dict) -> MagicMock:
     state.api_key = "test-api-key-123"
     state.retriever.index.ntotal = 3
     state.retriever.search.return_value = [(111, 0.92), (222, 0.85), (333, 0.76)]
-    state.retriever.index.reconstruct.side_effect = (
-        lambda row: np.zeros(256, dtype=np.float32)
-    )
+    state.retriever.index.reconstruct.side_effect = lambda row: np.zeros(256, dtype=np.float32)
     state.config.rerank = RerankConfig()
     state.art_map = mock_art_map
     state.faiss_aid_to_row = {111: 0, 222: 1, 333: 2}
@@ -58,9 +56,7 @@ def mock_brand_state(mock_art_map: dict) -> MagicMock:
 @pytest.fixture(scope="module")
 def mock_registry(mock_brand_state: MagicMock) -> MagicMock:
     registry = MagicMock()
-    registry.get.side_effect = (
-        lambda brand: mock_brand_state if brand == "test_brand" else None
-    )
+    registry.get.side_effect = lambda brand: mock_brand_state if brand == "test_brand" else None
     registry.brand_names.return_value = ["test_brand"]
     return registry
 

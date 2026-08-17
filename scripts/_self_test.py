@@ -1,4 +1,5 @@
 """Self-test: run /similar logic in-process for all brands and produce a raw data dump."""
+
 from __future__ import annotations
 
 import json
@@ -27,6 +28,7 @@ print(f"Loaded: {sorted(reg.brand_names())}\n", flush=True)
 # ---------------------------------------------------------------------------
 # Mirror of routes.py _get_item_embedding + /similar logic
 # ---------------------------------------------------------------------------
+
 
 def _emb(state, item_id_str: str) -> np.ndarray | None:
     try:

@@ -10,6 +10,7 @@ Usage:
     python scripts/apply_category_normalization.py --brand fashor
     python scripts/apply_category_normalization.py --brand virgio
 """
+
 from __future__ import annotations
 
 import argparse
