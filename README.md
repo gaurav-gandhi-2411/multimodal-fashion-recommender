@@ -8,12 +8,13 @@ A two-tower retrieval system for personalised fashion recommendations, combining
 
 **[Live Demo](https://huggingface.co/spaces/gauravgandhi2411/multimodal-fashion-recommender)**
 
-### Try the production API right now
+### Production API
 
-No signup, no catalog handoff — a public sandbox key against real data:
+> **Currently offline** (billing paused on the backing GCP project — no active users, so this
+> is not being kept warm right now). The HuggingFace Space above is the current live demo.
 
-- **[QUICKSTART.md](QUICKSTART.md)** — copy-paste curl/JS in under 5 minutes
-- **[Live interactive API docs](https://fashion-recommender-staging-rm7rz66wza-el.a.run.app/docs)** — every endpoint, every field, try-it-out in the browser
+- **[QUICKSTART.md](QUICKSTART.md)** — copy-paste curl/JS, for when the API is back online
+- **[Interactive API docs](https://fashion-recommender-sgkbjiatcq-el.a.run.app/docs)** — every endpoint, every field, try-it-out in the browser (offline, see above)
 - Onboarding your own catalog: **[CLIENT_ONBOARDING.md](CLIENT_ONBOARDING.md)**
 
 ---
