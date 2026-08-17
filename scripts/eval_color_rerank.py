@@ -48,6 +48,7 @@ def _load_brand_visual_index(brand_cfg: dict) -> tuple[faiss.Index, list[int]] |
     if not idx_file.exists() or not ids_file.exists():
         return None
     import pickle
+
     index = faiss.read_index(str(idx_file))
     with ids_file.open("rb") as fh:
         article_ids: list[int] = pickle.load(fh)  # noqa: S301
@@ -81,9 +82,7 @@ def _eval_brand(
 
     # Only query items that are in the color index (so we have ground-truth color)
     indexed_items = [
-        (i, int(article_ids[i]))
-        for i in range(n_total)
-        if str(article_ids[i]) in color_index
+        (i, int(article_ids[i])) for i in range(n_total) if str(article_ids[i]) in color_index
     ]
     if not indexed_items:
         print(f"  {brand_slug}: no items in both FAISS + color index — skipping")
@@ -136,12 +135,14 @@ def _eval_brand(
     if not sims_before:
         return result
 
-    result.update({
-        "n_queries": len(sims_before),
-        "mean_color_sim_before": round(float(np.mean(sims_before)), 4),
-        "mean_color_sim_after": round(float(np.mean(sims_after)), 4),
-        "delta": round(float(np.mean(sims_after)) - float(np.mean(sims_before)), 4),
-    })
+    result.update(
+        {
+            "n_queries": len(sims_before),
+            "mean_color_sim_before": round(float(np.mean(sims_before)), 4),
+            "mean_color_sim_after": round(float(np.mean(sims_after)), 4),
+            "delta": round(float(np.mean(sims_after)) - float(np.mean(sims_before)), 4),
+        }
+    )
     return result
 
 
@@ -170,9 +171,7 @@ def main() -> None:
         color_index = load_color_index(REPO_ROOT / color_idx_path)
         res = _eval_brand(brand, cfg, color_index, n_queries=args.n_queries, k=args.k, rng=rng)
 
-        if res["mean_color_sim_before"] is None:
-            verdict = "SKIPPED"
-        elif res["delta"] is None:
+        if res["mean_color_sim_before"] is None or res["delta"] is None:
             verdict = "SKIPPED"
         elif res["delta"] >= 0.01:
             verdict = "IMPROVED ✓"

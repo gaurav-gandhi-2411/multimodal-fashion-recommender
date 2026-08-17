@@ -11,6 +11,7 @@ Saves:
   data/processed/index_article_ids.npy         (article ids for full index)
   data/processed/index_article_ids_active.npy  (article ids for active index)
 """
+
 import sys
 from pathlib import Path
 
@@ -49,8 +50,8 @@ def main() -> None:
 
     # Load raw precomputed embeddings
     processed = Path(config["data"]["processed_path"])
-    img_emb  = np.load(processed / "item_image_embeddings.npy")
-    txt_emb  = np.load(processed / "item_text_embeddings.npy")
+    img_emb = np.load(processed / "item_image_embeddings.npy")
+    txt_emb = np.load(processed / "item_text_embeddings.npy")
     item_ids = np.load(processed / "item_ids_image.npy", allow_pickle=True)
     item_ids_int = [int(aid) for aid in item_ids]
 
@@ -73,8 +74,8 @@ def main() -> None:
     # Items that appear in at least one transaction across train+val+test
     print("\nLoading transaction splits to find active items...")
     train_df = pd.read_parquet(processed / "train.parquet")
-    val_df   = pd.read_parquet(processed / "val.parquet")
-    test_df  = pd.read_parquet(processed / "test.parquet")
+    val_df = pd.read_parquet(processed / "val.parquet")
+    test_df = pd.read_parquet(processed / "test.parquet")
 
     all_txn = pd.concat([train_df, val_df, test_df], ignore_index=True)
     active_article_ids = set(all_txn["article_id"].unique())
@@ -83,8 +84,10 @@ def main() -> None:
     # Filter to items that are also in our embedding index
     catalogue_set = set(item_ids_int)
     active_in_catalogue = sorted(active_article_ids & catalogue_set)
-    print(f"  Active articles in catalogue: {len(active_in_catalogue):,} "
-          f"(of {len(item_ids_int):,} total)")
+    print(
+        f"  Active articles in catalogue: {len(active_in_catalogue):,} "
+        f"(of {len(item_ids_int):,} total)"
+    )
 
     # Build active index using same encoded embeddings (already computed)
     id_to_row = {int(aid): i for i, aid in enumerate(item_ids_int)}

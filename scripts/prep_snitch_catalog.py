@@ -9,6 +9,7 @@ Strategy:
 - Cap per-category at TARGET_PER_CAT; thin categories get all available items
 - Construct pdp_url from handle column
 """
+
 from __future__ import annotations
 
 import sys
@@ -18,7 +19,9 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-RAW = Path("C:/Users/gaura/ml-projects/agentic-shopping-assistant/data/raw/shopify/snitch/products.csv")
+RAW = Path(
+    "C:/Users/gaura/ml-projects/agentic-shopping-assistant/data/raw/shopify/snitch/products.csv"
+)
 OUT = Path("data/snitch/catalog_full.csv")
 
 # Apparel categories to include and per-category caps
@@ -26,9 +29,9 @@ CATEGORY_CAPS: dict[str, int] = {
     "Shirts": 200,
     "T-Shirts": 200,
     "Trousers": 200,
-    "Jeans": 300,       # was 50 — key fix
+    "Jeans": 300,  # was 50 — key fix
     "Cargo Pants": 200,
-    "Jackets": 200,     # was 50 — key fix
+    "Jackets": 200,  # was 50 — key fix
     "Overshirt": 200,
     "Sweaters": 150,
     "Shorts": 150,
@@ -47,18 +50,22 @@ for cat, cap in CATEGORY_CAPS.items():
     sub = sub.head(cap)
 
     for _, row in sub.iterrows():
-        pdp_url = f"https://snitch.co.in/products/{row['handle']}" if pd.notna(row.get("handle")) else ""
+        pdp_url = (
+            f"https://snitch.co.in/products/{row['handle']}" if pd.notna(row.get("handle")) else ""
+        )
         # Append category suffix to title to match existing catalog convention
         title = f"{row['title']} ( {cat})"
-        out_rows.append({
-            "product_id": str(int(row["id"])),
-            "title": title,
-            "description": str(row.get("description", "")),
-            "image_url": str(row["image_url"]),
-            "price_inr": float(row["price_inr"]),
-            "category": cat,
-            "pdp_url": pdp_url,
-        })
+        out_rows.append(
+            {
+                "product_id": str(int(row["id"])),
+                "title": title,
+                "description": str(row.get("description", "")),
+                "image_url": str(row["image_url"]),
+                "price_inr": float(row["price_inr"]),
+                "category": cat,
+                "pdp_url": pdp_url,
+            }
+        )
 
 result = pd.DataFrame(out_rows)
 print("\nCategory counts in output:")

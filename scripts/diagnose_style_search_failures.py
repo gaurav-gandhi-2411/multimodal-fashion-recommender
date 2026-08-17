@@ -10,6 +10,7 @@ landing on the wrong category and the rerank cascade following it.
 Usage:
     python scripts/diagnose_style_search_failures.py --brand fashor
 """
+
 from __future__ import annotations
 
 import argparse
@@ -88,8 +89,14 @@ def main() -> int:
                 (int(aid) if str(aid).isdigit() else aid, score) for aid, score in raw_results
             ]
             final_results = _rerank(
-                candidates, query_price, rank1_cat, art_map, rerank_cfg, args.k,
-                embeddings=None, query_meta=query_meta,
+                candidates,
+                query_price,
+                rank1_cat,
+                art_map,
+                rerank_cfg,
+                args.k,
+                embeddings=None,
+                query_meta=query_meta,
             )
         else:
             final_results = list(raw_results[: args.k])
@@ -97,9 +104,7 @@ def main() -> int:
         final_cats = [aid_to_cat.get(int(aid), "?") for aid, _ in final_results]
         hit = expected_cat in final_cats
         hits += hit
-        aff_hit = hit or any(
-            affinity_map.affinity(expected_cat, c) >= 0.4 for c in final_cats
-        )
+        aff_hit = hit or any(affinity_map.affinity(expected_cat, c) >= 0.4 for c in final_cats)
         affinity_hits += aff_hit
 
         if args.only_misses and hit:

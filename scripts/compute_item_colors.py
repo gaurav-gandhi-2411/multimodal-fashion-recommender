@@ -6,6 +6,7 @@ Outputs demo/public/catalog/{brand}_colors.json:
 Uses Shopify CDN width parameter to download 48×48 thumbnails (~3-5KB each)
 instead of full images, keeping total bandwidth under 30MB for all 3 brands.
 """
+
 from __future__ import annotations
 
 import colorsys
@@ -46,7 +47,7 @@ def extract_color(img_bytes: bytes) -> dict[str, float | str]:
         "h": round(h * 360, 1),
         "s": round(s, 3),
         "v": round(v, 3),
-        "hex": "#{:02x}{:02x}{:02x}".format(int(round(r)), int(round(g)), int(round(b))),
+        "hex": f"#{int(round(r)):02x}{int(round(g)):02x}{int(round(b)):02x}",
     }
 
 
@@ -84,7 +85,9 @@ def process_brand(brand: str) -> None:
                 print(f"  [{brand}] {done}/{len(rows)} done ({failed} failed)")
 
     out_path.write_text(json.dumps(colors, separators=(",", ":")))
-    print(f"[{brand}] saved {len(colors)} colors to {out_path.name} ({out_path.stat().st_size // 1024}KB)")
+    print(
+        f"[{brand}] saved {len(colors)} colors to {out_path.name} ({out_path.stat().st_size // 1024}KB)"
+    )
 
 
 if __name__ == "__main__":

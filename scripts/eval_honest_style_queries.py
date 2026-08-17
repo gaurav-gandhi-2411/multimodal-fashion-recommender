@@ -25,6 +25,7 @@ Usage:
         --api-base https://fashion-recommender-staging-rm7rz66wza-el.a.run.app \\
         --api-key <key>
 """
+
 from __future__ import annotations
 
 import argparse

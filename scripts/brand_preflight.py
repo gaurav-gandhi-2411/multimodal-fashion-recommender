@@ -16,6 +16,7 @@ function the runtime GCS sync (`app.storage.sync_brand_assets`) uses — so this
 check and the container's startup sync can never diverge (see docs/architecture/adr/
 0001-brand-onboarding-runbook.md for the incident history this closes).
 """
+
 from __future__ import annotations
 
 import argparse

@@ -10,11 +10,11 @@ Integrity guarantees printed and asserted:
 Usage:
     python scripts/generate_phase2_demo.py
 """
+
 from __future__ import annotations
 
 import json
-import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -143,9 +143,7 @@ def _integrity_check(
         assert train_cnt >= MIN_TRAIN_PURCHASES, (
             f"INTEGRITY FAIL: {uid} has only {train_cnt} train purchases"
         )
-        print(
-            f"{uid[:14]}...  {'YES ✓':<8}  {train_cnt:>8} tx   {test_cnt:>8} tx   {seg_label}"
-        )
+        print(f"{uid[:14]}...  {'YES ✓':<8}  {train_cnt:>8} tx   {test_cnt:>8} tx   {seg_label}")
 
     print("-" * 78)
     print(
@@ -170,11 +168,7 @@ def _fetch_recs(uid: str) -> tuple[list[dict], str]:
 def _build_history_sample(
     uid: str, train: pd.DataFrame, art_meta: dict[int, dict], n: int = 4
 ) -> list[dict]:
-    rows = (
-        train[train["customer_id"] == uid]
-        .sort_values("t_dat", ascending=False)
-        .head(n)
-    )
+    rows = train[train["customer_id"] == uid].sort_values("t_dat", ascending=False).head(n)
     sample = []
     for _, row in rows.iterrows():
         aid = int(row["article_id"])
@@ -195,16 +189,16 @@ def main() -> None:
     test, train, articles = _load_data()
 
     art_meta: dict[int, dict] = articles.set_index("article_id").to_dict("index")
-    article_to_type: dict[int, str] = articles.set_index("article_id")["product_type_name"].to_dict()
+    article_to_type: dict[int, str] = articles.set_index("article_id")[
+        "product_type_name"
+    ].to_dict()
     product_types = sorted(articles["product_type_name"].dropna().unique().tolist())
 
     test_users = set(test["customer_id"].unique())
     train_users = set(train["customer_id"].unique())
     overlap = test_users & train_users
 
-    train_counts = (
-        train[train["customer_id"].isin(overlap)]["customer_id"].value_counts()
-    )
+    train_counts = train[train["customer_id"].isin(overlap)]["customer_id"].value_counts()
     qualified: list[str] = train_counts[train_counts >= MIN_TRAIN_PURCHASES].index.tolist()
 
     print(f"Test users:      {len(test_users):>7,}")
@@ -213,7 +207,9 @@ def main() -> None:
     print(f"Qualified (>={MIN_TRAIN_PURCHASES}): {len(qualified):>7,}")
 
     # ── Feature matrix + K-means ──────────────────────────────────────────────
-    print(f"\nBuilding product-type features for {min(KMEANS_SAMPLE, len(qualified))} sampled users…")
+    print(
+        f"\nBuilding product-type features for {min(KMEANS_SAMPLE, len(qualified))} sampled users…"
+    )
     X, valid_users = _build_features(qualified, train, article_to_type, product_types)
     print(f"Feature matrix: {X.shape}")
 
@@ -261,6 +257,7 @@ def main() -> None:
         # Dominant types from this user's train history
         user_items = train[train["customer_id"] == uid]["article_id"].tolist()
         from collections import Counter
+
         type_counts = Counter(article_to_type.get(int(a)) for a in user_items)
         top_user_types = [t for t, _ in type_counts.most_common(3) if t]
 
@@ -299,7 +296,7 @@ def main() -> None:
 
     # ── Write output ──────────────────────────────────────────────────────────
     output = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "api_url": API_BASE,
         "integrity": {
             "user_split": "test",

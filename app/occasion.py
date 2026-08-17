@@ -109,8 +109,7 @@ def _compile_lexicon(
         compiled: dict[str, list[re.Pattern[str]]] = {}
         for occasion, keywords in lexicon.items():
             compiled[occasion] = [
-                re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE)
-                for kw in keywords
+                re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE) for kw in keywords
             ]
         _COMPILED_LEXICON_CACHE[cache_key] = compiled
     return _COMPILED_LEXICON_CACHE[cache_key]

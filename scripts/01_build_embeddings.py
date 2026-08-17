@@ -32,12 +32,14 @@ img_embs, img_ids = img_encoder.encode_directory(
 )
 img_time = time.time() - t0
 
-print(f"Image encoding time: {img_time:.1f}s ({img_time/60:.1f} min)")
+print(f"Image encoding time: {img_time:.1f}s ({img_time / 60:.1f} min)")
 print(f"Saved: {img_out}  shape={img_embs.shape}")
 norms = np.linalg.norm(img_embs, axis=1)
 # Zero-vectors (missing images) have norm 0; exclude from norm check
 nonzero = norms[norms > 0]
-print(f"Norm check (non-zero rows): mean={nonzero.mean():.6f}  min={nonzero.min():.6f}  max={nonzero.max():.6f}")
+print(
+    f"Norm check (non-zero rows): mean={nonzero.mean():.6f}  min={nonzero.min():.6f}  max={nonzero.max():.6f}"
+)
 
 # --- Text embeddings ---
 print("\n=== Text Encoding (SBERT all-MiniLM-L6-v2) ===")
@@ -53,7 +55,7 @@ txt_embs = txt_encoder.encode_dataframe(
 )
 txt_time = time.time() - t0
 
-print(f"Text encoding time: {txt_time:.1f}s ({txt_time/60:.1f} min)")
+print(f"Text encoding time: {txt_time:.1f}s ({txt_time / 60:.1f} min)")
 print(f"Saved: {txt_out}  shape={txt_embs.shape}")
 norms = np.linalg.norm(txt_embs, axis=1)
 print(f"Norm check: mean={norms.mean():.6f}  min={norms.min():.6f}  max={norms.max():.6f}")

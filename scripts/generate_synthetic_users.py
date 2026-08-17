@@ -3,6 +3,7 @@
 Outputs one CSV per brand with columns: user_id, product_id, timestamp, event_type.
 All product_ids are verified to exist in the brand's catalog.csv.
 """
+
 from __future__ import annotations
 
 import random
@@ -214,9 +215,7 @@ def main() -> None:
 
         out_path = DATA_DIR / brand / "synthetic_users.csv"
         # Drop the temporary 'archetype' helper column before writing
-        interactions.drop(columns=["archetype"], errors="ignore").to_csv(
-            out_path, index=False
-        )
+        interactions.drop(columns=["archetype"], errors="ignore").to_csv(out_path, index=False)
         print(f"  written to       : {out_path}")
 
     print("\nAll brands processed successfully.")

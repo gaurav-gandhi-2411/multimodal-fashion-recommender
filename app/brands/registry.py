@@ -124,16 +124,11 @@ def _load_brand(yaml_path: Path) -> BrandState:
     art_map: dict[int, dict] = catalog.set_index("article_id").to_dict("index")
 
     retriever = FaissRetriever.load(config.index_path)
-    faiss_aid_to_row: dict[int, int] = {
-        int(aid): i for i, aid in enumerate(retriever.article_ids)
-    }
+    faiss_aid_to_row: dict[int, int] = {int(aid): i for i, aid in enumerate(retriever.article_ids)}
 
     if config.transactions_dir:
         td = Path(config.transactions_dir)
-        splits = [
-            pd.read_parquet(td / f"{split}.parquet")
-            for split in config.transaction_splits
-        ]
+        splits = [pd.read_parquet(td / f"{split}.parquet") for split in config.transaction_splits]
         history = pd.concat(splits, ignore_index=True)
         history["article_id"] = history["article_id"].astype(int)
         history = history.sort_values("t_dat")
@@ -169,6 +164,7 @@ def _load_brand(yaml_path: Path) -> BrandState:
             visual_retriever = FaissRetriever.load(config.visual_index_path)
         else:
             import logging as _logging
+
             _logging.getLogger(__name__).warning(
                 "visual_index_path configured but directory not found; "
                 "visual search will return 503 for brand %r until the index is built. "
@@ -180,6 +176,7 @@ def _load_brand(yaml_path: Path) -> BrandState:
     if config.color_index_path:
         color_index = load_color_index(config.color_index_path)
         import logging as _logging
+
         _logging.getLogger(__name__).info(
             "color_index_loaded", brand=config.brand, n_items=len(color_index)
         )
@@ -188,6 +185,7 @@ def _load_brand(yaml_path: Path) -> BrandState:
     if config.attributes_path:
         attributes = load_attribute_index(config.attributes_path)
         import logging as _logging
+
         _logging.getLogger(__name__).info(
             "attributes_index_loaded", brand=config.brand, n_items=len(attributes)
         )

@@ -33,22 +33,23 @@ RESULT (2026-07-07): NEGATIVE. Do not ship.
     more cleanly at the raw-similarity level. See PROJECT_MEMORY / audit report for the
     embedding-model A/B proposal this evidence feeds into.
 """
+
 from __future__ import annotations
 
+import io
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from PIL import Image
-import io
 import requests
+from PIL import Image
 
 REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from app.rerank import CategoryGroupConfig, RerankConfig, rerank  # noqa: E402
 from src.retrieval.faiss_index import FaissRetriever  # noqa: E402
-from app.rerank import RerankConfig, CategoryGroupConfig, rerank  # noqa: E402
 
 K = 5
 POOL_K = 50
@@ -56,7 +57,7 @@ POOL_K = 50
 
 def _load_clip():
     import open_clip
-    import torch
+
     model, _, preprocess = open_clip.create_model_and_transforms("ViT-B-32", pretrained="openai")
     model.eval()
     return model, preprocess
@@ -64,6 +65,7 @@ def _load_clip():
 
 def _encode(model, preprocess, img_bytes: bytes) -> np.ndarray:
     import torch
+
     img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
     tensor = preprocess(img).unsqueeze(0)
     with torch.no_grad():
@@ -110,9 +112,16 @@ def main() -> None:
 
     # Baseline: current live Powerlook rerank config (category_groups empty).
     base_cfg = RerankConfig(
-        enabled=True, candidate_pool_size=POOL_K, w_similarity=0.70, w_price_penalty=0.10,
-        w_category_affinity=0.15, price_norm_inr=400.0, equivalent_group_bonus=0.70,
-        related_group_bonus=0.40, category_groups=[], w_diversity=0.0,  # MMR off for a clean A/B
+        enabled=True,
+        candidate_pool_size=POOL_K,
+        w_similarity=0.70,
+        w_price_penalty=0.10,
+        w_category_affinity=0.15,
+        price_norm_inr=400.0,
+        equivalent_group_bonus=0.70,
+        related_group_bonus=0.40,
+        category_groups=[],
+        w_diversity=0.0,  # MMR off for a clean A/B
         w_occasion=0.0,
     )
     # Fix: declare Shirt/T-Shirt as a related pair (no other config changed).
@@ -146,21 +155,33 @@ def main() -> None:
             fixed_cats = [art_map.get(aid, {}).get("category", "?") for aid, _ in fixed_res]
             base_match = sum(1 for c in base_cats if c == true_type)
             fixed_match = sum(1 for c in fixed_cats if c == true_type)
-            results.append({
-                "query_aid": row["article_id"], "true_type": true_type, "anchor_cat": top_cat,
-                "base_match": base_match, "fixed_match": fixed_match,
-                "base_cats": base_cats, "fixed_cats": fixed_cats,
-            })
-            print(f"aid={row['article_id']:<6} true={true_type:8s} anchor={top_cat:8s} "
-                  f"base@5={base_match}/5 fixed@5={fixed_match}/5  "
-                  f"base={base_cats} fixed={fixed_cats}")
+            results.append(
+                {
+                    "query_aid": row["article_id"],
+                    "true_type": true_type,
+                    "anchor_cat": top_cat,
+                    "base_match": base_match,
+                    "fixed_match": fixed_match,
+                    "base_cats": base_cats,
+                    "fixed_cats": fixed_cats,
+                }
+            )
+            print(
+                f"aid={row['article_id']:<6} true={true_type:8s} anchor={top_cat:8s} "
+                f"base@5={base_match}/5 fixed@5={fixed_match}/5  "
+                f"base={base_cats} fixed={fixed_cats}"
+            )
 
     n = len(results)
     base_total = sum(r["base_match"] for r in results)
     fixed_total = sum(r["fixed_match"] for r in results)
-    print(f"\n=== Powerlook cross-brand category-match@5 (n={n} queries, {n*5} slots) ===")
-    print(f"Baseline (no Shirt~T-Shirt relation): {base_total}/{n*5} = {base_total/(n*5):.1%}")
-    print(f"Fixed (Shirt~T-Shirt related, 0.40):  {fixed_total}/{n*5} = {fixed_total/(n*5):.1%}")
+    print(f"\n=== Powerlook cross-brand category-match@5 (n={n} queries, {n * 5} slots) ===")
+    print(
+        f"Baseline (no Shirt~T-Shirt relation): {base_total}/{n * 5} = {base_total / (n * 5):.1%}"
+    )
+    print(
+        f"Fixed (Shirt~T-Shirt related, 0.40):  {fixed_total}/{n * 5} = {fixed_total / (n * 5):.1%}"
+    )
 
 
 if __name__ == "__main__":

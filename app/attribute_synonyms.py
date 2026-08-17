@@ -14,6 +14,7 @@ usage and is included there only, not duplicated into beige) -- a human-reviewed
 a fuzzy/auto-generated one. Each entry maps to exactly one canonical `color` taxonomy
 label (see `ATTRIBUTE_TAXONOMY["color"]` in `app/attributes.py`).
 """
+
 from __future__ import annotations
 
 COLOR_SYNONYMS: dict[str, list[str]] = {

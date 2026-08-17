@@ -12,6 +12,7 @@ python scripts/ingest_interactions.py --brand snitch --path shopify_orders.csv -
 After running this, restart the API server — personalized /recommend unlocks for
 any customer_id that appears in the ingested data.
 """
+
 from __future__ import annotations
 
 import argparse

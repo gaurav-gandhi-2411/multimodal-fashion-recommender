@@ -50,7 +50,6 @@ def main() -> None:
     print(f"Catalog:      {catalog_path}")
     print(f"Recall@{k} eval\n")
 
-    import numpy as np
     import pandas as pd
     from tqdm import tqdm
 
@@ -75,15 +74,14 @@ def main() -> None:
     catalog = catalog[catalog["article_id"].isin(index_ids)].reset_index(drop=True)
     print(f"Catalog items in visual index: {len(catalog)}\n")
 
-    hits_self = 0      # exact item in top-k
-    hits_cat = 0       # any item from same category in top-k
+    hits_self = 0  # exact item in top-k
+    hits_cat = 0  # any item from same category in top-k
     total = 0
     low_conf: list[tuple[float, str]] = []  # (confidence, query) for bottom-10
 
     # Build aid→category lookup for category-level recall
     aid_to_cat: dict[int, str] = {
-        int(r["article_id"]): str(r.get("category", ""))
-        for _, r in catalog.iterrows()
+        int(r["article_id"]): str(r.get("category", "")) for _, r in catalog.iterrows()
     }
 
     for _, row in tqdm(catalog.iterrows(), total=len(catalog), desc=f"Eval recall@{k}"):
@@ -132,7 +130,7 @@ def main() -> None:
     print(f"  (bar >=0.90):              {'PASS' if recall_cat >= 0.90 else 'FAIL'}")
     print()
     print(f"  Self-retrieval recall@{k}:   {recall_self:.4f}  ({recall_self * 100:.1f}%)")
-    print(f"  (secondary; CLIP optimises semantic similarity, not identity lookup)")
+    print("  (secondary; CLIP optimises semantic similarity, not identity lookup)")
     print()
 
     # Show 10 worst misses by query text

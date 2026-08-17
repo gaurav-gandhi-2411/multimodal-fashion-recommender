@@ -24,6 +24,7 @@ this project normally requires (see PROJECT_MEMORY Phase 5/7 locked evals) --
 treat as justification to run the full A/B, not as sufficient evidence to
 migrate on its own. See the audit report for the proposed full-scale A/B.
 """
+
 from __future__ import annotations
 
 import io
@@ -44,6 +45,7 @@ N_CANDIDATES_PER_BRAND = 60  # subset of the catalog to brute-force encode per q
 
 def load_openai_clip():
     import open_clip
+
     model, _, preprocess = open_clip.create_model_and_transforms("ViT-B-32", pretrained="openai")
     model.eval()
 
@@ -59,6 +61,7 @@ def load_openai_clip():
 
 def load_fashion_clip():
     from transformers import CLIPModel, CLIPProcessor
+
     model = CLIPModel.from_pretrained("patrickjohncyh/fashion-clip")
     proc = CLIPProcessor.from_pretrained("patrickjohncyh/fashion-clip")
     model.eval()
@@ -81,7 +84,9 @@ def fetch_img(url: str) -> Image.Image | None:
         return None
 
 
-def run_case(encode_fn, query_img: Image.Image, candidates: list[tuple[int, str, Image.Image]], k: int = 5):
+def run_case(
+    encode_fn, query_img: Image.Image, candidates: list[tuple[int, str, Image.Image]], k: int = 5
+):
     q_emb = encode_fn(query_img)
     scored = []
     for aid, cat, img in candidates:
@@ -97,10 +102,12 @@ def main() -> None:
     sn = pd.read_parquet(REPO_ROOT / "data/snitch/items.parquet")
 
     # Candidate pool: a mix of Powerlook Shirt + T-Shirt items (subset, brute force).
-    pool_df = pd.concat([
-        pl[pl["category"] == "Shirt"].sample(N_CANDIDATES_PER_BRAND // 2, random_state=42),
-        pl[pl["category"] == "T-Shirt"].sample(N_CANDIDATES_PER_BRAND // 2, random_state=42),
-    ])
+    pool_df = pd.concat(
+        [
+            pl[pl["category"] == "Shirt"].sample(N_CANDIDATES_PER_BRAND // 2, random_state=42),
+            pl[pl["category"] == "T-Shirt"].sample(N_CANDIDATES_PER_BRAND // 2, random_state=42),
+        ]
+    )
     print(f"Downloading {len(pool_df)} candidate images...")
     candidates = []
     for _, row in pool_df.iterrows():
@@ -114,20 +121,26 @@ def main() -> None:
     query_img = fetch_img(query_row["image_url"])
 
     # Self-retrieval sanity set: 5 Powerlook T-Shirts + 5 Shirts (own catalog images).
-    self_sample = pd.concat([
-        pl[pl["category"] == "T-Shirt"].sample(5, random_state=7),
-        pl[pl["category"] == "Shirt"].sample(5, random_state=7),
-    ])
+    self_sample = pd.concat(
+        [
+            pl[pl["category"] == "T-Shirt"].sample(5, random_state=7),
+            pl[pl["category"] == "Shirt"].sample(5, random_state=7),
+        ]
+    )
 
-    for name, loader in [("CLIP ViT-B/32 (current, openai)", load_openai_clip),
-                         ("FashionCLIP (patrickjohncyh/fashion-clip)", load_fashion_clip)]:
-        print(f"\n{'='*70}\n{name}\n{'='*70}")
+    for name, loader in [
+        ("CLIP ViT-B/32 (current, openai)", load_openai_clip),
+        ("FashionCLIP (patrickjohncyh/fashion-clip)", load_fashion_clip),
+    ]:
+        print(f"\n{'=' * 70}\n{name}\n{'=' * 70}")
         encode_fn = loader()
 
         top5 = run_case(encode_fn, query_img, candidates, k=5)
         n_tee = sum(1 for _, cat, _ in top5 if cat == "T-Shirt")
-        print(f"Cross-brand failing query (Snitch tee -> Powerlook pool): top-5 = "
-              f"{[(a, c, round(s,4)) for a, c, s in top5]}")
+        print(
+            f"Cross-brand failing query (Snitch tee -> Powerlook pool): top-5 = "
+            f"{[(a, c, round(s, 4)) for a, c, s in top5]}"
+        )
         print(f"  T-Shirt count in top-5: {n_tee}/5")
 
         # Self-retrieval check: does each item's own image still find itself as top-1

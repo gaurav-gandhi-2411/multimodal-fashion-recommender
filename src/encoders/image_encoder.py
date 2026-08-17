@@ -82,7 +82,9 @@ class ImageEncoder:
         from src.data.loader import get_image_path
 
         article_ids = articles_df["article_id"].tolist()
-        paths = [get_image_path(aid, {"data": {"images_dir": str(images_dir)}}) for aid in article_ids]  # noqa: E501
+        paths = [
+            get_image_path(aid, {"data": {"images_dir": str(images_dir)}}) for aid in article_ids
+        ]  # noqa: E501
 
         # Check which paths exist upfront
         exists_mask = [p.exists() for p in paths]

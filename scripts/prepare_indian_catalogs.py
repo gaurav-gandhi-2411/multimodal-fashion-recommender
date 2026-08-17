@@ -11,6 +11,7 @@ Sampling strategy:
 - Snitch    : Stratified 500-item sample from top-10 categories, min(count, 50) per
               category, seed=42 for reproducibility.
 """
+
 from __future__ import annotations
 
 import re
@@ -42,7 +43,13 @@ PDP_BASES: dict[str, str] = {
 }
 
 TARGET_COLUMNS = [
-    "product_id", "title", "description", "image_url", "price_inr", "category", "pdp_url"
+    "product_id",
+    "title",
+    "description",
+    "image_url",
+    "price_inr",
+    "category",
+    "pdp_url",
 ]
 
 SNITCH_SAMPLE_SIZE = 500
@@ -113,12 +120,7 @@ def stratified_snitch(df: pd.DataFrame) -> pd.DataFrame:
     For each of the top 10 categories by item count, samples min(count, 50) rows.
     Seed=42 for reproducibility.
     """
-    top_cats = (
-        df["category"]
-        .value_counts()
-        .head(SNITCH_TOP_N_CATS)
-        .index.tolist()
-    )
+    top_cats = df["category"].value_counts().head(SNITCH_TOP_N_CATS).index.tolist()
     parts: list[pd.DataFrame] = []
     for cat in top_cats:
         cat_df = df[df["category"] == cat]

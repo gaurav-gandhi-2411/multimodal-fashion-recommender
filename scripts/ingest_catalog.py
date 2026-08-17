@@ -17,6 +17,7 @@ Cold-start is the baseline: the brand is immediately queryable via
     GET /v1/<brand>/item/{article_id}/similar
 with no interaction data. Interactions are an optional second step.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -54,10 +55,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--url",
-        help=(
-            "Shopify store URL or direct /products.json URL. "
-            "Required when --source shopify."
-        ),
+        help=("Shopify store URL or direct /products.json URL. Required when --source shopify."),
     )
     parser.add_argument(
         "--output-base",

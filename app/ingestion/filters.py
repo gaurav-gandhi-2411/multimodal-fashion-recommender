@@ -1,6 +1,7 @@
 """Generic post-fetch catalog filters, applied after a CatalogSource returns rows and
 before the ingestion pipeline downloads images or computes embeddings.
 """
+
 from __future__ import annotations
 
 from collections import Counter
