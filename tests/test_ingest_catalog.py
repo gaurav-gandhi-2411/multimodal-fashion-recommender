@@ -39,6 +39,7 @@ def _mock_response(json_data=None, status_code: int = 200, text: str = "") -> Ma
 
 # ── CsvSource ─────────────────────────────────────────────────────────────────
 
+
 class TestCsvSource:
     def test_loads_fixture_csv(self):
         source = CsvSource(FIXTURE_CSV)
@@ -55,14 +56,18 @@ class TestCsvSource:
 
     def test_missing_required_column_raises(self, tmp_path: Path):
         bad_csv = tmp_path / "bad.csv"
-        bad_csv.write_text("product_id,title,description,image_url,price_inr,pdp_url\nSN001,Tee,Desc,http://x.com/a.jpg,999,http://x.com/p\n")
+        bad_csv.write_text(
+            "product_id,title,description,image_url,price_inr,pdp_url\nSN001,Tee,Desc,http://x.com/a.jpg,999,http://x.com/p\n"
+        )
         source = CsvSource(bad_csv)
         with pytest.raises(ValueError, match="missing required columns"):
             source.fetch()
 
     def test_missing_column_error_names_the_column(self, tmp_path: Path):
         bad_csv = tmp_path / "bad.csv"
-        bad_csv.write_text("product_id,title,description,image_url,price_inr,pdp_url\nSN001,Tee,Desc,http://x.com/a.jpg,999,http://x.com/p\n")
+        bad_csv.write_text(
+            "product_id,title,description,image_url,price_inr,pdp_url\nSN001,Tee,Desc,http://x.com/a.jpg,999,http://x.com/p\n"
+        )
         source = CsvSource(bad_csv)
         with pytest.raises(ValueError, match="category"):
             source.fetch()
@@ -95,6 +100,7 @@ class TestCsvSource:
 
 
 # ── ShopifySource ─────────────────────────────────────────────────────────────
+
 
 class TestShopifySource:
     BASE_URL = "https://testbrand.myshopify.com"
@@ -191,6 +197,7 @@ class TestShopifySource:
                 [robots_resp, probe_resp, page1_resp, page2_resp]
             )
             import logging
+
             with caplog.at_level(logging.WARNING, logger="app.ingestion.sources"):
                 rows = source.fetch()
 
@@ -303,6 +310,7 @@ class TestPipelineIntegration:
 
     def test_faiss_index_has_correct_item_count(self, tmp_path: Path, mock_pipeline_ml):
         import sys
+
         sys.path.insert(0, str(Path(__file__).parent.parent))
         from src.retrieval.faiss_index import FaissRetriever
 
@@ -346,6 +354,7 @@ class TestPipelineIntegration:
 
     def test_pipeline_is_idempotent(self, tmp_path: Path, mock_pipeline_ml):
         import sys
+
         sys.path.insert(0, str(Path(__file__).parent.parent))
         from src.retrieval.faiss_index import FaissRetriever
 

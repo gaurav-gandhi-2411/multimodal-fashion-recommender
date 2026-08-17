@@ -11,16 +11,17 @@ This file asserts:
   3. The pre-fix behaviour (no normalization) would have preserved FAISS order,
      demonstrating what the bug looked like.
 """
+
 from __future__ import annotations
 
 import pytest
 
-from app.rerank import CategoryAffinityMap, RerankConfig, rerank
-
+from app.rerank import RerankConfig, rerank
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def config() -> RerankConfig:
@@ -40,7 +41,11 @@ def art_map_int_keys() -> dict[int, dict]:
     """art_map as built by registry.py: int keys, realistic metadata."""
     return {
         1: {"title": "Off-category item at far price", "category": "Dresses", "price_inr": 5000.0},
-        2: {"title": "Same-category item at close price", "category": "Kurtas", "price_inr": 1100.0},
+        2: {
+            "title": "Same-category item at close price",
+            "category": "Kurtas",
+            "price_inr": 1100.0,
+        },
         3: {"title": "Same-category item mid price", "category": "Kurtas", "price_inr": 1300.0},
     }
 
@@ -49,7 +54,10 @@ def art_map_int_keys() -> dict[int, dict]:
 # 1. Key normalization: str candidates resolve int art_map entries
 # ---------------------------------------------------------------------------
 
-def test_str_candidate_resolves_int_art_map(config: RerankConfig, art_map_int_keys: dict[int, dict]) -> None:
+
+def test_str_candidate_resolves_int_art_map(
+    config: RerankConfig, art_map_int_keys: dict[int, dict]
+) -> None:
     """art_map.get(str_id, {}) returns {} pre-fix; after fix, non-empty metadata is returned."""
     str_candidates: list[tuple[str, float]] = [("1", 0.90), ("2", 0.85)]
 
@@ -78,7 +86,10 @@ def test_str_candidate_resolves_int_art_map(config: RerankConfig, art_map_int_ke
 # 2. Rerank order differs from raw FAISS order for a known price+category signal
 # ---------------------------------------------------------------------------
 
-def test_rerank_differs_from_faiss_order(config: RerankConfig, art_map_int_keys: dict[int, dict]) -> None:
+
+def test_rerank_differs_from_faiss_order(
+    config: RerankConfig, art_map_int_keys: dict[int, dict]
+) -> None:
     """For str candidates with int art_map keys, reranked top-1 != FAISS top-1.
 
     Query: Kurtas, Rs.1000
@@ -117,7 +128,10 @@ def test_rerank_differs_from_faiss_order(config: RerankConfig, art_map_int_keys:
 # 3. Rerank is idempotent for already-correct int candidates (non-regression)
 # ---------------------------------------------------------------------------
 
-def test_rerank_works_for_int_candidates_too(config: RerankConfig, art_map_int_keys: dict[int, dict]) -> None:
+
+def test_rerank_works_for_int_candidates_too(
+    config: RerankConfig, art_map_int_keys: dict[int, dict]
+) -> None:
     """Normalization must not break the path where candidates are already int."""
     int_candidates: list[tuple[int, float]] = [
         (1, 0.95),

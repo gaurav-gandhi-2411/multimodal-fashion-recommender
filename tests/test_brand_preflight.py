@@ -107,9 +107,7 @@ def test_main_missing_assets_exits_one(
     assert len(result["missing_local"]) == len(result["required_paths"])
 
 
-def test_main_missing_yaml_file_exits_one(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_main_missing_yaml_file_exits_one(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """main() exits 1 (no JSON) when the brand YAML file itself does not exist."""
     monkeypatch.setattr(
         sys,
@@ -125,9 +123,7 @@ def test_main_missing_yaml_file_exits_one(
     assert main() == 1
 
 
-def test_main_malformed_yaml_exits_one(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_main_malformed_yaml_exits_one(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """main() exits 1 when the brand YAML fails BrandConfig validation (missing required fields)."""
     brands_dir = tmp_path / "brands"
     brands_dir.mkdir()

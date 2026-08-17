@@ -113,8 +113,7 @@ class TestLoadShopifyCsv:
     def test_email_normalised_lowercase(self, tmp_path: Path) -> None:
         p = tmp_path / "caps.csv"
         p.write_text(
-            "Email,Paid at,Lineitem sku\n"
-            "Alice@Example.COM,2025-01-01T00:00:00+00:00,SN001\n"
+            "Email,Paid at,Lineitem sku\nAlice@Example.COM,2025-01-01T00:00:00+00:00,SN001\n"
         )
         df = load_shopify_orders_csv(p)
         assert df["user_id"].iloc[0] == "alice@example.com"
@@ -189,13 +188,12 @@ class TestProcessInteractions:
 class TestSplitChronological:
     def _make_df(self, n: int) -> pd.DataFrame:
         import datetime
+
         return pd.DataFrame(
             {
                 "customer_id": [f"u{i}" for i in range(n)],
                 "article_id": list(range(1, n + 1)),
-                "t_dat": [
-                    datetime.date(2025, 1, 1) + datetime.timedelta(days=i) for i in range(n)
-                ],
+                "t_dat": [datetime.date(2025, 1, 1) + datetime.timedelta(days=i) for i in range(n)],
             }
         )
 
@@ -225,6 +223,7 @@ class TestSplitChronological:
 class TestWriteSplits:
     def test_creates_three_parquets(self, tmp_path: Path) -> None:
         import datetime
+
         df = pd.DataFrame(
             {
                 "customer_id": ["u1", "u2", "u3"],
@@ -241,13 +240,13 @@ class TestWriteSplits:
 
     def test_parquet_columns_correct(self, tmp_path: Path) -> None:
         import datetime
+
         df = pd.DataFrame(
             {
                 "customer_id": [f"u{i}" for i in range(20)],
                 "article_id": list(range(1, 21)),
                 "t_dat": [
-                    datetime.date(2025, 1, 1) + datetime.timedelta(days=i)
-                    for i in range(20)
+                    datetime.date(2025, 1, 1) + datetime.timedelta(days=i) for i in range(20)
                 ],
             }
         )

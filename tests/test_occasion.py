@@ -10,6 +10,7 @@ candidate wins.  Tests cover:
   4. Rerank order change driven by occasion boost
   5. Serve-path route test: occasion runs through the live /similar HTTP endpoint
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -208,11 +209,21 @@ def test_rerank_occasion_boost_changes_order() -> None:
     cfg_on = _base_rerank_cfg(w_occasion=0.30)
 
     result_off = rerank(
-        candidates, 1000.0, "Kurtas", art_map, cfg_off, k=2,
+        candidates,
+        1000.0,
+        "Kurtas",
+        art_map,
+        cfg_off,
+        k=2,
         query_meta=query_meta,
     )
     result_on = rerank(
-        candidates, 1000.0, "Kurtas", art_map, cfg_on, k=2,
+        candidates,
+        1000.0,
+        "Kurtas",
+        art_map,
+        cfg_on,
+        k=2,
         query_meta=query_meta,
     )
 
@@ -241,10 +252,18 @@ def test_rerank_occasion_boost_changes_order() -> None:
 def test_rerank_occasion_boost_w0_identical_to_no_meta() -> None:
     """w_occasion=0 must produce the same output regardless of query_meta presence."""
     art_map: dict[int, dict] = {
-        1: {"category": "Tops", "price_inr": 1000.0,
-            "title": "Casual Top", "description": "casual"},
-        2: {"category": "Tops", "price_inr": 1000.0,
-            "title": "Festive Blouse", "description": "festive"},
+        1: {
+            "category": "Tops",
+            "price_inr": 1000.0,
+            "title": "Casual Top",
+            "description": "casual",
+        },
+        2: {
+            "category": "Tops",
+            "price_inr": 1000.0,
+            "title": "Festive Blouse",
+            "description": "festive",
+        },
     }
     query_meta = {"title": "Casual Shirt", "description": "casual everyday"}
     candidates: list[tuple[int, float]] = [(1, 0.90), (2, 0.80)]
@@ -285,11 +304,13 @@ def test_similar_route_applies_occasion_end_to_end() -> None:
 
     # Embeddings: query (row 0), cand_A=festive (row 1), cand_B=casual (row 2)
     # Identical sim vectors — only occasion discriminates
-    emb = np.stack([
-        _normed([1.0, 0.0, 0.0, 0.0]),   # row 0 — query item (aid 1)
-        _normed([0.80, 0.60, 0.0, 0.0]),  # row 1 — aid 10  festive candidate
-        _normed([0.80, 0.60, 0.0, 0.0]),  # row 2 — aid 11  casual candidate (same vector)
-    ])
+    emb = np.stack(
+        [
+            _normed([1.0, 0.0, 0.0, 0.0]),  # row 0 — query item (aid 1)
+            _normed([0.80, 0.60, 0.0, 0.0]),  # row 1 — aid 10  festive candidate
+            _normed([0.80, 0.60, 0.0, 0.0]),  # row 2 — aid 11  casual candidate (same vector)
+        ]
+    )
 
     state = MagicMock()
     state.api_key = "test-key"
@@ -309,19 +330,19 @@ def test_similar_route_applies_occasion_end_to_end() -> None:
         parse_explicit_occasion=False,
     )
     state.art_map = {
-        1: {                                      # query item
+        1: {  # query item
             "category": "Kurtas",
             "price_inr": 1000.0,
             "title": "Festive Kurta",
             "description": "festive wedding ceremony",
         },
-        10: {                                     # same-occasion (festive)
+        10: {  # same-occasion (festive)
             "category": "Kurtas",
             "price_inr": 1000.0,
             "title": "Festive Lehenga",
             "description": "festive wedding celebration",
         },
-        11: {                                     # different occasion (casual)
+        11: {  # different occasion (casual)
             "category": "Kurtas",
             "price_inr": 1000.0,
             "title": "Casual Tee",

@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.brands.registry import _enabled_brands, load_registry
-
 
 # ---------------------------------------------------------------------------
 # Unit tests for _enabled_brands()

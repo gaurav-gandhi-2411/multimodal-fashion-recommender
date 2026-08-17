@@ -34,6 +34,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     if has_visual:
         from app.visual import get_image_encoder
+
         await asyncio.to_thread(get_image_encoder)
 
     yield
