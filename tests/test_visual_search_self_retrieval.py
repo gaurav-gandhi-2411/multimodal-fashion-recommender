@@ -42,7 +42,7 @@ REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 BRAND = "snitch"
-ARTICLE_ID = 164          # verified clean under FashionCLIP rerank (0 off-category in top-10)
+ARTICLE_ID = 164  # verified clean under FashionCLIP rerank (0 off-category in top-10)
 TOP_K = 10
 
 
@@ -73,6 +73,7 @@ def _image_path_for_article(brand: str, article_id: int) -> Path | None:
 def _build_mock_state(art_map: dict, visual_retriever) -> MagicMock:
     """Minimal BrandState mock: real visual_retriever, no TwoTower model."""
     from app.rerank import RerankConfig
+
     state = MagicMock()
     state.api_key = "vs-test-key"
     state.config.brand = BRAND
@@ -113,6 +114,7 @@ def test_visual_search_self_retrieval_rank1() -> None:
 
     # Load REAL visual FAISS index (don't load TwoTower — not needed).
     from src.retrieval.faiss_index import FaissRetriever
+
     visual_retriever = FaissRetriever.load(str(visual_index_dir))
 
     catalog = pd.read_parquet(REPO_ROOT / "data" / BRAND / "items.parquet")
@@ -125,8 +127,9 @@ def test_visual_search_self_retrieval_rank1() -> None:
     registry.brand_names.return_value = [BRAND]
 
     with patch("app.api.main.load_registry", return_value=registry):
-        from app.api.main import app
         from fastapi.testclient import TestClient
+
+        from app.api.main import app
 
         with TestClient(app, raise_server_exceptions=True) as client:
             resp = client.post(
@@ -148,8 +151,8 @@ def test_visual_search_self_retrieval_rank1() -> None:
         "the build path — check device mismatch or image-path resolution."
     )
     assert item_ids[0] == str(ARTICLE_ID), (
-        f"Self-retrieval rank wrong: expected rank-1, got rank-{item_ids.index(str(ARTICLE_ID))+1}. "
-        f"Results: {item_ids}"
+        f"Self-retrieval rank wrong: expected rank-1, "
+        f"got rank-{item_ids.index(str(ARTICLE_ID)) + 1}. Results: {item_ids}"
     )
 
 
@@ -172,6 +175,7 @@ def test_visual_search_self_retrieval_with_item_id_rerank() -> None:
     img_bytes = img_path.read_bytes()
 
     from src.retrieval.faiss_index import FaissRetriever
+
     visual_retriever = FaissRetriever.load(str(visual_index_dir))
 
     catalog = pd.read_parquet(REPO_ROOT / "data" / BRAND / "items.parquet")
@@ -184,8 +188,9 @@ def test_visual_search_self_retrieval_with_item_id_rerank() -> None:
     registry.brand_names.return_value = [BRAND]
 
     with patch("app.api.main.load_registry", return_value=registry):
-        from app.api.main import app
         from fastapi.testclient import TestClient
+
+        from app.api.main import app
 
         with TestClient(app, raise_server_exceptions=True) as client:
             resp = client.post(
@@ -205,16 +210,14 @@ def test_visual_search_self_retrieval_with_item_id_rerank() -> None:
     )
     assert item_ids[0] == str(ARTICLE_ID), (
         f"Self-retrieval rank with rerank wrong: expected rank-1, "
-        f"got rank-{item_ids.index(str(ARTICLE_ID))+1}. Results: {item_ids}"
+        f"got rank-{item_ids.index(str(ARTICLE_ID)) + 1}. Results: {item_ids}"
     )
 
     # Category coherence: with item_id reranking, all results should share the
     # query item's category (no cross-category scatter).
     query_cat = art_map[ARTICLE_ID].get("category", "")
     result_cats = [
-        art_map.get(int(iid), {}).get("category", "UNKNOWN")
-        for iid in item_ids
-        if iid.isdigit()
+        art_map.get(int(iid), {}).get("category", "UNKNOWN") for iid in item_ids if iid.isdigit()
     ]
     off_cat = [c for c in result_cats if c != query_cat]
     assert not off_cat, (
@@ -246,6 +249,7 @@ def test_visual_search_pure_image_category_coherence() -> None:
     img_bytes = img_path.read_bytes()
 
     from src.retrieval.faiss_index import FaissRetriever
+
     visual_retriever = FaissRetriever.load(str(visual_index_dir))
 
     catalog = pd.read_parquet(REPO_ROOT / "data" / BRAND / "items.parquet")
@@ -258,8 +262,9 @@ def test_visual_search_pure_image_category_coherence() -> None:
     registry.brand_names.return_value = [BRAND]
 
     with patch("app.api.main.load_registry", return_value=registry):
-        from app.api.main import app
         from fastapi.testclient import TestClient
+
+        from app.api.main import app
 
         with TestClient(app, raise_server_exceptions=True) as client:
             # NO item_id — pure image upload, the path a real buyer takes
@@ -282,9 +287,7 @@ def test_visual_search_pure_image_category_coherence() -> None:
     # Category coherence: inferred from rank-1's category ("Shirts")
     rank1_cat = art_map[ARTICLE_ID].get("category", "")
     result_cats = [
-        art_map.get(int(iid), {}).get("category", "UNKNOWN")
-        for iid in item_ids
-        if iid.isdigit()
+        art_map.get(int(iid), {}).get("category", "UNKNOWN") for iid in item_ids if iid.isdigit()
     ]
     off_cat = [c for c in result_cats if c != rank1_cat]
     assert not off_cat, (
@@ -317,7 +320,9 @@ def test_visual_search_inferred_category_mocked_fast() -> None:
     and apply the reranker, pushing the Overshirt out of the top-k results.
     """
     import io
+
     from PIL import Image
+
     from app.rerank import RerankConfig
 
     buf = io.BytesIO()
@@ -325,16 +330,16 @@ def test_visual_search_inferred_category_mocked_fast() -> None:
     buf.seek(0)
     tiny_png = buf.read()
 
-    SHIRT_A  = ARTICLE_ID       # rank-1: Shirt, ₹1299 — category inference source
+    SHIRT_A = ARTICLE_ID  # rank-1: Shirt, ₹1299 — category inference source
     OVERSHIRT = ARTICLE_ID + 1  # rank-2: Overshirt — should be reranked down
-    SHIRT_B  = ARTICLE_ID + 2   # rank-3: Shirt
-    SHIRT_C  = ARTICLE_ID + 3   # rank-4: Shirt
+    SHIRT_B = ARTICLE_ID + 2  # rank-3: Shirt
+    SHIRT_C = ARTICLE_ID + 3  # rank-4: Shirt
 
     art_map = {
-        SHIRT_A:   {"title": "Cotton Check Shirt",       "category": "Shirts",    "price_inr": 1299.0},
-        OVERSHIRT: {"title": "Relaxed Fit Overshirt",    "category": "Overshirt", "price_inr": 1399.0},
-        SHIRT_B:   {"title": "Linen Regular Fit Shirt",  "category": "Shirts",    "price_inr": 1199.0},
-        SHIRT_C:   {"title": "Slim Fit Stretch Shirt",   "category": "Shirts",    "price_inr": 1399.0},
+        SHIRT_A: {"title": "Cotton Check Shirt", "category": "Shirts", "price_inr": 1299.0},
+        OVERSHIRT: {"title": "Relaxed Fit Overshirt", "category": "Overshirt", "price_inr": 1399.0},
+        SHIRT_B: {"title": "Linen Regular Fit Shirt", "category": "Shirts", "price_inr": 1199.0},
+        SHIRT_C: {"title": "Slim Fit Stretch Shirt", "category": "Shirts", "price_inr": 1399.0},
     }
 
     fixed_vec = np.zeros(512, dtype=np.float32)
@@ -346,10 +351,10 @@ def test_visual_search_inferred_category_mocked_fast() -> None:
     state.art_map = art_map
     state.visual_retriever = MagicMock()
     state.visual_retriever.search.return_value = [
-        (SHIRT_A,   1.00),
+        (SHIRT_A, 1.00),
         (OVERSHIRT, 0.93),
-        (SHIRT_B,   0.91),
-        (SHIRT_C,   0.89),
+        (SHIRT_B, 0.91),
+        (SHIRT_C, 0.89),
     ]
     state.config.rerank = RerankConfig(
         enabled=True,
@@ -372,8 +377,9 @@ def test_visual_search_inferred_category_mocked_fast() -> None:
         patch("app.api.main.load_registry", return_value=registry),
         patch("app.visual.encode_query_image", return_value=fixed_vec),
     ):
-        from app.api.main import app
         from fastapi.testclient import TestClient
+
+        from app.api.main import app
 
         with TestClient(app, raise_server_exceptions=True) as client:
             # NO item_id — pure image upload
@@ -404,6 +410,7 @@ def test_visual_search_self_retrieval_mocked_fast() -> None:
     Run alongside the real-CLIP tests; this catches regressions in HTTP plumbing.
     """
     import io
+
     from PIL import Image
 
     buf = io.BytesIO()
@@ -426,6 +433,7 @@ def test_visual_search_self_retrieval_mocked_fast() -> None:
     fixed_vec[0] = 1.0
 
     from unittest.mock import MagicMock, patch
+
     from app.rerank import RerankConfig
 
     state = MagicMock()
@@ -448,8 +456,9 @@ def test_visual_search_self_retrieval_mocked_fast() -> None:
         patch("app.api.main.load_registry", return_value=registry),
         patch("app.visual.encode_query_image", return_value=fixed_vec),
     ):
-        from app.api.main import app
         from fastapi.testclient import TestClient
+
+        from app.api.main import app
 
         with TestClient(app, raise_server_exceptions=True) as client:
             resp = client.post(

@@ -1,4 +1,5 @@
 """Smoke tests for Phase 3 Indian brand demo."""
+
 from __future__ import annotations
 
 import pickle
@@ -23,10 +24,22 @@ MIN_ROWS: dict[str, int] = {"snitch": 490, "fashor": 3500, "powerlook": 890}
 
 # Expected columns in each artifact
 CATALOG_CSV_COLS = {
-    "product_id", "title", "description", "image_url", "price_inr", "category", "pdp_url"
+    "product_id",
+    "title",
+    "description",
+    "image_url",
+    "price_inr",
+    "category",
+    "pdp_url",
 }
 ITEMS_PARQUET_COLS = {
-    "article_id", "product_id", "title", "category", "image_url", "pdp_url", "price_inr"
+    "article_id",
+    "product_id",
+    "title",
+    "category",
+    "image_url",
+    "pdp_url",
+    "price_inr",
 }
 USERS_CSV_COLS = {"user_id", "product_id", "timestamp", "event_type"}
 
@@ -46,9 +59,7 @@ def test_catalog_csv_columns(brand: str) -> None:
 
     df = pd.read_csv(csv_path)
 
-    assert set(df.columns) == CATALOG_CSV_COLS, (
-        f"{brand}: unexpected columns {set(df.columns)}"
-    )
+    assert set(df.columns) == CATALOG_CSV_COLS, f"{brand}: unexpected columns {set(df.columns)}"
     assert df.isnull().sum().sum() == 0, f"{brand}: catalog.csv has null values"
     assert (df["price_inr"] > 0).all(), f"{brand}: price_inr must be > 0 for all rows"
     assert df["pdp_url"].str.startswith("https://").all(), (
@@ -56,6 +67,7 @@ def test_catalog_csv_columns(brand: str) -> None:
     )
 
 
+@pytest.mark.requires_data
 @pytest.mark.parametrize("brand", BRANDS)
 def test_items_parquet_columns(brand: str) -> None:
     """items.parquet exists, has correct columns, int article_id, and meets row-count minimums."""
@@ -70,9 +82,7 @@ def test_items_parquet_columns(brand: str) -> None:
     assert pd.api.types.is_integer_dtype(df["article_id"]), (
         f"{brand}: article_id must be integer dtype, got {df['article_id'].dtype}"
     )
-    assert len(df) >= MIN_ROWS[brand], (
-        f"{brand}: expected ≥ {MIN_ROWS[brand]} rows, got {len(df)}"
-    )
+    assert len(df) >= MIN_ROWS[brand], f"{brand}: expected ≥ {MIN_ROWS[brand]} rows, got {len(df)}"
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +114,7 @@ def test_brand_yaml_structure(brand: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.requires_data
 def test_fashor_has_ethnic_vocabulary() -> None:
     """At least 50 % of Fashor rows have an ethnic-wear category keyword."""
     df = pd.read_parquet(ROOT / "data" / "fashor" / "items.parquet")
@@ -135,9 +146,7 @@ def test_synthetic_users_labelled(brand: str) -> None:
     assert df["user_id"].str.startswith("synthetic_").all(), (
         f"{brand}: not all user_id values start with 'synthetic_'"
     )
-    assert (df["event_type"] == "purchase").all(), (
-        f"{brand}: expected all event_type == 'purchase'"
-    )
+    assert (df["event_type"] == "purchase").all(), f"{brand}: expected all event_type == 'purchase'"
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +154,7 @@ def test_synthetic_users_labelled(brand: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.requires_data
 @pytest.mark.parametrize("brand", BRANDS)
 def test_faiss_index_searchable(brand: str) -> None:
     """FAISS index loads, is non-empty, and handles a zero-vector query without error."""
@@ -239,6 +249,7 @@ def indian_client(indian_registry: MagicMock):
             yield client
 
 
+@pytest.mark.requires_data
 @pytest.mark.parametrize("brand", BRANDS)
 def test_similar_returns_results(brand: str, indian_client) -> None:
     """/similar returns ≥ 1 result with item_id and score for each Indian brand."""
@@ -258,6 +269,7 @@ def test_similar_returns_results(brand: str, indian_client) -> None:
         assert "score" in item, f"{brand}: result missing 'score'"
 
 
+@pytest.mark.requires_data
 @pytest.mark.parametrize("brand", BRANDS)
 def test_recommend_synthetic_user(brand: str, indian_client) -> None:
     """/recommend returns 200 for a synthetic user (cold_start=True is acceptable)."""

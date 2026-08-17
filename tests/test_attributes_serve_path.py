@@ -38,6 +38,10 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from app.attributes import load_attribute_index  # noqa: E402
 
+# Every test in this file reads the real data/snitch/{attributes.json,items.parquet}
+# artifacts -- gitignored, not present in a fresh checkout or CI.
+pytestmark = pytest.mark.requires_data
+
 BRAND = "snitch"
 # article_id=1: present in data/snitch/attributes.json (verified: color=white,
 # pattern=textured, fabric=linen, occasion=casual) -- a stable, non-arbitrary pick,

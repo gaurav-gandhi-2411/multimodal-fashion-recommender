@@ -13,6 +13,7 @@ Secrets layout (configure in Streamlit Cloud → App Settings → Secrets):
     fashor   = "<value from Secret Manager: fashion-rec-fashor-key>"
     powerlook = "<value from Secret Manager: fashion-rec-powerlook-key>"
 """
+
 from __future__ import annotations
 
 import os
@@ -23,9 +24,7 @@ import streamlit as st
 
 # ── constants ─────────────────────────────────────────────────────────────────
 
-_FALLBACK_URL = (
-    "https://fashion-recommender-staging-657468372797.asia-south1.run.app"
-)
+_FALLBACK_URL = "https://fashion-recommender-staging-657468372797.asia-south1.run.app"
 
 BRANDS: dict[str, dict] = {
     "snitch": {
@@ -88,7 +87,9 @@ def _clean_title(title: str) -> str:
 # ── UI components ─────────────────────────────────────────────────────────────
 
 
-def _product_card(col: st.delta_generator.DeltaGenerator, item_id: str, catalog: dict, explanation: str = "") -> None:
+def _product_card(
+    col: st.delta_generator.DeltaGenerator, item_id: str, catalog: dict, explanation: str = ""
+) -> None:
     meta = catalog.get(str(item_id), {})
     title = _clean_title(meta.get("title") or str(item_id))
     price = float(meta.get("price_inr") or 0)
@@ -125,7 +126,9 @@ def _results_grid(results: list[dict], catalog: dict, cols: int = 4) -> None:
     for row_start in range(0, len(results), cols):
         chunk = results[row_start : row_start + cols]
         grid = st.columns(cols)
-        for col, rec in zip(grid, chunk):
+        # strict=False is intentional: the last chunk can be shorter than `cols`, and
+        # zip should truncate to it rather than raise.
+        for col, rec in zip(grid, chunk, strict=False):
             iid = str(rec.get("item_id", ""))
             if rec.get("pdp_url") and iid in catalog:
                 catalog[iid]["pdp_url"] = rec["pdp_url"]
@@ -280,7 +283,10 @@ def _complete_the_look(brand: str, catalog: dict) -> None:
         return
 
     _item_preview(item_id, catalog)
-    st.caption("Best results with tops (shirts, t-shirts). The model suggests coordinated bottoms and layers.")
+    st.caption(
+        "Best results with tops (shirts, t-shirts). "
+        "The model suggests coordinated bottoms and layers."
+    )
     st.markdown(" ")
 
     if st.button("Complete the Look", type="primary", key=f"cpl_btn_{brand}"):
