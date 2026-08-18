@@ -14,12 +14,14 @@
 #   GCP_SERVICE_ACCOUNT   — DEDICATED SA email for this service (NOT another product's SA).
 #                           Least-privilege: artifactregistry.writer on the fashion-rec repo,
 #                           run.developer, serviceAccountUser on itself, storage.objectViewer on
-#                           the new bucket, secretmanager.secretAccessor on the 4 secrets below.
+#                           the new bucket, secretmanager.secretAccessor on the 6 secrets below.
+#                           (Corrected 2026-08-15 — this said "4" and the list below was missing
+#                           fashion-rec-virgio-key; the --set-secrets block below always had 6.)
 #
 # Secret Manager secret names (referenced in --set-secrets; namespaced so they cannot collide
 # in a shared project — the Cloud Run ENV VAR names stay SNITCH_API_KEY etc. for the app):
 #   fashion-rec-snitch-key, fashion-rec-fashor-key, fashion-rec-powerlook-key, fashion-rec-h_and_m-key,
-#   fashion-rec-groq-key
+#   fashion-rec-groq-key, fashion-rec-virgio-key
 #
 # h_and_m is the public SANDBOX brand (H&M Kaggle dataset, not a paying client) — its key is
 # meant to be shared publicly in docs so a prospect's developer can integrate against real
@@ -35,6 +37,16 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # NOTES
 # ──────────────────────────────────────────────────────────────────────────────
+# • Provisioning status (2026-08-15, Item 67): fashion-rec-pool/fashion-rec-provider
+#   and the fashion-rec-deployer SA now exist in fashionrecommender-prod-260814, with
+#   artifactregistry.writer, run.developer, self serviceAccountUser, and
+#   storage.objectViewer (scoped to the bucket only) already granted. The
+#   secretmanager.secretAccessor grants on the 6 secrets above are NOT yet done --
+#   this is an on-demand product with billing currently unlinked, and Secret
+#   Manager operations (unlike IAM/WIF, which work fine without billing) require
+#   it. Grant those 6 bindings once the secrets themselves are created, which
+#   also needs billing. A real deploy needs both; do not attempt one until then.
+#
 # • REDIS_URL is intentionally omitted from Cloud Run env vars. The API falls back
 #   to an in-process LRU cache when Redis is unavailable. To enable managed caching,
 #   provision a Memorystore instance and add REDIS_URL to --set-secrets below.
