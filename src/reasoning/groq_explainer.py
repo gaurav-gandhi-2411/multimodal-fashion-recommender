@@ -23,7 +23,7 @@ class GroqExplainer:
     """
 
     API_URL = "https://api.groq.com/openai/v1/chat/completions"
-    MODEL   = "llama-3.1-8b-instant"
+    MODEL   = "openai/gpt-oss-20b"
 
     # One retry with 1 s backoff; total budget is capped by TOTAL_BUDGET_SECONDS.
     RETRY_BACKOFF_SECONDS = (1,)

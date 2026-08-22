@@ -38,7 +38,7 @@ def _enabled_brands() -> set[str] | None:
 
 class LLMBrandConfig(BaseModel):
     provider: str = "template"
-    model: str = "llama-3.1-8b-instant"
+    model: str = "openai/gpt-oss-20b"
     enabled: bool = True
 
 
