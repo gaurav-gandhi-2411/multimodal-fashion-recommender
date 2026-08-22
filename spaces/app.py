@@ -290,7 +290,7 @@ def main():
 
     st.markdown(
         "---\n"
-        "Built with CLIP + SBERT + LLaMA 3.1 via Groq · "
+        "Built with CLIP + SBERT + GPT-OSS 20B via Groq · "
         "[GitHub](https://github.com/gaurav-gandhi-2411/multimodal-fashion-recommender)"
     )
 

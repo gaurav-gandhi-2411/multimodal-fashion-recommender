@@ -16,7 +16,7 @@ class GroqExplainer:
     """
 
     API_URL = "https://api.groq.com/openai/v1/chat/completions"
-    MODEL   = "llama-3.1-8b-instant"
+    MODEL   = "openai/gpt-oss-20b"
     RETRY_BACKOFF_SECONDS = (2, 5, 10)
 
     def __init__(self, config=None):
