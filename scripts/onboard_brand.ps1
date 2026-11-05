@@ -1,6 +1,6 @@
 <#
   onboard_brand.ps1 -- repeatable, per-brand onboarding for the fashion-recommender STAGING
-  deploy in the SHARED project iconic-reactor-496423-m4.
+  deploy in the SHARED project fashionrecommender-prod-260814.
 
   Unlike scripts/deploy_staging.ps1 (a one-time, 3-brand-hardcoded bootstrap of the SHARED
   infrastructure: bucket, AR repo, SA, WIF), this script assumes that infrastructure already
@@ -26,7 +26,7 @@
     * Container-verify (step 5) is mandatory unless -SkipContainerVerify is passed --
       matches this project's standing Deploy Verification Standard (PROJECT_MEMORY.md):
       "local pass != container pass."
-    * Never touches aetherart-497918: $Project defaults to iconic-reactor-496423-m4 only;
+    * Never touches aetherart-497918: $Project defaults to fashionrecommender-prod-260814 only;
       nothing in this script can default to any other project.
 
   Run from the repo ROOT. Requires: gcloud + gh already authenticated, docker running.
@@ -38,9 +38,9 @@ param(
   [switch]$SkipContainerVerify,
   [switch]$TriggerDeploy,
   [switch]$VerifyLive,
-  [string]$Project = "iconic-reactor-496423-m4",
+  [string]$Project = "fashionrecommender-prod-260814",
   [string]$Region = "asia-south1",
-  [string]$Bucket = "fashion-rec-staging-iconic-reactor-496423-m4",
+  [string]$Bucket = "fashion-rec-staging-fashionrecommender-prod-260814",
   [string]$Repo = "gaurav-gandhi-2411/multimodal-fashion-recommender"
 )
 
